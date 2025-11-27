@@ -1,0 +1,179 @@
+{
+  "account": "DEMO",
+  "balance": 9.6,
+  "amount": 5.0,
+  "display_name": "Finance",
+  "user_id": "101002476",
+  "email": "cooldogstan@gmail.com",
+  "currency": "USD",
+  "level_label": "Beginner",
+  "xp_current": null,
+  "xp_total": null,
+  "account_banner": "YOU ARE TRADING ON DEMO ACCOUNT",
+  "today_stats": {
+    "trades": null,
+    "turnover": null,
+    "profit": null
+  },
+  "nav_items": [
+    "M10",
+    "M30",
+    "H1",
+    "H4",
+    "D1",
+    "D7",
+    "D14",
+    "Add money",
+    "Trade on the real account",
+    "Achievements\n                \n                \n            \n                31",
+    "History",
+    "Rating",
+    "Community help",
+    "Deposit",
+    "Withdrawal",
+    "History\n                \n                \n            \n                0",
+    "Cashback",
+    "Promo codes",
+    "My Safe",
+    "Market\n                                \n                \n            \n                \n                34",
+    "Purchases & Gifts\n                \n                \n            \n                6",
+    "Gem Lottery\n                \n                                \n            \n                7",
+    "Gems mining\n                \n                                \n            \n                0",
+    "Social rewards\n                \n                \n            \n                0",
+    "Trading profile",
+    "Profile",
+    "Loyalty Program",
+    "Security",
+    "Trading history",
+    "Pocket Friends"
+  ],
+  "raw": {
+    "balance_and_account_meta": {
+      "ok": true,
+      "balance_text": "QT Demo\nUSD\n48,417.86\nTOP UP\nAUD/CAD OTC\n+92\n%\nNZD/USD OTC\n+92\n%\nUSD/COP OTC\n+78\n%\nKES/USD OTC\n+91\n%\nUSD/JPY OTC\n+59\n%\nEUR/RUB OTC\n+92\n%\nEUR/NZD OTC\n+84\n%\nEUR/CHF OTC\n+92\n%\nEUR/GBP OTC\n+92\n%\nGBP/USD OTC\n+92\n%\nTrading\nFinance\nProfile\nMarket\nAchievements\nChat\n8\nHelp\nPOCKET FRIENDS\nnew\nPROMO\nLogout\nAUD/CAD OTC\nM1\n6\n22:44:10\nUTC+0\nA\nM10\nM30\nH1\nH4\nD1\nD7\nD14\nH1\nTime\n00:01:00\nAmount\nPayout\n+92%\n+$9.60\nBUY\nSELL\nTrades\nOpened\nClosed\nNo opened trades\nTrades\nSignals\nSocial Trading\nExpress Trades\nTournaments\n\nPending Trades\nHotkeys\nFull screen",
+      "account_type": "DEMO",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(translate(normalize-space(.),'BALANCE','balance'),'balance')]/following::*[contains(normalize-space(.),'$') or contains(normalize-space(.),'€') or contains(normalize-space(.),'£')][1]",
+      "attempts": [],
+      "balance_attempts": [
+        {
+          "strategy": "xpath",
+          "selector": "//*[contains(translate(normalize-space(.),'BALANCE','balance'),'balance')]/following::*[contains(normalize-space(.),'$') or contains(normalize-space(.),'€') or contains(normalize-space(.),'£')][1]",
+          "ok": true
+        }
+      ],
+      "account_attempts": [
+        {
+          "strategy": "xpath",
+          "selector": "//*[contains(translate(normalize-space(.),'DEMO','demo'),'demo')]",
+          "ok": true
+        }
+      ]
+    },
+    "amount_meta": {
+      "strategies": [
+        {
+          "strategy": "xpath",
+          "selector": "//*[contains(normalize-space(.), 'Amount')]/following::input[1]",
+          "found": true
+        }
+      ],
+      "raw_value": "5",
+      "parsed": 5.0
+    },
+    "viewport_scale": 1.0,
+    "viewport_scale_ok": false,
+    "profile_panel_open": {
+      "opened": true,
+      "avatar_attempts": [
+        {
+          "strategy": "css",
+          "selector": "img[alt*='profile' i]",
+          "found": false
+        },
+        {
+          "strategy": "css",
+          "selector": "img[alt*='avatar' i]",
+          "found": false
+        },
+        {
+          "strategy": "css",
+          "selector": "[class*='avatar' i] img",
+          "found": true
+        }
+      ],
+      "container_attempts": [
+        {
+          "strategy": "css",
+          "selector": "aside[class*='profile' i]",
+          "found": false
+        },
+        {
+          "strategy": "css",
+          "selector": "div[class*='profile' i][class*='menu' i]",
+          "found": false
+        },
+        {
+          "strategy": "css",
+          "selector": "div[class*='profile' i]",
+          "found": true
+        }
+      ]
+    },
+    "display_name_meta": {
+      "strategies": []
+    },
+    "id_email_meta": {
+      "regex": {
+        "email_matched": false,
+        "id_matched": false
+      },
+      "attempts": []
+    },
+    "currency_meta": {
+      "fallback": "USD"
+    },
+    "level_xp_meta": {
+      "level_found": false,
+      "xp_found": false
+    },
+    "account_banner_meta": {
+      "banner_found": false
+    },
+    "today_stats_meta": {
+      "found": false
+    },
+    "nav_items_meta": {
+      "count": 0
+    },
+    "id_email_fallback_meta": {
+      "regex": {
+        "email_matched": true,
+        "id_matched": true
+      }
+    },
+    "level_xp_fallback_meta": {
+      "level_found": true,
+      "xp_found": false
+    },
+    "account_banner_fallback_meta": {
+      "banner_found": true
+    },
+    "today_stats_fallback_meta": {
+      "found": false
+    },
+    "nav_items_fallback_meta": {
+      "containers": [],
+      "count": 30
+    },
+    "balance_fallback_meta": {
+      "patterns": [
+        "symbol"
+      ]
+    },
+    "display_name_email_ctx_meta": {
+      "email": "cooldogstan@gmail.com",
+      "source": "title_near_keywords"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "collected_at": "2025-10-01T19:18:03.316806",
+  "current_asset": null,
+  "period_minutes": 60,
+  "total_realtime_updates": 0,
+  "latest_prices": {},
+  "candles_summary": {},
+  "realtime_updates": [],
+  "candles_data": {},
+  "session_summary": {
+    "session_id": null,
+    "user_id": null,
+    "authenticated": false,
+    "timeframe_detected": false,
+    "favorites_count": 0,
+    "tick_data_mode": false
+  }
+}

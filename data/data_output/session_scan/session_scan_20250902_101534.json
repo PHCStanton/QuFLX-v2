@@ -1,0 +1,43 @@
+{
+  "account": "DEMO",
+  "balance": null,
+  "strategy": "PLACEHOLDER",
+  "amount": 1.0,
+  "viewport_scale": 1.0,
+  "raw": {
+    "balance_and_account_meta": {
+      "ok": true,
+      "balance_text": "QT Demo\nUSD\n48,426.60\nTOP UP\nAUD/CAD OTC\n+92\n%\nNZD/USD OTC\n+68\n%\nUSD/COP OTC\n+82\n%\nKES/USD OTC\n+41\n%\nUSD/JPY OTC\n+85\n%\nEUR/RUB OTC\n+92\n%\nEUR/NZD OTC\n+92\n%\nEUR/CHF OTC\n+92\n%\nEUR/GBP OTC\n+89\n%\nGBP/USD OTC\n+92\n%\nEUR/JPY OTC\nTrading\nFinance\nProfile\nMarket\nAchievements\nChat\n8\nHelp\nPOCKET FRIENDS\nLogout\nGBP/USD OTC\nM1\n4\n10:15:33\nUTC+0\nBollinger Bands 20 2\nMoving Average SMA 2\nMoving Average SMA 5\nMoving Average SMA 100\nA\nM10\nM30\nH1\nH4\nD1\nD7\nD14\nH1\nTime\n00:01:00\nAmount\nPayout\n+92%\n+$1.92\nBUY\nSELL\nTrades\nOpened\nClosed\n2025-09-01\nGBP/USD OTC +92%\n20:51\n$1\n$0\n$0\nGBP/USD OTC +87%\n19:33\n$1\n$1.87\n+$0.87\nGBP/USD OTC +92%\n19:17\n$1\n$0\n$0\nAUD/CAD OTC +92%\n19:17\n$1\n$0\n$0\nGBP/USD OTC +92%\n19:12\n$1\n$0\n$0\nAUD/CAD OTC +92%\n19:12\n$1\n$1.92\n+$0.92\nAUD/CAD OTC +92%\n18:46\n$1\n$0\n$0\nEUR/CHF OTC +73%\n18:46\n$1\n$1.73\n+$0.73\nEUR/CHF OTC +73%\n18:46\n$1\n$0\n$0\nEUR/CHF OTC +69%\n18:45\n$1\n$1.69\n+$0.69\nEUR/CHF OTC +69%\n18:44\n$1\n$1.69\n+$0.69\nTrades\nSignals\nSocial Trading\nExpress Trades\nTournaments\n\nPending Trades\nHotkeys\nFull screen",
+      "account_type": "DEMO",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(translate(normalize-space(.),'BALANCE','balance'),'balance')]/following::*[contains(normalize-space(.),'$') or contains(normalize-space(.),'€') or contains(normalize-space(.),'£')][1]",
+      "attempts": [],
+      "balance_attempts": [
+        {
+          "strategy": "xpath",
+          "selector": "//*[contains(translate(normalize-space(.),'BALANCE','balance'),'balance')]/following::*[contains(normalize-space(.),'$') or contains(normalize-space(.),'€') or contains(normalize-space(.),'£')][1]",
+          "ok": true
+        }
+      ],
+      "account_attempts": [
+        {
+          "strategy": "xpath",
+          "selector": "//*[contains(translate(normalize-space(.),'DEMO','demo'),'demo')]",
+          "ok": true
+        }
+      ]
+    },
+    "amount_meta": {
+      "strategies": [
+        {
+          "strategy": "xpath",
+          "selector": "//*[contains(normalize-space(.), 'Amount')]/following::input[1]",
+          "found": true
+        }
+      ],
+      "raw_value": "1",
+      "parsed": 1.0
+    },
+    "viewport_scale_ok": false
+  }
+}

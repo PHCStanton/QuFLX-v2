@@ -1,0 +1,40 @@
+{
+  "inputs": {
+    "min_pct": 92,
+    "select": "first"
+  },
+  "eligible_records": [
+    {
+      "asset": "AUD/CAD OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/RUB OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/NZD OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/CHF OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "GBP/USD OTC",
+      "payout_percent": 92
+    }
+  ],
+  "result": {
+    "eligible": [
+      "AUD/CAD OTC",
+      "EUR/RUB OTC",
+      "EUR/NZD OTC",
+      "EUR/CHF OTC",
+      "GBP/USD OTC"
+    ],
+    "selected": null,
+    "min_pct": 92,
+    "select_pref": "first"
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "asset": "GBPUSD",
+  "timeframe": 240,
+  "collected_at": "2025-09-03T06:33:10.488452",
+  "data": {
+    "historical_data": [
+      {
+        "timestamp": "1970-01-01T04:25:35.402956",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888379.918,
+          1.30001
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:35.633143",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888380.302,
+          1.30001
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:36.461334",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888380.933,
+          1.29999
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:36.903266",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888381.434,
+          1.30007
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:37.435712",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888381.935,
+          1.30005
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:37.912244",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888382.435,
+          1.30007
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:38.404073",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888382.935,
+          1.30005
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:38.650267",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888383.303,
+          1.30005
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:39.425264",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888383.953,
+          1.30002
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:39.924207",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888384.452,
+          1.30002
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:40.427420",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888384.962,
+          1.29999
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:40.927410",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888385.453,
+          1.29996
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:41.423723",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888385.954,
+          1.29998
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:41.673943",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888386.304,
+          1.29998
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:42.424937",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888386.97,
+          1.29992
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:42.925244",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888387.456,
+          1.29995
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:43.432258",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888387.939,
+          1.29992
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:43.932996",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888388.455,
+          1.29996
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:44.435062",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888388.97,
+          1.29996
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:44.685064",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888389.304,
+          1.29996
+        ]
+      },
+      {
+        "timestamp": "1970-01-01T04:25:45.412753",
+        "asset": "GBPUSD_otc",
+        "price_data": [
+          "GBPUSD_otc",
+          1756888389.942,
+          1.29992
+        ]
+      }
+    ]
+  }
+}

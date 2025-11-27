@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "direction": "buy",
+  "target": {
+    "selector_used": "css",
+    "selector_detail": "#put-call-buttons-chart-1 .action-high-low.button-call-wrap a.btn.btn-call",
+    "outer_html": "<a class=\"btn btn-call\"><span class=\"no-animate switch-state-block\"><span class=\"switch-state-block__in\"><span class=\"switch-state-block__item\"><div class=\"svg-icon-wrap\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" class=\"injected-svg\" data-src=\"/themes/cabinet/svg/icons/btn-buy.svg?v=1\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" role=\"img\">\n<path d=\"M10 0C8.02219 0 6.08879 0.58649 4.4443 1.6853C2.79981 2.78412 1.51809 4.3459 0.761209 6.17317C0.00433284 8.00043 -0.193701 10.0111 0.192152 11.9509C0.578004 13.8907 1.53041 15.6725 2.92894 17..."
+  },
+  "attempts": [
+    {
+      "strategy": "css",
+      "selector": "#put-call-buttons-chart-1 .action-high-low.button-call-wrap a.btn.btn-call",
+      "ok": true
+    }
+  ],
+  "computed": {
+    "display": "flex",
+    "opacity": "1",
+    "pointerEvents": "auto",
+    "visibility": "visible"
+  },
+  "rect": {
+    "height": 47.988285064697266,
+    "width": 140.00978088378906,
+    "x": 1231.9044189453125,
+    "y": 333.1201477050781
+  },
+  "element_from_point": {
+    "before": {
+      "className": "payout__text payout__text-lh",
+      "found": true,
+      "id": null,
+      "tag": "span",
+      "text": "Buy"
+    },
+    "after": {
+      "className": "payout__text payout__text-lh",
+      "found": true,
+      "id": null,
+      "tag": "span",
+      "text": "Buy"
+    }
+  },
+  "click_strategy": "actions",
+  "opened_count": {
+    "before": 167,
+    "after": 169
+  },
+  "verification": {
+    "opened_increment": true,
+    "streamer_seen": true,
+    "opened_samples": [
+      {
+        "t": 1756753906.106432,
+        "count": 169
+      }
+    ]
+  },
+  "artifacts": {
+    "pre_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\trade_click_pre_20250901_191134.png",
+    "post_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\trade_click_post_20250901_191134.png"
+  },
+  "errors": []
+}

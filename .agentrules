@@ -1,0 +1,25 @@
+# Project Guidelines
+
+## Core Principles
+1.  **Functional Simplicity First**: Ruthlessly eliminate unnecessary complexity.
+2.  **Sequential Logic**: Reason step-by-step. Each step must build on the previous one.
+3.  **Incremental Testing**: Test after every step.
+4.  **Zero Assumptions**: Verify everything explicitly.
+5.  **Code Integrity**: No breaking changes without approval.
+6.  **Separation of Concerns**: Clear boundaries between Collector, Strategy, Gateway, and Frontend.
+
+## Documentation Requirements
+- Update `.agent-memory/activeContext.md` and `.agent-memory/progress.md` after every significant task.
+- Keep `v2_Dev_Docs/v2_Roadmap.md` updated as phases are completed.
+
+## Architecture
+- Follow the Event-Driven Modular Monolith pattern defined in `v2_Dev_Docs/Architecture_v2.md`.
+- Use Redis for all inter-service communication.
+
+## Code Style & Patterns
+- **Python**: PEP 8, Pydantic models for data exchange.
+- **Frontend**: Functional React components, Zustand for state, Custom Hooks for logic.
+
+## Testing Standards
+- Write unit tests for all new logic (parsers, indicators).
+- Verify Redis communication with integration tests.

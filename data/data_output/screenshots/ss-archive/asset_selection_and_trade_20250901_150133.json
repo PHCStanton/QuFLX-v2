@@ -1,0 +1,114 @@
+{
+  "timestamp": "20250901_150133",
+  "account": {},
+  "amount_value_observed": "1",
+  "favorites_min_pct": 92,
+  "favorites_eligible": [
+    {
+      "asset": "AUD/CAD OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "USD/COP OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/CHF OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/GBP OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "GBP/USD OTC",
+      "payout_percent": 92
+    }
+  ],
+  "selection_meta": [
+    {
+      "ok": true,
+      "label": "AUD/CAD OTC",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(@class,'assets-favorites-item__label') and normalize-space(text())='AUD/CAD OTC']/ancestor::*[contains(@class,'assets-favorites-item__line')][1]",
+      "attempts": []
+    },
+    {
+      "ok": true,
+      "label": "USD/COP OTC",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(@class,'assets-favorites-item__label') and normalize-space(text())='USD/COP OTC']/ancestor::*[contains(@class,'assets-favorites-item__line')][1]",
+      "attempts": []
+    },
+    {
+      "ok": true,
+      "label": "EUR/CHF OTC",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(@class,'assets-favorites-item__label') and normalize-space(text())='EUR/CHF OTC']/ancestor::*[contains(@class,'assets-favorites-item__line')][1]",
+      "attempts": []
+    },
+    {
+      "ok": true,
+      "label": "EUR/GBP OTC",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(@class,'assets-favorites-item__label') and normalize-space(text())='EUR/GBP OTC']/ancestor::*[contains(@class,'assets-favorites-item__line')][1]",
+      "attempts": []
+    },
+    {
+      "ok": true,
+      "label": "GBP/USD OTC",
+      "selector_used": "xpath",
+      "selector_detail": "//*[contains(@class,'assets-favorites-item__label') and normalize-space(text())='GBP/USD OTC']/ancestor::*[contains(@class,'assets-favorites-item__line')][1]",
+      "attempts": []
+    }
+  ],
+  "first_asset": "AUD/CAD OTC",
+  "last_asset": "GBP/USD OTC",
+  "trade_results": {
+    "buy": {
+      "ok": true,
+      "direction": "buy",
+      "selector_used": "xpath",
+      "selector_detail": "(//*[self::button or self::div][contains(translate(normalize-space(.),'BUY','buy'),'buy')])[1]",
+      "attempts": [
+        {
+          "strategy": "xpath",
+          "selector": "(//*[self::button or self::div][contains(translate(normalize-space(.),'BUY','buy'),'buy')])[1]"
+        },
+        {
+          "strategy": "xpath",
+          "selector": "(//*[self::button or self::div][contains(@class,'buy')])[1]"
+        },
+        {
+          "strategy": "css",
+          "selector": "button.buy, .button--buy, .trade-button--buy, .action_buy, .btn-buy, .green"
+        }
+      ],
+      "pre_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\pre_buy_20250901_150129.png",
+      "post_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\post_buy_20250901_150130.png"
+    },
+    "sell": {
+      "ok": true,
+      "direction": "sell",
+      "selector_used": "xpath",
+      "selector_detail": "(//*[self::button or self::div][contains(translate(normalize-space(.),'SELL','sell'),'sell')])[1]",
+      "attempts": [
+        {
+          "strategy": "xpath",
+          "selector": "(//*[self::button or self::div][contains(translate(normalize-space(.),'SELL','sell'),'sell')])[1]"
+        },
+        {
+          "strategy": "xpath",
+          "selector": "(//*[self::button or self::div][contains(@class,'sell')])[1]"
+        },
+        {
+          "strategy": "css",
+          "selector": "button.sell, .button--sell, .trade-button--sell, .action_sell, .btn-sell, .red"
+        }
+      ],
+      "pre_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\pre_sell_20250901_150131.png",
+      "post_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\post_sell_20250901_150132.png"
+    }
+  },
+  "overall_screenshot": "C:\\FinRL\\quantumFlux\\MXG-Webview\\API-test-space\\data_output\\screenshots\\asset_selection_and_trade_20250901_150133.png"
+}

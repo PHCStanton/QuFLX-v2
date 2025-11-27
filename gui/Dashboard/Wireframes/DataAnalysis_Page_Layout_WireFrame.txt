@@ -1,0 +1,41 @@
+DataAnalysis.jsx Wireframe Layout
+1. Collapsable Sidebar/Menu
+2. Buttons to connect Backend operations:
+	- 'Chrome' via {root}\start_hybrid_session.py
+	- 'Websocket' via {root}\via streaming_server.py
+3. Data Source:
+	- Use 'CSV' or 'Upload'(When 'Upload' is selected the main Chart Area should change/switch the Drop Zone where the CSV can be Dragged and dropped or Selected form local system via a 'Browse' Button.
+	- Use 'Live Feed' to initialize Real-Time data streaming funtionality 		via the Redis intergration (Currently identified as the 'Platform' button)
+	- 'Get Assets' is currently identified as the 'Detect Asset' Button.
+	IMPORTANT NOTE: This area still needs development in regards to multi-asset streaming and detection which should have the capability to select from the QuFLX UI via '92% Payout Asset' which then must render the 'Live Feed for the selected Asset to the Chart Display.('92% Payout Assets' is currently identified as 'Favorites' on the DataAnalysis Page) We will need a unified solution for the current 'Update Favorites' Button and the 'Get Assets' Button. The current 'Detect Asset' and 'Start Stream' Functionality is designed to only handle one asset that is manually selected by user in/on the Pocket Option platform. It should be detecting and listing the 92% Payout Assets and serve as a 'Ticker Panel/Market Ticker' index. (NOTE, I am working locally on this, because we are unable to test Redis in the Replit IDE. You can provide Recommendations for my Local System Coding Agent. If you have any constuctive suggestions)
+4. '92% Payout Assets' Lists the Assets that have a 92% payout rate. Asset List should be scrollable to maintain the correct size for UI/UX
+(See number {3.} explained Above. This Basically lays out the Current Situation.)
+5. TradingView Light Weight Chart Display:
+	- CSV Data Display
+	- RealTime Data Streaming
+	- Dropzone for uploading local  CSV files
+	- I would like to add 'Spinner' Component instead of the current spinning 'Emoji Hour Glass'. And Text  descrption should be 'Loading Data...'
+6. Currently identified as "Asset Selector' section. I would like all these dropdowns at the top of the chart to be 'Compobox' Components. 
+IMPORTANT NOTES: 
+	-There should a clear seperation of concerns regarding the selection of these Assets, because every asset doesn't have matching format_Ticks and different specified timeframes) e.g. AUDNZD_otc might only have a 1min 100 candle data available and not any othe Timeframe nor Tick Data. So if the Data is not Recognized or Detected there should a special Error Message not the general one.
+	- Ticks should also be stored seperately in Database Structure. I.e. when 'Ticks' is selected from the 'Timeframe' Combobox dropdown the user must not be able to select the candle data and when timeframes 1m, 5m, 15m, 1h, and 4h is selected the user should not be able to select Ticks from the 'Asset Selector' Combobox Dropdown. So the the non-available assets should be greyd out or not appear in the menu depending on which option is selected. (Please, carefully look at this issue without complicating codebase with clear sepertation of concerns maintaining optimal functionality)
+7. Timeframe Combobox Dropdown. (See above(6.) for more details on Tick and Candle seperations)
+8. CSV Combobox Dropdown. Select Data import method.
+9. Indicator Combobox dropdown. The currently identified with the Indicator buttons and which also reveals a Panel that takes up way too much space. With the Combobox we will have a simple unified solution. The Indicators do not need descriptions. You can add descriptions in the popup modal where the user enters the input or configuration values of the specific Indicator. So the Conbo box must only display the Name and the values selected. Keep it Compact.
+10. Automations Controls: I'm lookinmg to control certain Automations that are handled by the capabilites. Located at \{root}/capabilities. We are already using the favorite_star_select.py capability for the '92% Payout Assets' functionality. We will need to discuss the details of this part of the development. Some capabilities still need some testing and the 'Pending Orders' capability still needs to be created. We will deal with this when we get there. For now, just create the Buttons on frontend with place holder and end-point in backend.
+11. Here we can list the Active indcators. Currently above the Chart Display and taking up too much space in the UI.
+12. Quick: I still have to deciede exactly what we will do here.But the idea I have is as follow:
+	- This is the DataAnalysis page, so what are we analysing? I thought we should focus on Analyzing Times with favaroble Market Conditions that will be based on Price action and the amout of activity in the market. So I can determine the most optimal and profitable times for trading. Thjis could be combined with Trading Results Data. Just create place holders or Labels on frontend display for now. (We will still discuss this.)
+	13. Connection Status: Currently this section is located at the top of the Page. I thisnk this placement is beter for UI/UX design. We also need a unified solution. 
+Current Issue:
+			- There is currently a small modal that apears in the Right 		upper corner with this Output:
+							"WebSocket: ✅
+							Chrome: ✅
+							Data Source: csv
+							Can Enter Live: ❌"
+							And this in the upper left and corner;
+						"WS: Connected Chrome: Connected Stream:Idle"
+14. Ask AI: I would like to add an AI assistant whose perpose is te help with Market Analysis. Should be able to Analyse images. Also just add place holders in backend nd create the Button on the Frontend. We will go into more details when we get there.
+
+I just added the disclaimer 'Copyright © 2026 QuFLX. All rights Reseved' at bottom of the page for visual appeal and best practices.
+								

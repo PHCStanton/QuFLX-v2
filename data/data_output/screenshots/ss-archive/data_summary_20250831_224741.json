@@ -1,0 +1,24 @@
+{
+  "collected_at": "2025-08-31T22:47:41.277761",
+  "summary": {
+    "div_elements_found": 100,
+    "websocket_messages_collected": 164,
+    "sample_div_element": {
+      "index": 0,
+      "tag_name": "div",
+      "id": "",
+      "class": "loading-container js-loading-container hide",
+      "text": "",
+      "outer_html": "<div class=\"loading-container js-loading-container hide\">\n    <div class=\"ajax-loader-v2 js-ajax-loader-v2 ajax-loader-v2--absolute ajax-loader-v2--window\"><!--?xml version=\"1.0\" encoding=\"UTF-8\" stan"
+    },
+    "sample_websocket_message": {
+      "timestamp": 1756680446.2910666,
+      "frame_type": "received",
+      "size_bytes": 50,
+      "full_payload": "451-[\"updateStream\",{\"_placeholder\":true,\"num\":0}]",
+      "truncated_payload": "451-[\"updateStream\",{\"_placeholder\":true,\"num\":0}]",
+      "request_id": "8844.5721",
+      "timestamp_str": "2025-08-31T22:47:26.291067"
+    }
+  }
+}

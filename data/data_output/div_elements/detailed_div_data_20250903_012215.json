@@ -1,0 +1,750 @@
+{
+  "collected_at": "2025-09-03T01:22:15.976098",
+  "total_div_elements": 93,
+  "div_elements": [
+    {
+      "index": 0,
+      "tag_name": "div",
+      "id": "",
+      "class": "loading-container js-loading-container hide",
+      "text": "",
+      "outer_html": "<div class=\"loading-container js-loading-container hide\">\n    <div class=\"ajax-loader-v2 js-ajax-loader-v2 ajax-loader-v2--absolute ajax-loader-v2--window\"><!--?xml version=\"1.0\" encoding=\"UTF-8\" stan"
+    },
+    {
+      "index": 1,
+      "tag_name": "div",
+      "id": "",
+      "class": "ajax-loader-v2 js-ajax-loader-v2 ajax-loader-v2--absolute ajax-loader-v2--window",
+      "text": "",
+      "outer_html": "<div class=\"ajax-loader-v2 js-ajax-loader-v2 ajax-loader-v2--absolute ajax-loader-v2--window\"><!--?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?-->\n<svg class=\"ajax-loader-v2__icon\" width=\"64\" h"
+    },
+    {
+      "index": 2,
+      "tag_name": "div",
+      "id": "",
+      "class": "portrait-dummy",
+      "text": "",
+      "outer_html": "<div class=\"portrait-dummy\"></div>"
+    },
+    {
+      "index": 3,
+      "tag_name": "div",
+      "id": "",
+      "class": "achievements-notice-streamer",
+      "text": "",
+      "outer_html": "<div class=\"achievements-notice-streamer\"></div>"
+    },
+    {
+      "index": 4,
+      "tag_name": "div",
+      "id": "",
+      "class": "wrapper",
+      "text": "QT Demo\nUSD\n48,325.49\nTOP UP\n+59\n%\nUSD/COP OTC\n+92\n%\nKES/USD OTC\n+63\n%\nUSD/JPY OTC\n+70\n%\nEUR/RUB OTC",
+      "outer_html": "<div class=\"wrapper\">\n    <div class=\"wrapper__top\">\n        <header class=\"site-header\">\n            <a href=\"https://pocketoption.com/en/\" class=\"site-header__logo\">\n                <svg width=\"202\""
+    },
+    {
+      "index": 5,
+      "tag_name": "div",
+      "id": "",
+      "class": "wrapper__top",
+      "text": "QT Demo\nUSD\n48,325.49\nTOP UP\n+59\n%\nUSD/COP OTC\n+92\n%\nKES/USD OTC\n+63\n%\nUSD/JPY OTC\n+70\n%\nEUR/RUB OTC",
+      "outer_html": "<div class=\"wrapper__top\">\n        <header class=\"site-header\">\n            <a href=\"https://pocketoption.com/en/\" class=\"site-header__logo\">\n                <svg width=\"202\" height=\"30\" viewBox=\"0 0 "
+    },
+    {
+      "index": 6,
+      "tag_name": "div",
+      "id": "js-window-layout-switcher",
+      "class": "window-layout-switcher",
+      "text": "",
+      "outer_html": "<div id=\"js-window-layout-switcher\" class=\"window-layout-switcher\"></div>"
+    },
+    {
+      "index": 7,
+      "tag_name": "div",
+      "id": "js-fav-panel-switcher",
+      "class": "",
+      "text": "",
+      "outer_html": "<div id=\"js-fav-panel-switcher\"><a class=\"fav-panel-switcher\"><svg width=\"21\" height=\"20\" viewBox=\"0 0 21 20\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"svg-icon\"><path d=\"M20.4656 7.56167C"
+    },
+    {
+      "index": 8,
+      "tag_name": "div",
+      "id": "",
+      "class": "right-block js-right-block",
+      "text": "QT Demo\nUSD\n48,325.49\nTOP UP",
+      "outer_html": "<div class=\"right-block js-right-block\">\n                                                                                                                                <div class=\"right-block__item j"
+    },
+    {
+      "index": 9,
+      "tag_name": "div",
+      "id": "",
+      "class": "right-block__item js-drop-down-modal-open",
+      "text": "QT Demo\nUSD\n48,325.49",
+      "outer_html": "<div class=\"right-block__item js-drop-down-modal-open\" data-modal-id=\"balance\">\n                    <div class=\"balance-info-block \">\n    <div class=\"balance-info-block__top\">\n        <div class=\"bala"
+    },
+    {
+      "index": 10,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block ",
+      "text": "QT Demo\nUSD\n48,325.49",
+      "outer_html": "<div class=\"balance-info-block \">\n    <div class=\"balance-info-block__top\">\n        <div class=\"balance-info-block__top-in\">\n            <div class=\"balance-info-block__label\">\n                QT Demo"
+    },
+    {
+      "index": 11,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__top",
+      "text": "QT Demo\nUSD",
+      "outer_html": "<div class=\"balance-info-block__top\">\n        <div class=\"balance-info-block__top-in\">\n            <div class=\"balance-info-block__label\">\n                QT Demo            </div>\n                   "
+    },
+    {
+      "index": 12,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__top-in",
+      "text": "QT Demo\nUSD",
+      "outer_html": "<div class=\"balance-info-block__top-in\">\n            <div class=\"balance-info-block__label\">\n                QT Demo            </div>\n                        <div class=\"balance-info-block__currency\""
+    },
+    {
+      "index": 13,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__label",
+      "text": "QT Demo",
+      "outer_html": "<div class=\"balance-info-block__label\">\n                QT Demo            </div>"
+    },
+    {
+      "index": 14,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__currency",
+      "text": "USD",
+      "outer_html": "<div class=\"balance-info-block__currency\">\n                USD            </div>"
+    },
+    {
+      "index": 15,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__data",
+      "text": "48,325.49",
+      "outer_html": "<div class=\"balance-info-block__data\">\n        <div class=\"balance-info-block__balance\">\n            <span class=\"js-hd js-balance-demo\" data-hd-hide=\"*******\" data-hd-show=\"48,325.49\" data-hd-status="
+    },
+    {
+      "index": 16,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__balance",
+      "text": "48,325.49",
+      "outer_html": "<div class=\"balance-info-block__balance\">\n            <span class=\"js-hd js-balance-demo\" data-hd-hide=\"*******\" data-hd-show=\"48,325.49\" data-hd-status=\"show\">48,325.49</span>        </div>"
+    },
+    {
+      "index": 17,
+      "tag_name": "div",
+      "id": "",
+      "class": "balance-info-block__arrow",
+      "text": "",
+      "outer_html": "<div class=\"balance-info-block__arrow\">\n            <svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n    <path d=\"M15.9433 11.2266L12.5714 14.7891C12.433"
+    },
+    {
+      "index": 18,
+      "tag_name": "div",
+      "id": "",
+      "class": "right-block__item deposit-btn-wrap",
+      "text": "TOP UP",
+      "outer_html": "<div class=\"right-block__item deposit-btn-wrap\">\n                    \n    <a class=\"h-btn h-btn--deposit js-drop-down-modal-open\" data-modal-id=\"fast-deposit\"><div class=\"h-btn__start\"><svg width=\"20\""
+    },
+    {
+      "index": 19,
+      "tag_name": "div",
+      "id": "",
+      "class": "h-btn__start",
+      "text": "",
+      "outer_html": "<div class=\"h-btn__start\"><svg width=\"20\" height=\"18\" viewBox=\"0 0 20 18\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path d=\"M17 4H16V3C16 2.20435 15.6839 1.44129 15.1213 0.87868C14.5587 0.31607"
+    },
+    {
+      "index": 20,
+      "tag_name": "div",
+      "id": "",
+      "class": "h-btn__end",
+      "text": "TOP UP",
+      "outer_html": "<div class=\"h-btn__end\"><div class=\"h-btn__text\">Top up</div></div>"
+    },
+    {
+      "index": 21,
+      "tag_name": "div",
+      "id": "",
+      "class": "h-btn__text",
+      "text": "TOP UP",
+      "outer_html": "<div class=\"h-btn__text\">Top up</div>"
+    },
+    {
+      "index": 22,
+      "tag_name": "div",
+      "id": "",
+      "class": "right-block__item",
+      "text": "",
+      "outer_html": "<div class=\"right-block__item\">\n                    <div class=\"header-avatar js-drop-down-modal-open\" data-modal-id=\"user-info\">\n    <div class=\"header-avatar__l\">\n        <div class=\"header-avatar__"
+    },
+    {
+      "index": 23,
+      "tag_name": "div",
+      "id": "",
+      "class": "header-avatar js-drop-down-modal-open",
+      "text": "",
+      "outer_html": "<div class=\"header-avatar js-drop-down-modal-open\" data-modal-id=\"user-info\">\n    <div class=\"header-avatar__l\">\n        <div class=\"header-avatar__chat-counter js-dimon-chat-areThereAnyNewNewsAndMess"
+    },
+    {
+      "index": 24,
+      "tag_name": "div",
+      "id": "",
+      "class": "header-avatar__l",
+      "text": "",
+      "outer_html": "<div class=\"header-avatar__l\">\n        <div class=\"header-avatar__chat-counter js-dimon-chat-areThereAnyNewNewsAndMessagesFromSupport\"></div>\n        <div class=\"user-avatar user-avatar--level-1 toolt"
+    },
+    {
+      "index": 25,
+      "tag_name": "div",
+      "id": "",
+      "class": "header-avatar__chat-counter js-dimon-chat-areThereAnyNewNewsAndMessagesFromSupport",
+      "text": "",
+      "outer_html": "<div class=\"header-avatar__chat-counter js-dimon-chat-areThereAnyNewNewsAndMessagesFromSupport\"></div>"
+    },
+    {
+      "index": 26,
+      "tag_name": "div",
+      "id": "",
+      "class": "user-avatar user-avatar--level-1 tooltip2",
+      "text": "",
+      "outer_html": "<div class=\"user-avatar user-avatar--level-1 tooltip2\" style=\"--user-avatar-size: 42px\">\n            <div class=\"user-avatar__profile-level-icon\">\n            <svg viewBox=\"0 0 40 40\" fill=\"none\" xmln"
+    },
+    {
+      "index": 27,
+      "tag_name": "div",
+      "id": "",
+      "class": "user-avatar__profile-level-icon",
+      "text": "",
+      "outer_html": "<div class=\"user-avatar__profile-level-icon\">\n            <svg viewBox=\"0 0 40 40\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<g clip-path=\"url(#clip0_56_499)\">\n<path d=\"M4.82139 23.8988L0.685152"
+    },
+    {
+      "index": 28,
+      "tag_name": "div",
+      "id": "",
+      "class": "user-avatar__img-wrap",
+      "text": "",
+      "outer_html": "<div class=\"user-avatar__img-wrap\">\n        <img src=\"/images/user-backgrounds/avatars/mexico.jpg\" alt=\"\" class=\"user-avatar__img\">\n    </div>"
+    },
+    {
+      "index": 29,
+      "tag_name": "div",
+      "id": "",
+      "class": "profile-level",
+      "text": "",
+      "outer_html": "<div class=\"profile-level\" style=\"--profile-level-size: 42px\">\n    <svg class=\"profile-level__icon\" viewBox=\"0 0 200 200\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n    <g class=\"profile-level__i"
+    },
+    {
+      "index": 30,
+      "tag_name": "div",
+      "id": "",
+      "class": "tooltip-content position-down",
+      "text": "",
+      "outer_html": "<div class=\"tooltip-content position-down\">\n            <div class=\"tooltip-text\">Beginner</div>\n        </div>"
+    },
+    {
+      "index": 31,
+      "tag_name": "div",
+      "id": "",
+      "class": "tooltip-text",
+      "text": "",
+      "outer_html": "<div class=\"tooltip-text\">Beginner</div>"
+    },
+    {
+      "index": 32,
+      "tag_name": "div",
+      "id": "js-assets-favorites-slider",
+      "class": "",
+      "text": "+59\n%\nUSD/COP OTC\n+92\n%\nKES/USD OTC\n+63\n%\nUSD/JPY OTC\n+70\n%\nEUR/RUB OTC\n+43\n%\nEUR/NZD OTC\n+92\n%\nEUR/",
+      "outer_html": "<div id=\"js-assets-favorites-slider\"><div class=\"assets-favorites-list\"><div class=\"assets-favorites-arrow assets-favorites-arrow--left\"><i class=\"fa fa-chevron-left\"></i></div><div class=\"assets-favo"
+    },
+    {
+      "index": 33,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-list",
+      "text": "+59\n%\nUSD/COP OTC\n+92\n%\nKES/USD OTC\n+63\n%\nUSD/JPY OTC\n+70\n%\nEUR/RUB OTC\n+43\n%\nEUR/NZD OTC\n+92\n%\nEUR/",
+      "outer_html": "<div class=\"assets-favorites-list\"><div class=\"assets-favorites-arrow assets-favorites-arrow--left\"><i class=\"fa fa-chevron-left\"></i></div><div class=\"assets-favorites-list__wrap\"><div class=\"assets-"
+    },
+    {
+      "index": 34,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-arrow assets-favorites-arrow--left",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-arrow assets-favorites-arrow--left\"><i class=\"fa fa-chevron-left\"></i></div>"
+    },
+    {
+      "index": 35,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-list__wrap",
+      "text": "+59\n%\nUSD/COP OTC\n+92\n%\nKES/USD OTC\n+63\n%\nUSD/JPY OTC\n+70\n%\nEUR/RUB OTC\n+43\n%\nEUR/NZD OTC\n+92\n%\nEUR/",
+      "outer_html": "<div class=\"assets-favorites-list__wrap\"><div class=\"assets-favorites-list__in\" style=\"transform: translate3d(-300px, 0px, 0px);\"><div class=\"animated assets-favorites-item\" data-id=\"AUDCAD_otc\" tabin"
+    },
+    {
+      "index": 36,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-list__in",
+      "text": "+59\n%\nUSD/COP OTC\n+92\n%\nKES/USD OTC\n+63\n%\nUSD/JPY OTC\n+70\n%\nEUR/RUB OTC\n+43\n%\nEUR/NZD OTC\n+92\n%\nEUR/",
+      "outer_html": "<div class=\"assets-favorites-list__in\" style=\"transform: translate3d(-300px, 0px, 0px);\"><div class=\"animated assets-favorites-item\" data-id=\"AUDCAD_otc\" tabindex=\"1\"><div class=\"assets-favorites-item"
+    },
+    {
+      "index": 37,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"AUDCAD_otc\" tabindex=\"1\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 38,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 40,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">AUD/CAD OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout_"
+    },
+    {
+      "index": 41,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__label\">AUD/CAD OTC</div>"
+    },
+    {
+      "index": 42,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 43,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 44,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "",
+      "outer_html": "<div class=\"payout__number\">+92</div>"
+    },
+    {
+      "index": 45,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    },
+    {
+      "index": 46,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "+59\n%",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"NZDUSD_otc\" tabindex=\"2\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 47,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 49,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "+59\n%",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">NZD/USD OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+59</div><div class=\"payout_"
+    },
+    {
+      "index": 50,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__label\">NZD/USD OTC</div>"
+    },
+    {
+      "index": 51,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "+59\n%",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+59</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 52,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "+59\n%",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+59</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 53,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "+59",
+      "outer_html": "<div class=\"payout__number\">+59</div>"
+    },
+    {
+      "index": 54,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "%",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    },
+    {
+      "index": 55,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "USD/COP OTC\n+92\n%",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"USDCOP_otc\" tabindex=\"3\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 56,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 58,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "USD/COP OTC\n+92\n%",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">USD/COP OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout_"
+    },
+    {
+      "index": 59,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "USD/COP OTC",
+      "outer_html": "<div class=\"assets-favorites-item__label\">USD/COP OTC</div>"
+    },
+    {
+      "index": 60,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "+92\n%",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 61,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "+92\n%",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 62,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "+92",
+      "outer_html": "<div class=\"payout__number\">+92</div>"
+    },
+    {
+      "index": 63,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "%",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    },
+    {
+      "index": 64,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "KES/USD OTC\n+63\n%",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"KESUSD_otc\" tabindex=\"4\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 65,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 67,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "KES/USD OTC\n+63\n%",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">KES/USD OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+63</div><div class=\"payout_"
+    },
+    {
+      "index": 68,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "KES/USD OTC",
+      "outer_html": "<div class=\"assets-favorites-item__label\">KES/USD OTC</div>"
+    },
+    {
+      "index": 69,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "+63\n%",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+63</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 70,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "+63\n%",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+63</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 71,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "+63",
+      "outer_html": "<div class=\"payout__number\">+63</div>"
+    },
+    {
+      "index": 72,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "%",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    },
+    {
+      "index": 73,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "USD/JPY OTC\n+70\n%",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"USDJPY_otc\" tabindex=\"5\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 74,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 76,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "USD/JPY OTC\n+70\n%",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">USD/JPY OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+70</div><div class=\"payout_"
+    },
+    {
+      "index": 77,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "USD/JPY OTC",
+      "outer_html": "<div class=\"assets-favorites-item__label\">USD/JPY OTC</div>"
+    },
+    {
+      "index": 78,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "+70\n%",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+70</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 79,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "+70\n%",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+70</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 80,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "+70",
+      "outer_html": "<div class=\"payout__number\">+70</div>"
+    },
+    {
+      "index": 81,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "%",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    },
+    {
+      "index": 82,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "EUR/RUB OTC\n+43\n%",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"EURRUB_otc\" tabindex=\"6\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 83,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 85,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "EUR/RUB OTC\n+43\n%",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">EUR/RUB OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+43</div><div class=\"payout_"
+    },
+    {
+      "index": 86,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "EUR/RUB OTC",
+      "outer_html": "<div class=\"assets-favorites-item__label\">EUR/RUB OTC</div>"
+    },
+    {
+      "index": 87,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "+43\n%",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+43</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 88,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "+43\n%",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+43</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 89,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "+43",
+      "outer_html": "<div class=\"payout__number\">+43</div>"
+    },
+    {
+      "index": 90,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "%",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    },
+    {
+      "index": 91,
+      "tag_name": "div",
+      "id": "",
+      "class": "animated assets-favorites-item",
+      "text": "EUR/NZD OTC\n+92\n%",
+      "outer_html": "<div class=\"animated assets-favorites-item\" data-id=\"EURNZD_otc\" tabindex=\"7\"><div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w"
+    },
+    {
+      "index": 92,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__preview-wrapper",
+      "text": "",
+      "outer_html": "<div class=\"assets-favorites-item__preview-wrapper\"><div><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"165\" height=\"55\" class=\"injected-svg\" data-src=\"https"
+    },
+    {
+      "index": 94,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__line",
+      "text": "EUR/NZD OTC\n+92\n%",
+      "outer_html": "<div class=\"assets-favorites-item__line\"><div class=\"assets-favorites-item__label\">EUR/NZD OTC</div><div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout_"
+    },
+    {
+      "index": 95,
+      "tag_name": "div",
+      "id": "",
+      "class": "assets-favorites-item__label",
+      "text": "EUR/NZD OTC",
+      "outer_html": "<div class=\"assets-favorites-item__label\">EUR/NZD OTC</div>"
+    },
+    {
+      "index": 96,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout",
+      "text": "+92\n%",
+      "outer_html": "<div class=\"payout\"><div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout__symbol\">%</div></div></div>"
+    },
+    {
+      "index": 97,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__in",
+      "text": "+92\n%",
+      "outer_html": "<div class=\"payout__in\"><div class=\"payout__number\">+92</div><div class=\"payout__symbol\">%</div></div>"
+    },
+    {
+      "index": 98,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__number",
+      "text": "+92",
+      "outer_html": "<div class=\"payout__number\">+92</div>"
+    },
+    {
+      "index": 99,
+      "tag_name": "div",
+      "id": "",
+      "class": "payout__symbol",
+      "text": "%",
+      "outer_html": "<div class=\"payout__symbol\">%</div>"
+    }
+  ]
+}

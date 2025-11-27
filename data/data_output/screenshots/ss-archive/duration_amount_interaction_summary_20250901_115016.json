@@ -1,0 +1,111 @@
+{
+  "timestamp": "20250901_115016",
+  "amount": {
+    "ok": false,
+    "value": 10,
+    "selector_used": "xpath",
+    "selector_detail": "//*[contains(normalize-space(.), 'Amount')]/following::input[1]",
+    "attempts": [
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(normalize-space(.), 'Amount')]/following::input[1]",
+        "ok": true
+      }
+    ],
+    "retries": [
+      {
+        "attempt": 1,
+        "raw_value": "110",
+        "parsed_value": 110.0,
+        "ok": false
+      },
+      {
+        "attempt": 2,
+        "raw_value": "110",
+        "parsed_value": 110.0,
+        "ok": false
+      },
+      {
+        "attempt": 3,
+        "raw_value": "110",
+        "parsed_value": 110.0,
+        "ok": false
+      }
+    ]
+  },
+  "trade_duration_expiry": {
+    "ok": false,
+    "value": null,
+    "selector_used": null,
+    "selector_detail": null,
+    "attempts": [
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(normalize-space(.), 'Time')]/following::*[(self::button or self::div or self::input)][1]",
+        "ok": false
+      },
+      {
+        "strategy": "css",
+        "selector": ".time",
+        "ok": false
+      },
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(@aria-label,'Time')]",
+        "ok": false
+      }
+    ],
+    "verify_attempts": [
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(normalize-space(.), 'Time')]/following::*[contains(normalize-space(.), '1 min')][1]",
+        "ok": false
+      },
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(@class,'time') and (contains(normalize-space(.), '1 min') or contains(normalize-space(.), '1 m') or contains(normalize-space(.), '01:00') or contains(normalize-space(.), '00:01:00'))]",
+        "ok": false
+      },
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(@aria-label,'Time') and (contains(normalize-space(.), '1 min') or contains(normalize-space(.), '1 m') or contains(normalize-space(.), '01:00') or contains(normalize-space(.), '00:01:00'))]",
+        "ok": false
+      },
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(normalize-space(.), '1 m')]",
+        "ok": false
+      },
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(normalize-space(.), '01:00') or contains(normalize-space(.), '00:01:00')]",
+        "ok": false
+      }
+    ],
+    "right_root_attempts": [
+      {
+        "strategy": "css",
+        "selector": ".js-right-block",
+        "ok": true
+      }
+    ],
+    "right_root_used": "css",
+    "right_root_detail": ".js-right-block",
+    "option_attempts": [
+      {
+        "strategy": "xpath",
+        "selector": "//*[normalize-space(text())='1 min']",
+        "ok": false
+      },
+      {
+        "strategy": "xpath",
+        "selector": "//*[contains(normalize-space(.), '1 min')]",
+        "ok": true
+      }
+    ],
+    "option_selector_used": "xpath",
+    "option_selector_detail": "//*[contains(normalize-space(.), '1 min')]",
+    "verify_selector_used": null,
+    "verify_selector_detail": null
+  }
+}

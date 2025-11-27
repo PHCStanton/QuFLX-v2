@@ -1,0 +1,40 @@
+{
+  "timestamp": "20250901_095644",
+  "zoom_observed": 1.0,
+  "zoom_ok": false,
+  "timeframe_ok": false,
+  "amount_ok": true,
+  "amount_value": 10,
+  "payout_percentage": 92,
+  "payout_raw_text": "BUY +92 %",
+  "payout_payback_text": "+92%\n+$211.20",
+  "buy_present": true,
+  "sell_present": true,
+  "favorites_min_pct": 92,
+  "favorites_eligible": [
+    {
+      "asset": "NZD/USD OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "GBP/USD OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/RUB OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/NZD OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "EUR/CHF OTC",
+      "payout_percent": 92
+    },
+    {
+      "asset": "AUD/CAD OTC",
+      "payout_percent": 92
+    }
+  ]
+}
