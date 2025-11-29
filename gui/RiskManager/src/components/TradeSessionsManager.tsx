@@ -12,7 +12,7 @@ interface CustomSession {
   id: number;
   trades: Trade[];
   profit: number;
-  balance: number;
+  endBalance: number;
 }
 
 interface TradeSessionsManagerProps {

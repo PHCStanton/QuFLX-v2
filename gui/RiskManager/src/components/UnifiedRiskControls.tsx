@@ -16,12 +16,14 @@ interface UnifiedRiskControlsProps {
   riskPercentPerTrade: number;
   drawdownPercent: number;
   riskRewardRatio: number;
+  payoutPercentage: number;
   useFixedAmount: boolean;
   fixedRiskAmount: number;
   onBalanceChange: (value: number) => void;
   onRiskPercentChange: (value: number) => void;
   onDrawdownPercentChange: (value: number) => void;
   onRiskRewardRatioChange: (value: number) => void;
+  onPayoutPercentageChange: (value: number) => void;
   onUseFixedAmountChange: (value: boolean) => void;
   onFixedRiskAmountChange: (value: number) => void;
   onAddTrade: (result: 'win' | 'loss') => void;
@@ -41,7 +43,9 @@ export default function UnifiedRiskControls({
   onBalanceChange,
   onRiskPercentChange,
   onDrawdownPercentChange,
+  payoutPercentage,
   onRiskRewardRatioChange,
+  onPayoutPercentageChange,
   onUseFixedAmountChange,
   onFixedRiskAmountChange,
   onAddTrade,
@@ -52,11 +56,11 @@ export default function UnifiedRiskControls({
   const [showCheatsheet, setShowCheatsheet] = useState(false);
 
   const riskPerTrade = useFixedAmount ? fixedRiskAmount : balance * (riskPercentPerTrade / 100);
-  const rewardPerTrade = riskPerTrade * riskRewardRatio;
+  const rewardPerTrade = riskPerTrade * (payoutPercentage / 100);
   const totalDrawdownAmount = initialBalance * (drawdownPercent / 100);
   const maxDrawdownLimit = initialBalance - totalDrawdownAmount;
   const takeProfitTarget = initialBalance + (totalDrawdownAmount * riskRewardRatio);
-  const requiredWinRate = (1 / (1 + riskRewardRatio)) * 100;
+  const requiredWinRate = (1 / (1 + (payoutPercentage / 100))) * 100;
 
   return (
     <>
@@ -75,7 +79,7 @@ export default function UnifiedRiskControls({
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4 mb-6">
+      <div className="grid md:grid-cols-4 gap-4 mb-6">
         <div>
           <label className="flex items-center gap-2 text-gray-400 text-xs mb-2">
             Current Balance
@@ -111,23 +115,21 @@ export default function UnifiedRiskControls({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onUseFixedAmountChange(false)}
-                disabled={!canEditSettings}
                 className={`px-2 py-1 rounded text-xs font-semibold transition-all ${
-                  !useFixedAmount && canEditSettings
+                  !useFixedAmount
                     ? 'bg-emerald-500 text-white'
                     : 'bg-[#0f1419] text-gray-400 border border-gray-700'
-                } ${!canEditSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
                 %
               </button>
               <button
                 onClick={() => onUseFixedAmountChange(true)}
-                disabled={!canEditSettings}
                 className={`px-2 py-1 rounded text-xs font-semibold transition-all ${
-                  useFixedAmount && canEditSettings
+                  useFixedAmount
                     ? 'bg-emerald-500 text-white'
                     : 'bg-[#0f1419] text-gray-400 border border-gray-700'
-                } ${!canEditSettings ? 'opacity-50 cursor-not-allowed' : ''}`}
+                }`}
               >
                 $
               </button>
@@ -141,12 +143,11 @@ export default function UnifiedRiskControls({
                   <button
                     key={percent}
                     onClick={() => onRiskPercentChange(percent)}
-                    disabled={!canEditSettings}
                     className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
-                      riskPercentPerTrade === percent && canEditSettings
+                      riskPercentPerTrade === percent
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-[#0f1419] text-gray-400 border border-gray-700'
-                    } ${!canEditSettings ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-600'}`}
+                        : 'bg-[#0f1419] text-gray-400 border border-gray-700 hover:border-gray-600'
+                    }`}
                   >
                     {percent}%
                   </button>
@@ -163,8 +164,7 @@ export default function UnifiedRiskControls({
                     }
                   }}
                   placeholder="Custom %"
-                  disabled={!canEditSettings}
-                  className="w-full px-3 py-2 bg-[#0f1419] border border-gray-700 rounded-lg text-white text-xs placeholder:text-gray-600 focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 bg-[#0f1419] border border-gray-700 rounded-lg text-white text-xs placeholder:text-gray-600 focus:border-emerald-500 focus:outline-none"
                   min="0.01"
                   max="100"
                   step="0.1"
@@ -185,8 +185,7 @@ export default function UnifiedRiskControls({
                   }
                 }}
                 placeholder="Enter fixed amount"
-                disabled={!canEditSettings}
-                className="w-full pl-8 pr-3 py-2 bg-[#0f1419] border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-emerald-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full pl-8 pr-3 py-2 bg-[#0f1419] border border-gray-700 rounded-lg text-white text-sm placeholder:text-gray-600 focus:border-emerald-500 focus:outline-none"
                 min="0.01"
                 step="0.01"
               />
@@ -233,6 +232,33 @@ export default function UnifiedRiskControls({
               step="0.1"
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+            Payout Percentage
+            <Tooltip content="The percentage of your investment that you receive as profit for a winning trade." />
+          </label>
+          <div className="relative h-[72px] flex items-end">
+            <div className="relative w-full">
+              <input
+                type="number"
+                value={payoutPercentage}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  if (!isNaN(value) && value > 0 && value <= 92) {
+                    onPayoutPercentageChange(value);
+                  }
+                }}
+                placeholder="Custom %"
+                className="w-full px-3 py-2 bg-[#0f1419] border border-gray-700 rounded-lg text-white text-xs placeholder:text-gray-600 focus:border-blue-500 focus:outline-none"
+                min="1"
+                max="92"
+                step="1"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%</span>
+            </div>
           </div>
         </div>
       </div>

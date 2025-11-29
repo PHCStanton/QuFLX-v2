@@ -1,32 +1,39 @@
 # Active Context
 
 ## Current Focus
-**Phase 3: The Strategy Engine**
+**Phase 5: The UI (Frontend Rebuild)**
 
-We have successfully completed Phase 2 (The Miner) and are now moving to Phase 3. The goal is to build the "Brain" of the system that consumes raw market data from Redis, calculates technical indicators, and generates trading signals.
+We have successfully refactored the frontend into a modular architecture using React, Zustand, and Lightweight Charts. The `DataAnalysis.jsx` monolith has been broken down into focused components (`Sidebar`, `TopBar`, `AssetPanel`, `ChartWorkspace`, `StatsPanel`).
 
 ## Recent Accomplishments
-- **Phase 2 Complete**:
-    - Implemented `ChromeConnectionManager` to attach to existing Chrome sessions.
-    - Implemented `WebSocketInterceptor` to parse raw WebSocket frames from Chrome performance logs.
-    - Implemented `CollectorService` to orchestrate data collection and publish `Tick` objects to Redis channel `market_data`.
-    - Verified end-to-end data flow: Chrome -> Collector -> Redis.
+- **Phase 3 Complete (Strategy Engine)**:
+    - Implemented `TechnicalIndicatorsPipeline` with comprehensive indicator set.
+    - Implemented `StrategyService` to process candles and generate signals.
+- **Phase 4 Complete (API Gateway)**:
+    - Implemented FastAPI Gateway with Socket.IO support.
+    - Configured Redis listener for real-time data broadcasting.
+- **Phase 5 (Frontend Refactoring)**:
+    - Renamed `DataAnalysis.jsx` to `Dashboard.jsx`.
+    - Implemented `marketStore.js` using `zustand` for global state management.
+    - Created modular components: `Sidebar`, `TopBar`, `AssetPanel`, `ChartWorkspace`, `StatsPanel`, `Combobox`.
+    - Integrated `lightweight-charts` for financial data visualization.
+    - Added `ErrorBoundary` for robust error handling.
+    - Verified build success.
 
 ## Current State
-- **Collector Service**: Running (or ready to run) and publishing ticks to Redis.
-- **Redis**: Receiving `Tick` objects on `market_data` channel.
-- **Data Models**: `Tick` and `Candle` models are defined in `backend/models/market_data.py`.
+- **Frontend**: Modular structure in place. Mock data is currently used for the chart and asset list.
+- **Backend**: Collector, Strategy, and Gateway services are implemented.
+- **Data Flow**: Backend services are ready to stream data. Frontend needs to be wired to the Gateway via Socket.IO.
 
-## Next Steps (Phase 3)
-1.  **Indicator Engine**: Implement technical indicator calculations (SMA, RSI, etc.) using `pandas` or `ta-lib`.
-2.  **Strategy Service**: Create a service that:
-    - Subscribes to `market_data`.
-    - Aggregates ticks into candles (if needed, or uses a separate aggregator).
-    - Calculates indicators on new data.
-    - Evaluates trading rules.
-    - Publishes `Signal` objects to `trading:signals`.
+## Next Steps (Phase 5 & 4)
+1.  **Socket.IO Integration (Frontend)**: Connect `marketStore` to the backend Socket.IO server.
+2.  **Socket.IO Integration (Backend)**: Implement the Socket.IO server in the API Gateway (Phase 4).
+3.  **Real-time Data Binding**:
+    -   Bind "92% Payout Assets" list to live data.
+    -   Bind Chart to live tick/candle updates.
+    -   Bind Connection Status badges to real socket events.
 
 ## Active Files
-- `backend/services/strategy/` (To be created)
-- `backend/models/market_data.py`
-- `backend/infrastructure/redis_client.py`
+- `gui/Dashboard/src/store/marketStore.js`
+- `gui/Dashboard/src/components/Dashboard.jsx`
+- `backend/services/gateway/main.py` (To be created/updated)

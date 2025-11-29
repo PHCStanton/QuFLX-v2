@@ -47,51 +47,51 @@
 ## Phase 3: The Brain (Strategy Engine) (Week 3)
 **Goal**: Process raw data into actionable insights.
 
-- [ ] **3.1 Indicator Engine**
-    - [ ] Create `backend/services/strategy/indicators.py`.
-    - [ ] Implement rolling window calculation for SMA, RSI (using `pandas` or `ta-lib`).
+- [x] **3.1 Indicator Engine**
+    - [x] Create `backend/services/strategy/indicators.py`.
+    - [x] Implement rolling window calculation for SMA, RSI (using `pandas` or `ta-lib`).
 
-- [ ] **3.2 The Strategy Service**
-    - [ ] Create `backend/services/strategy/main.py`.
-    - [ ] Subscribe to `market_data`.
-    - [ ] On new tick/candle: Calculate Indicators -> Check Rules -> Generate Signal.
-    - [ ] Publish `Signal` to `trading:signals`.
+- [x] **3.2 The Strategy Service**
+    - [x] Create `backend/services/strategy/main.py`.
+    - [x] Subscribe to `market_data`.
+    - [x] On new tick/candle: Calculate Indicators -> Check Rules -> Generate Signal.
+    - [x] Publish `Signal` to `trading:signals`.
 
 ## Phase 4: The Face (API Gateway) (Week 4)
 **Goal**: Connect the outside world (Frontend) to the internal world (Redis).
 
-- [ ] **4.1 FastAPI Setup**
-    - [ ] Create `backend/services/gateway/main.py`.
-    - [ ] Configure CORS and basic routes (`/health`, `/status`).
+- [x] **4.1 FastAPI Setup**
+    - [x] Create `backend/services/gateway/main.py`.
+    - [x] Configure CORS and basic routes (`/health`, `/status`).
 
-- [ ] **4.2 Socket.IO Integration**
-    - [ ] Mount `socketio.ASGIApp`.
-    - [ ] Create `SocketManager` that subscribes to Redis `market_data:*`.
-    - [ ] Forward Redis messages to Socket.IO rooms (`room:EURUSD`).
+- [x] **4.2 Socket.IO Integration**
+    - [x] Mount `socketio.ASGIApp`.
+    - [x] Create `SocketManager` that subscribes to Redis `market_data:*`.
+    - [x] Forward Redis messages to Socket.IO rooms (`room:EURUSD`).
 
 - [ ] **4.3 Historical Data API**
-    - [ ] Implement `/api/v1/history/{asset}` endpoint.
+    - [x] Implement `/api/v1/history/{asset}` endpoint (Placeholder implemented).
     - [ ] Fetch recent history from Redis Streams (buffer).
 
 ## Phase 5: The UI (Frontend Rebuild) (Week 5)
 **Goal**: Visualize the data using the "Smart Store" pattern.
 
 - [ ] **5.1 State Management**
-    - [ ] Install `zustand`.
-    - [ ] Create `useMarketStore`:
-        - [ ] `candles: Record<Asset, Candle[]>`
-        - [ ] `connectionStatus: 'connected' | 'disconnected'`
+    - [x] Install `zustand`.
+    - [x] Create `useMarketStore`:
+        - [x] `candles: Record<Asset, Candle[]>`
+        - [x] `connectionStatus: 'connected' | 'disconnected'`
     - [ ] Connect Store to Socket.IO client.
 
 - [ ] **5.2 Chart Components**
-    - [ ] Install `lightweight-charts`.
-    - [ ] Create `<ChartCanvas />` (Wrapper for resize/init).
-    - [ ] Create `<CandlestickSeries />` (Dumb component, takes data prop).
-    - [ ] Create `<IndicatorPane />` (Renders RSI/MACD).
+    - [x] Install `lightweight-charts`.
+    - [x] Create `<ChartCanvas />` (Wrapper for resize/init).
+    - [x] Create `<CandlestickSeries />` (Dumb component, takes data prop).
+    - [x] Create `<IndicatorPane />` (Renders RSI/MACD).
 
-- [ ] **5.3 Dashboard Layout**
-    - [ ] Implement Grid Layout.
-    - [ ] Assemble `Dashboard` page using the components.
+- [x] **5.3 Dashboard Layout**
+    - [x] Implement Grid Layout.
+    - [x] Assemble `Dashboard` page using the components.
 
 ## Phase 6: Integration & Polish (Week 6)
 **Goal**: End-to-end testing and refinement.

@@ -149,15 +149,28 @@ class WebSocketInterceptor:
 
         return ticks
 
+    def _normalize_asset_name(self, asset: str) -> str:
+        """
+        Normalize asset names for consistent comparison.
+        Removes underscores, slashes, spaces and converts to uppercase.
+        """
+        if not asset:
+            return ''
+        return asset.replace('_', '').replace('/', '').replace(' ', '').upper()
+
     def _parse_single_tick(self, item: List) -> Optional[Tick]:
         """
         Parses a list [asset, timestamp, price] into a Tick.
         """
         try:
             if len(item) >= 3:
-                asset = item[0]
+                raw_asset = item[0]
                 timestamp = float(item[1])
                 price = float(item[2])
+                
+                asset = self._normalize_asset_name(raw_asset)
+                
+                logger.info(f"Raw Tick: {raw_asset} -> {asset} {price}") # Debugging
                 
                 return Tick(
                     timestamp=timestamp,
@@ -174,11 +187,12 @@ class WebSocketInterceptor:
         Parses a dict into a Tick.
         """
         try:
-            asset = item.get('asset') or item.get('symbol')
+            raw_asset = item.get('asset') or item.get('symbol')
             price = item.get('price') or item.get('value') or item.get('quote')
             timestamp = item.get('timestamp')
             
-            if asset and price and timestamp:
+            if raw_asset and price and timestamp:
+                asset = self._normalize_asset_name(raw_asset)
                 return Tick(
                     timestamp=float(timestamp),
                     asset=asset,

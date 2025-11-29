@@ -1,9 +1,9 @@
-import DataAnalysis from './components/DataAnalysis'
+import Dashboard from './components/Dashboard'
 
 function App() {
   return (
     <div className="min-h-screen bg-dashboard-bg text-white">
-      <DataAnalysis />
+      <Dashboard />
     </div>
   )
 }

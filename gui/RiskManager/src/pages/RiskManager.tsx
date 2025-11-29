@@ -10,6 +10,7 @@ import TradeSessionsManager from '../components/TradeSessionsManager';
 import TPDrawdownControls from '../components/TPDrawdownControls';
 import SessionCompletionModal from '../components/SessionCompletionModal';
 import AllSessionsCompleteModal from '../components/AllSessionsCompleteModal';
+import LimitReachedModal from '../components/LimitReachedModal';
 import { RiskCalculator as Calculator, SessionData, RiskScenario } from '../lib/risk-calculations';
 import { exportToCSV } from '../lib/export-utils';
 
@@ -39,6 +40,7 @@ export default function RiskManager() {
   const [riskPercentPerTrade, setRiskPercentPerTrade] = useState(1.0);
   const [drawdownPercent, setDrawdownPercent] = useState(10);
   const [riskRewardRatio, setRiskRewardRatio] = useState(2);
+  const [payoutPercentage, setPayoutPercentage] = useState(92);
   const [useFixedAmount, setUseFixedAmount] = useState(false);
   const [fixedRiskAmount, setFixedRiskAmount] = useState(10);
   const [tradesPerSession, setTradesPerSession] = useState(4);
@@ -49,6 +51,8 @@ export default function RiskManager() {
   const [sessionStartBalance, setSessionStartBalance] = useState(1000);
   const [showSessionCompleteModal, setShowSessionCompleteModal] = useState(false);
   const [showAllSessionsCompleteModal, setShowAllSessionsCompleteModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitType, setLimitType] = useState<'profit' | 'drawdown'>('drawdown');
 
   const handleCalculate = () => {
     const calculator = new Calculator();
@@ -94,7 +98,7 @@ export default function RiskManager() {
     let balanceChange = 0;
 
     if (result === 'win') {
-      balanceChange = riskAmount * riskRewardRatio;
+      balanceChange = riskAmount * (payoutPercentage / 100);
     } else {
       balanceChange = -riskAmount;
     }
@@ -103,6 +107,19 @@ export default function RiskManager() {
     setBalance(newBalance);
     setCurrentSession([...currentSession, newTrade]);
     setTrades([...trades, newTrade]);
+
+    // Check limits
+    const totalDrawdownAmount = initialBalance * (drawdownPercent / 100);
+    const maxDrawdownLimit = initialBalance - totalDrawdownAmount;
+    const takeProfitTarget = initialBalance + (totalDrawdownAmount * riskRewardRatio);
+
+    if (newBalance <= maxDrawdownLimit) {
+      setLimitType('drawdown');
+      setShowLimitModal(true);
+    } else if (newBalance >= takeProfitTarget) {
+      setLimitType('profit');
+      setShowLimitModal(true);
+    }
   };
 
   const handleSessionComplete = () => {
@@ -165,6 +182,7 @@ export default function RiskManager() {
     setSessionStartBalance(initialBalance);
     setShowSessionCompleteModal(false);
     setShowAllSessionsCompleteModal(false);
+    setShowLimitModal(false);
   };
 
   return (
@@ -289,12 +307,14 @@ export default function RiskManager() {
               riskPercentPerTrade={riskPercentPerTrade}
               drawdownPercent={drawdownPercent}
               riskRewardRatio={riskRewardRatio}
+              payoutPercentage={payoutPercentage}
               useFixedAmount={useFixedAmount}
               fixedRiskAmount={fixedRiskAmount}
               onBalanceChange={handleBalanceChange}
               onRiskPercentChange={setRiskPercentPerTrade}
               onDrawdownPercentChange={setDrawdownPercent}
               onRiskRewardRatioChange={setRiskRewardRatio}
+              onPayoutPercentageChange={setPayoutPercentage}
               onUseFixedAmountChange={setUseFixedAmount}
               onFixedRiskAmountChange={setFixedRiskAmount}
               onAddTrade={handleAddTrade}
@@ -352,6 +372,14 @@ export default function RiskManager() {
           onExport={handleExportData}
           onContinueViewing={() => setShowAllSessionsCompleteModal(false)}
           onStartNew={handleReset}
+        />
+
+        <LimitReachedModal
+          isOpen={showLimitModal}
+          type={limitType}
+          amount={limitType === 'profit' ? balance : balance}
+          onClose={() => setShowLimitModal(false)}
+          onContinue={() => setShowLimitModal(false)}
         />
       </div>
     </div>
