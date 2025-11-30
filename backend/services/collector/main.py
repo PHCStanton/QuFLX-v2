@@ -25,6 +25,7 @@ class CollectorService:
         self.interceptor = None
         self.publisher = RedisPublisher()
         self.channel = "market_data" # Redis channel for ticks
+        self.status_channel = "system_status" # Redis channel for service status
 
     def start(self):
         """
@@ -37,6 +38,13 @@ class CollectorService:
             driver = self.connection_manager.connect()
             self.interceptor = WebSocketInterceptor(driver)
             self.running = True
+            
+            # Publish status: Connected
+            self.publisher.publish(self.status_channel, {
+                "service": "collector",
+                "status": "connected",
+                "timestamp": time.time()
+            })
             
             logger.info("Collector Service started successfully.")
             
@@ -79,6 +87,17 @@ class CollectorService:
         Stops the service and cleans up resources.
         """
         logger.info("Stopping Collector Service...")
+        
+        # Publish status: Disconnected
+        try:
+            self.publisher.publish(self.status_channel, {
+                "service": "collector",
+                "status": "disconnected",
+                "timestamp": time.time()
+            })
+        except Exception as e:
+            logger.error(f"Failed to publish disconnect status: {e}")
+
         self.running = False
         self.connection_manager.disconnect()
         logger.info("Collector Service stopped.")

@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "v2",
+			"path": "."
+		},
+		{
+			"path": "../gui/lightweight-charts"
+		},
+		{
+			"path": "../QuFLX-Fusion"
+		}
+	],
+	"settings": {}
+}

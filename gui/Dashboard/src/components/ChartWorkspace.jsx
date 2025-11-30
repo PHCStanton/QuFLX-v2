@@ -86,20 +86,96 @@ const ChartWorkspace = () => {
     }
   }, []);
 
-  // Handle Live Updates
+  // Handle Live Updates (Frontend Aggregation)
   useEffect(() => {
     const latestData = marketData[selectedAsset];
     if (latestData && candleSeriesRef.current) {
-      // Ensure data format matches lightweight-charts requirements
-      // If backend sends unix timestamp, lightweight-charts handles it (as number)
-      // If string 'YYYY-MM-DD', it handles that too.
       try {
-        candleSeriesRef.current.update(latestData);
+        // Check if it's a tick (has price but no open/close)
+        if (latestData.price !== undefined && latestData.open === undefined) {
+          const tick = latestData;
+          const price = tick.price;
+          const timestamp = tick.timestamp; // Unix timestamp (seconds or ms)
+          
+          // Convert to seconds if in ms
+          const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
+          
+          // Get current candle from series
+          // Note: lightweight-charts doesn't give easy access to the *last* candle data directly from the series object
+          // without maintaining state. However, we can use update() with the same time to update the current candle.
+          
+          // We need to maintain the current candle state locally or in the store to aggregate correctly.
+          // For simplicity, let's assume we are starting a new candle if time changes significantly,
+          // or updating the existing one.
+          
+          // Since we don't have the previous candle state easily here without a ref, 
+          // we'll implement a simple heuristic:
+          // If the chart has data, we assume the last point is the current candle.
+          // But we can't read it back easily.
+          
+          // BETTER APPROACH: The store should probably handle aggregation or we keep a local ref.
+          // Let's use a local ref for the current candle.
+        } else {
+          // It's a full candle update (from history or backend aggregation)
+          candleSeriesRef.current.update(latestData);
+        }
       } catch (err) {
         console.error("Error updating chart:", err);
       }
     }
   }, [marketData, selectedAsset]);
+
+  // Ref to store the current building candle
+  const currentCandleRef = useRef(null);
+
+  // Effect to handle tick aggregation
+  useEffect(() => {
+    const latestData = marketData[selectedAsset];
+    if (!latestData || !candleSeriesRef.current) return;
+
+    // If it's a tick
+    if (latestData.price !== undefined && latestData.open === undefined) {
+      const price = latestData.price;
+      const timestamp = latestData.timestamp;
+      const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
+      
+      // Determine timeframe interval (e.g., 60s for 1m)
+      // TODO: Map selectedTimeframe to seconds. Defaulting to 60s.
+      const interval = 60; 
+      const candleTime = Math.floor(time / interval) * interval;
+
+      let candle = currentCandleRef.current;
+
+      if (!candle || candle.time !== candleTime) {
+        // Start new candle
+        // If we have a previous candle, ensure it's closed? 
+        // Lightweight charts handles updates automatically.
+        
+        // Initialize new candle
+        candle = {
+          time: candleTime,
+          open: price,
+          high: price,
+          low: price,
+          close: price,
+        };
+      } else {
+        // Update existing candle
+        candle.close = price;
+        candle.high = Math.max(candle.high, price);
+        candle.low = Math.min(candle.low, price);
+      }
+
+      currentCandleRef.current = candle;
+      candleSeriesRef.current.update(candle);
+    } 
+    // If it's a candle (e.g. historical data loaded)
+    else if (latestData.open !== undefined) {
+       candleSeriesRef.current.update(latestData);
+       // Update our ref so next tick continues correctly
+       currentCandleRef.current = latestData;
+    }
+  }, [marketData, selectedAsset, selectedTimeframe]);
 
   // Options for Comboboxes
   const assetOptions = payoutAssets.map(a => ({ label: a, value: a }));
@@ -131,7 +207,7 @@ const ChartWorkspace = () => {
   };
 
   return (
-    <div className="col-span-9 flex flex-col gap-4">
+    <div className="col-span-9 flex flex-col gap-4 flex-1">
       
       {/* Top Bar - Selectors */}
       <Card className="p-3 rounded-lg flex flex-wrap items-center gap-3 z-20">

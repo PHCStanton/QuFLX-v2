@@ -3,6 +3,7 @@ import useMarketStore from '../store/marketStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import AssetPanel from './AssetPanel';
+import AutomationsPanel from './AutomationsPanel';
 import ChartWorkspace from './ChartWorkspace';
 import StatsPanel from './StatsPanel';
 import ErrorBoundary from './ErrorBoundary';
@@ -27,22 +28,38 @@ const Dashboard = () => {
         <TopBar />
 
         {/* Main Workspace */}
-        <main className="flex-1 overflow-y-auto p-4 grid grid-cols-12 gap-4">
+        <main className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
           
-          {/* Left Panel - Controls & Assets */}
-          <AssetPanel />
+          {/* Top Row: Assets & Chart (Flexible Height) */}
+          <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+            {/* Left Panel - Controls & Assets */}
+            <AssetPanel />
 
-          {/* Center Panel - Chart & Analysis */}
-          <div className="col-span-9 flex flex-col gap-4">
-            <ErrorBoundary>
-              <ChartWorkspace />
-            </ErrorBoundary>
-            <StatsPanel />
+            {/* Center Panel - Chart */}
+            <div className="col-span-9 flex flex-col h-full min-h-0">
+              <ErrorBoundary>
+                <ChartWorkspace />
+              </ErrorBoundary>
+            </div>
           </div>
+
+          {/* Bottom Row: Automations & Stats (Fixed/Auto Height) */}
+          <div className="grid grid-cols-12 gap-4 shrink-0">
+            {/* Left Panel - Automations */}
+            <div className="col-span-3">
+              <AutomationsPanel />
+            </div>
+
+            {/* Center Panel - Stats */}
+            <div className="col-span-9">
+              <StatsPanel />
+            </div>
+          </div>
+
         </main>
 
         {/* Footer */}
-        <footer className="h-8 bg-card-bg border-t border-gray-700 flex items-center justify-center text-xs text-gray-500">
+        <footer className="h-8 bg-card-bg border-t border-gray-700 flex items-center justify-center text-xs text-gray-500 shrink-0">
           Copyright © 2026 QuFLX. All rights Reserved
         </footer>
       </div>

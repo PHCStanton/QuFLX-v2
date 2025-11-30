@@ -3,8 +3,9 @@ import os
 import logging
 import asyncio
 import json
+import subprocess
 from typing import List, Dict, Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
 import redis.asyncio as redis
@@ -13,7 +14,7 @@ import redis.asyncio as redis
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from backend.models.market_data import Candle
-from backend.models.events import Signal
+from backend.models.events import Signal, SystemStatus
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +44,10 @@ REDIS_URL = "redis://localhost:6379/0"
 
 # Global state
 redis_client = None
+system_state = {
+    "collector": "disconnected",
+    "stream": "idle"
+}
 
 @app.on_event("startup")
 async def startup_event():
@@ -62,9 +67,9 @@ async def shutdown_event():
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""
     pubsub = redis_client.pubsub()
-    await pubsub.subscribe("market_data", "trading:signals")
+    await pubsub.subscribe("market_data", "trading:signals", "system_status")
     
-    logger.info("Subscribed to Redis channels: market_data, trading:signals")
+    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status")
     
     async for message in pubsub.listen():
         if message['type'] == 'message':
@@ -88,6 +93,21 @@ async def redis_listener():
                         
                 elif channel == "trading:signals":
                     await sio.emit('trading_signal', parsed_data)
+
+                elif channel == "system_status":
+                    # Validate with Pydantic
+                    try:
+                        status_event = SystemStatus(**parsed_data)
+                        
+                        # Update internal state
+                        if status_event.service == "collector":
+                            system_state["collector"] = status_event.status
+                            system_state["stream"] = "streaming" if status_event.status == "connected" else "idle"
+
+                        await sio.emit('system_status', status_event.dict())
+                    except Exception as e:
+                        logger.error(f"Invalid system status message: {e}")
+                        continue
                     
             except json.JSONDecodeError:
                 logger.warning(f"Received non-JSON message on {channel}: {data}")
@@ -114,6 +134,13 @@ async def subscribe_asset(sid, asset):
 async def health_check():
     return {"status": "healthy", "service": "api-gateway"}
 
+@app.get("/api/v1/status")
+async def get_status():
+    """
+    Returns the current status of services.
+    """
+    return system_state
+
 @app.get("/api/v1/history/{asset}")
 async def get_history(asset: str, limit: int = 100):
     """
@@ -127,6 +154,111 @@ async def get_history(asset: str, limit: int = 100):
         "data": [],
         "message": "Historical data storage not yet implemented"
     }
+
+@app.post("/api/v1/refresh-assets")
+async def refresh_assets():
+    """
+    Executes favorite_star_select.py to refresh the list of 92% payout assets.
+    """
+    try:
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/favorite_star_select.py"))
+        
+        # Run the script
+        result = subprocess.run(
+            [sys.executable, script_path, "--min-pct", "92", "--sweep-all", "--unstar-below"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            logger.error(f"Error refreshing assets: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+            
+        # Parse output
+        try:
+            output_json = json.loads(result.stdout)
+            if not output_json.get("ok"):
+                raise HTTPException(status_code=500, detail=f"Script returned error: {output_json.get('error')}")
+                
+            data = output_json.get("data", {})
+            processed = data.get("processed", {})
+            
+            # Combine selected_now and already_favorited
+            assets = list(set(processed.get("selected_now", []) + processed.get("already_favorited", [])))
+            
+            return {"assets": assets}
+            
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON output from script: {result.stdout}")
+            raise HTTPException(status_code=500, detail="Invalid output from asset refresh script")
+            
+    except Exception as e:
+        logger.error(f"Refresh assets failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/select-asset")
+async def select_asset(payload: Dict[str, str] = Body(...)):
+    """
+    Selects an asset in the Pocket Option UI using Selenium.
+    """
+    asset = payload.get("asset")
+    if not asset:
+        raise HTTPException(status_code=400, detail="Asset name required")
+        
+    try:
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "asset_control.py"))
+        
+        result = subprocess.run(
+            [sys.executable, script_path, "--action", "select_asset", "--asset", asset],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            logger.error(f"Error selecting asset: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+            
+        output_json = json.loads(result.stdout)
+        if not output_json.get("ok"):
+             raise HTTPException(status_code=500, detail=f"Selection failed: {output_json.get('error')}")
+             
+        return {"status": "success", "message": f"Selected {asset}"}
+        
+    except Exception as e:
+        logger.error(f"Select asset failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/select-timeframe")
+async def select_timeframe(payload: Dict[str, str] = Body(...)):
+    """
+    Selects a timeframe in the Pocket Option UI using Selenium.
+    """
+    timeframe = payload.get("timeframe")
+    if not timeframe:
+        raise HTTPException(status_code=400, detail="Timeframe required")
+        
+    try:
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "asset_control.py"))
+        
+        result = subprocess.run(
+            [sys.executable, script_path, "--action", "select_timeframe", "--timeframe", timeframe],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            logger.error(f"Error selecting timeframe: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+            
+        output_json = json.loads(result.stdout)
+        if not output_json.get("ok"):
+             raise HTTPException(status_code=500, detail=f"Selection failed: {output_json.get('error')}")
+             
+        return {"status": "success", "message": f"Selected {timeframe}"}
+        
+    except Exception as e:
+        logger.error(f"Select timeframe failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

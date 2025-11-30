@@ -1,0 +1,12 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "C:\\Users\\piete\\anaconda3\\envs\\QuFLX-v2\\python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.envFile": "${workspaceFolder}/.env"
+  }
+}
