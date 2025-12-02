@@ -73,6 +73,13 @@
     - [x] Implement `/api/v1/history/{asset}` endpoint (Placeholder implemented).
     - [ ] Fetch recent history from Redis Streams (buffer).
 
+- [ ] **4.4 Asset Control & Selection**
+    - [ ] Create `config_files/92_Percent_config.json`.
+    - [ ] Update `gateway/main.py` with `select_asset` Socket.IO event.
+    - [ ] Refactor `asset_control.py` to use `HighPriorityControls`.
+    - [ ] Update `marketStore.js` to use Socket.IO for asset selection.
+    - [ ] Verify `interceptor.py` parsing logic.
+
 ## Phase 5: The UI (Frontend Rebuild) (Week 5)
 **Goal**: Visualize the data using the "Smart Store" pattern.
 

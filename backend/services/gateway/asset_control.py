@@ -38,6 +38,17 @@ try:
 except ImportError:
     pass
 
+# Import HighPriorityControls
+try:
+    from selenium.selenium_ui_controls import HighPriorityControls
+except ImportError:
+    # Try adding project root to path again if needed
+    sys.path.append(str(project_root))
+    try:
+        from selenium.selenium_ui_controls import HighPriorityControls
+    except ImportError:
+        HighPriorityControls = None
+
 class AssetControl(Capability):
     """
     Control asset and timeframe selection in Pocket Option UI.
@@ -65,11 +76,50 @@ class AssetControl(Capability):
 
     def _select_asset(self, ctx: Ctx, asset_name: str) -> CapResult:
         """
-        Selects an asset from the dropdown.
+        Selects an asset. Tries favorites bar first, then dropdown.
         """
         driver = ctx.driver
         
-        # 1. Open Asset Dropdown
+        # 1. Try Favorites Bar (Fast Path)
+        if HighPriorityControls:
+            try:
+                controls = HighPriorityControls(driver)
+                # Reset to left
+                controls.scroll_favorites_reset_left()
+                
+                # Scan and click
+                # We iterate pages similar to scan_favorites_for_payout but stop when we find the asset
+                found_in_favorites = False
+                
+                for _ in range(10): # Max 10 pages
+                    # Check current page
+                    items = driver.find_elements(By.CSS_SELECTOR, ".assets-favorites-item__line")
+                    for item in items:
+                        try:
+                            if not item.is_displayed(): continue
+                            label_el = item.find_element(By.CSS_SELECTOR, ".assets-favorites-item__label")
+                            current_asset = (label_el.text or "").strip()
+                            
+                            # Normalize names for comparison (remove / and spaces)
+                            norm_target = asset_name.replace("/", "").replace(" ", "").upper()
+                            norm_current = current_asset.replace("/", "").replace(" ", "").upper()
+                            
+                            if norm_target == norm_current:
+                                item.click()
+                                return CapResult(ok=True, data={"message": f"Selected asset {asset_name} from favorites"})
+                        except Exception:
+                            continue
+                    
+                    # Scroll right
+                    if not controls.scroll_favorites_right_scoped():
+                        break
+                    time.sleep(0.2)
+                    
+            except Exception as e:
+                # Log error but continue to dropdown fallback
+                print(f"Favorites selection failed: {e}")
+
+        # 2. Fallback to Dropdown (Slow Path)
         if not self._is_assets_panel_open(ctx):
             self._open_assets_dropdown(ctx)
             time.sleep(0.5)
@@ -77,8 +127,7 @@ class AssetControl(Capability):
         if not self._is_assets_panel_open(ctx):
              return CapResult(ok=False, error="Failed to open assets panel")
 
-        # 2. Search for asset
-        # Try to find the search input
+        # Search for asset
         try:
             search_input = WebDriverWait(driver, 2).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder*='Search']"))
@@ -87,18 +136,13 @@ class AssetControl(Capability):
             search_input.send_keys(asset_name)
             time.sleep(0.5)
         except Exception:
-            # If no search input, we might need to scroll. 
-            # But usually there is a search input in the asset dropdown.
             pass
 
-        # 3. Click the asset
-        # Look for the asset name in the list
+        # Click the asset
         try:
             # XPath to find element containing the text
-            # We look for exact match or close match
             xpath = f"//div[contains(@class, 'asset') or contains(@class, 'item')]//*[contains(text(), '{asset_name}')]"
             
-            # Wait for results
             time.sleep(0.5)
             
             elements = driver.find_elements(By.XPATH, xpath)
@@ -106,19 +150,17 @@ class AssetControl(Capability):
             
             for el in elements:
                 if el.is_displayed():
-                    # Check if text matches closely
                     if asset_name in el.text:
                         target_el = el
                         break
             
             if target_el:
-                # Click it
                 try:
                     target_el.click()
                 except:
                     driver.execute_script("arguments[0].click();", target_el)
                 
-                return CapResult(ok=True, data={"message": f"Selected asset {asset_name}"})
+                return CapResult(ok=True, data={"message": f"Selected asset {asset_name} from dropdown"})
             else:
                 return CapResult(ok=False, error=f"Asset {asset_name} not found in list")
 
@@ -210,7 +252,8 @@ class AssetControl(Capability):
     # Reuse helpers from favorite_star_select.py or similar
     def _is_assets_panel_open(self, ctx: Ctx) -> bool:
         try:
-            return bool(ctx.driver.execute_script("""
+            # Check for star icons (original logic)
+            is_open = bool(ctx.driver.execute_script("""
                 const inView = (el) => {
                   const r = el.getBoundingClientRect();
                   return r.width > 0 && r.height > 0;
@@ -221,22 +264,52 @@ class AssetControl(Capability):
                 for (const n of nodes) { if (inView(n)) return true; }
                 return false;
             """))
+            if is_open: return True
+            
+            # Fallback: Check for the assets list container
+            return bool(ctx.driver.execute_script("""
+                const el = document.querySelector('.assets-block__list, .assets-table, .assets-list');
+                return el && el.offsetParent !== null;
+            """))
         except Exception:
             return False
 
     def _open_assets_dropdown(self, ctx: Ctx):
-        # Simplified open logic
+        # Improved open logic with retries and multiple selectors
         drv = ctx.driver
-        try:
-            btn = drv.find_element(By.CSS_SELECTOR, ".asset-selector, .asset__selector, .assets-select")
-            btn.click()
-        except:
-            # Try clicking the current asset name at top
-            try:
-                btn = drv.find_element(By.XPATH, "//div[contains(@class, 'current-asset')]")
-                btn.click()
-            except:
-                pass
+        selectors = [
+            ".asset-selector", 
+            ".asset__selector", 
+            ".assets-select",
+            ".current-asset",
+            ".assets-block",
+            "//div[contains(@class, 'current-asset')]",
+            "//div[contains(@class, 'asset-selector')]"
+        ]
+        
+        for _ in range(3): # Retry 3 times
+            for sel in selectors:
+                try:
+                    if sel.startswith("//"):
+                        els = drv.find_elements(By.XPATH, sel)
+                    else:
+                        els = drv.find_elements(By.CSS_SELECTOR, sel)
+                    
+                    for el in els:
+                        if el.is_displayed():
+                            try:
+                                el.click()
+                                time.sleep(0.5)
+                                if self._is_assets_panel_open(ctx):
+                                    return
+                            except:
+                                drv.execute_script("arguments[0].click();", el)
+                                time.sleep(0.5)
+                                if self._is_assets_panel_open(ctx):
+                                    return
+                except:
+                    continue
+            time.sleep(0.5)
 
 if __name__ == "__main__":
     import argparse

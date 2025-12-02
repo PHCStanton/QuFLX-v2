@@ -185,3 +185,28 @@ Asset symbols are usually listed on PocketOption's asset trading page, and you c
 - **Socket.IO Room**: Group of connected clients receiving targeted emits.
 - **Redis Stream**: Append-only log for historical data with consumer groups.
 - **Time Violation**: Chart error from overlapping/invalid bar timestamps.
+
+## Addendum: React & Real-Time Updates (2025-12-01)
+
+### React Integration Best Practices
+Based on TradingView's "Advanced React Example", the recommended architecture for robust charting is:
+1.  **Component Composition**: Split the chart into a `ChartContainer` (manages lifecycle, resizing) and `Series` components (manages data updates).
+2.  **Context & Refs**: Use `createContext` and `useRef` to pass the chart API instance down to children series components. This avoids prop drilling and ensures the chart instance is available for updates.
+3.  **Imperative Handle**: Use `useImperativeHandle` to expose chart methods (like `update`, `setData`) to parent components or stores.
+
+### Real-Time Data Handling
+1.  **Streaming Updates**: Use `series.update(tick)` for incoming real-time data. This method automatically handles:
+    -   Updating the current bar (if timestamp matches).
+    -   Creating a new bar (if timestamp is newer).
+2.  **Resetting Data**: When switching assets, it is CRITICAL to clear the previous series data to prevent "ghost" candles or time violations.
+    -   **Action**: Before calling `setData(newData)` for the new asset, ensure the series is clean or re-created.
+    -   **Pattern**: In `useEffect` dependent on `selectedAsset`, unmount/remount the series component or call `series.setData([])` (though re-creation is safer for clean state).
+
+### Robustness Improvements for QuFLX
+1.  **Asset Switch Cleanup**: In `ChartWorkspace.jsx`, when `selectedAsset` changes:
+    -   Unsubscribe from old Socket.IO room.
+    -   Clear chart data (`series.setData([])`).
+    -   Show loading state.
+    -   Subscribe to new room.
+2.  **Error Handling**: If asset selection fails (as seen in logs), the UI should revert to the previous asset or show an error state, rather than leaving a broken chart.
+3.  **Synchronization**: Ensure the `select_asset` event (Control Plane) completes successfully before the `subscribe_asset` (Data Plane) starts rendering, or handle the race condition where data might arrive before the chart is ready.

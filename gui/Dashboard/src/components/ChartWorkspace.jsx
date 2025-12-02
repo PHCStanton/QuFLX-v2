@@ -86,47 +86,17 @@ const ChartWorkspace = () => {
     }
   }, []);
 
-  // Handle Live Updates (Frontend Aggregation)
-  useEffect(() => {
-    const latestData = marketData[selectedAsset];
-    if (latestData && candleSeriesRef.current) {
-      try {
-        // Check if it's a tick (has price but no open/close)
-        if (latestData.price !== undefined && latestData.open === undefined) {
-          const tick = latestData;
-          const price = tick.price;
-          const timestamp = tick.timestamp; // Unix timestamp (seconds or ms)
-          
-          // Convert to seconds if in ms
-          const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
-          
-          // Get current candle from series
-          // Note: lightweight-charts doesn't give easy access to the *last* candle data directly from the series object
-          // without maintaining state. However, we can use update() with the same time to update the current candle.
-          
-          // We need to maintain the current candle state locally or in the store to aggregate correctly.
-          // For simplicity, let's assume we are starting a new candle if time changes significantly,
-          // or updating the existing one.
-          
-          // Since we don't have the previous candle state easily here without a ref, 
-          // we'll implement a simple heuristic:
-          // If the chart has data, we assume the last point is the current candle.
-          // But we can't read it back easily.
-          
-          // BETTER APPROACH: The store should probably handle aggregation or we keep a local ref.
-          // Let's use a local ref for the current candle.
-        } else {
-          // It's a full candle update (from history or backend aggregation)
-          candleSeriesRef.current.update(latestData);
-        }
-      } catch (err) {
-        console.error("Error updating chart:", err);
-      }
-    }
-  }, [marketData, selectedAsset]);
-
   // Ref to store the current building candle
   const currentCandleRef = useRef(null);
+
+  // Cleanup on Asset Change
+  useEffect(() => {
+    if (candleSeriesRef.current) {
+      console.log(`Clearing chart for new asset: ${selectedAsset}`);
+      candleSeriesRef.current.setData([]); // Clear data
+      currentCandleRef.current = null; // Reset current candle ref
+    }
+  }, [selectedAsset]);
 
   // Effect to handle tick aggregation
   useEffect(() => {

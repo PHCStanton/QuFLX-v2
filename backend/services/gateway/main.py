@@ -129,6 +129,52 @@ async def subscribe_asset(sid, asset):
     logger.info(f"Client {sid} subscribed to {asset}")
     await sio.enter_room(sid, f"market_data:{asset}")
 
+@sio.event
+async def select_asset(sid, asset):
+    """
+    Handle asset selection request via Socket.IO.
+    Executes asset_control.py to switch asset in browser.
+    """
+    logger.info(f"Client {sid} requested to select asset: {asset}")
+    
+    try:
+        # Run asset_control.py in a separate thread to avoid blocking event loop
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "asset_control.py"))
+        
+        def run_script():
+            return subprocess.run(
+                [sys.executable, script_path, "--action", "select_asset", "--asset", asset],
+                capture_output=True,
+                text=True
+            )
+            
+        # Use asyncio.to_thread for non-blocking execution (Python 3.9+)
+        # Or run_in_executor for older versions
+        result = await asyncio.to_thread(run_script)
+        
+        if result.returncode != 0:
+            logger.error(f"Error selecting asset: {result.stderr}")
+            await sio.emit('asset_selection_error', {'error': f"Script failed: {result.stderr}"}, room=sid)
+            return
+
+        try:
+            output_json = json.loads(result.stdout)
+            if not output_json.get("ok"):
+                error_msg = output_json.get("error", "Unknown error")
+                logger.error(f"Asset selection failed: {error_msg}")
+                await sio.emit('asset_selection_error', {'error': error_msg}, room=sid)
+            else:
+                logger.info(f"Successfully selected asset: {asset}")
+                await sio.emit('asset_selected', {'asset': asset}, room=sid)
+                
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON output from script: {result.stdout}")
+            await sio.emit('asset_selection_error', {'error': "Invalid script output"}, room=sid)
+
+    except Exception as e:
+        logger.error(f"Exception in select_asset: {e}")
+        await sio.emit('asset_selection_error', {'error': str(e)}, room=sid)
+
 # REST Endpoints
 @app.get("/health")
 async def health_check():

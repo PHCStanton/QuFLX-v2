@@ -7,6 +7,10 @@ const useMarketStore = create((set, get) => ({
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
+  
+  // Error State
+  lastError: null,
+  clearError: () => set({ lastError: null }),
 
   // Market Data State
   selectedAsset: 'AUDNZDOTC',
@@ -15,17 +19,10 @@ const useMarketStore = create((set, get) => ({
     const { socket } = get();
     if (socket && socket.connected) {
       socket.emit('subscribe_asset', asset);
-    }
-    
-    // Call backend to select asset in Pocket Option
-    try {
-      await fetch('http://localhost:8000/api/v1/select-asset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset })
-      });
-    } catch (err) {
-      console.error("Failed to select asset in backend:", err);
+      // Emit select_asset event to backend via Socket.IO
+      socket.emit('select_asset', asset);
+    } else {
+      console.warn("Socket not connected, cannot select asset via Socket.IO");
     }
   },
   
@@ -172,6 +169,15 @@ const useMarketStore = create((set, get) => ({
         // We can refine this later if we have separate stream status
         set({ streamStatus: data.status === 'connected' ? 'streaming' : 'idle' });
       }
+    });
+
+    socket.on('asset_selected', (data) => {
+      console.log('Asset selected successfully:', data.asset);
+    });
+
+    socket.on('asset_selection_error', (data) => {
+      console.error('Asset selection error:', data.error);
+      set({ lastError: data.error });
     });
   },
 

@@ -1,0 +1,230 @@
+# 1. CONSOLE ERRORS:
+
+The key part of the error is:
+
+Code
+Uncaught Error: Cannot update oldest data, last time=[object Object], new time=[object Object]
+This comes from lightweight-charts, specifically inside its DataLayer._internal_updateSeriesData method.
+
+Lightweight Charts expects each data point in a series to have a time field that is strictly increasing (newer data must have a later timestamp than the previous one).
+
+The error is thrown when you try to update the oldest data point with a new time that is not valid (e.g., equal or earlier than the existing one).
+
+The [object Object] part indicates that instead of a primitive (like a number or string timestamp), you’re passing a raw JavaScript object as the time field. The library doesn’t know how to compare two objects, so it fails.
+
+⚠️ Likely causes
+Incorrect time format
+
+You may be passing a Date object directly (new Date()) instead of a number (Date.getTime()) or a string (YYYY-MM-DD).
+
+Lightweight Charts requires time to be either:
+
+A business day object ({ year: 2025, month: 12, day: 2 }), or
+
+A UNIX timestamp (number of seconds since epoch).
+
+Updating the wrong data point
+
+The error mentions "oldest data" — meaning you’re trying to overwrite the very first point in the series with a new time. That’s not allowed; you should append new data or update existing points with the same time.
+
+React hook effect timing
+
+The stack trace shows ChartWorkspace.jsx:140:31 inside a React effect (commitHookEffectListMount).
+
+This suggests you’re calling series.update() inside a useEffect or similar hook, but the data being passed has malformed or inconsistent time.
+
+✅ How to fix it
+Here’s how you can resolve the issue:
+
+Ensure correct time format
+
+js
+// ❌ Wrong: passing a Date object
+series.update({ time: new Date(), value: 100 });
+
+// ✅ Correct: pass a timestamp (seconds)
+series.update({ time: Math.floor(Date.now() / 1000), value: 100 });
+
+// ✅ Or use business day format
+series.update({ time: { year: 2025, month: 12, day: 2 }, value: 100 });
+Do not update the oldest data point with a new time
+
+If you want to change the value of an existing point, keep the same time.
+
+If you want to add new data, make sure the time is strictly greater than the last one.
+
+js
+// Update existing point
+series.update({ time: 1733145600, value: 105 }); // same time, new value
+
+// Append new point
+series.update({ time: 1733232000, value: 110 }); // later time
+Validate your data before updating
+
+js
+function safeUpdate(series, point) {
+  if (typeof point.time === "object" && !(point.time.year && point.time.month && point.time.day)) {
+    throw new Error("Invalid time format for lightweight-charts");
+  }
+  series.update(point);
+}
+🛠️ Next step for you
+Check the code at ChartWorkspace.jsx:140 where you call series.update().
+
+Log the data you’re passing in:
+
+js
+console.log("Updating series with:", point);
+Verify that point.time is either a valid timestamp (number) or a proper business day object.
+
+## 2. CONSOLE ERROR:
+
+What the error message is saying
+Code
+installHook.js:1  The above error occurred in the <ChartWorkspace> component:
+    at ChartWorkspace (ChartWorkspace.jsx:37:7)
+    at ErrorBoundary (ErrorBoundary.jsx:7:5)
+    ...
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+React detected an uncaught error inside your <ChartWorkspace> component.
+
+Because you wrapped it in an <ErrorBoundary>, React didn’t crash the entire app — instead, it unmounted the broken component tree and attempted to remount it from scratch.
+
+The stack trace shows the error originated at line 37 in ChartWorkspace.jsx, which is where the problematic code is executed.
+
+This message itself doesn’t tell you the exact cause (that’s in the original error thrown earlier — e.g., the Cannot update oldest data from lightweight-charts you saw before). What it does tell you is where in your React tree the error bubbled up and how React handled it.
+
+⚠️ What likely caused it
+The root cause is still the chart update logic inside ChartWorkspace.
+
+Specifically, you’re calling series.update() with invalid or inconsistent data (wrong time format, or trying to overwrite the oldest point).
+
+That error propagates up, React catches it, and your <ErrorBoundary> logs this message.
+
+So this console output is essentially React saying:
+
+“Your <ChartWorkspace> component threw an error. I used the <ErrorBoundary> to recover, but you need to fix the code inside that component.”
+
+✅ How to fix it
+Inspect the code at ChartWorkspace.jsx:37
+
+That’s where you’re likely calling series.update() or handling chart data.
+
+Add a console.log before the update to see what data is being passed:
+
+js
+console.log("Updating chart with:", point);
+series.update(point);
+Validate the time field
+
+Ensure it’s either:
+
+A UNIX timestamp (number of seconds since epoch), or
+
+A business day object ({ year, month, day }).
+
+Do not pass raw Date objects or nested objects.
+
+Guard against invalid updates
+
+js
+function safeUpdate(series, point) {
+  if (!point.time || typeof point.time === "object" && !("year" in point.time)) {
+    console.error("Invalid time format:", point.time);
+    return;
+  }
+  series.update(point);
+}
+Use the ErrorBoundary for fallback UI
+
+Right now, your ErrorBoundary just remounts the component.
+
+You can improve it by showing a friendly message or logging the error more clearly:
+
+jsx
+<ErrorBoundary fallback={<div>Chart failed to load. Please refresh.</div>}>
+  <ChartWorkspace />
+</ErrorBoundary>
+🛠️ Summary
+The DevTools message is React telling you that <ChartWorkspace> crashed.
+
+The underlying cause is still the invalid chart update (bad time values).
+
+Fixing the data format and guarding updates will stop the error from bubbling up.
+
+## 3. What the error message is saying
+Code
+ErrorBoundary caught an error Error: Cannot update oldest data, last time=[object Object], new time=[object Object]
+    at DataLayer._internal_updateSeriesData (lightweight-charts...)
+    at ChartApi._internal_updateData (...)
+    at SeriesApi.update (...)
+    at ChartWorkspace.jsx:140:31
+Root cause: The lightweight-charts library threw an error because it was asked to update the oldest data point in a series with a new time value that is invalid.
+
+The [object Object] output means you’re passing a JavaScript object as the time field instead of the expected format.
+
+React’s <ErrorBoundary> caught this error so your whole app didn’t crash. It logged the error and attempted to remount <ChartWorkspace>.
+
+⚠️ Why it happened
+Invalid time format
+
+lightweight-charts requires time to be either:
+
+A UNIX timestamp (number of seconds since epoch), or
+
+A business day object: { year: 2025, month: 12, day: 2 }.
+
+Passing a raw Date object (new Date()) or a nested object will stringify to [object Object], which the library cannot compare.
+
+Updating the oldest data point incorrectly
+
+The error specifically says “Cannot update oldest data.”
+
+You’re trying to overwrite the very first point in the series with a new time. The library disallows changing the oldest point’s time — you can only update its value if the time stays the same, or append new points with strictly increasing times.
+
+React hook timing
+
+The stack trace shows ChartWorkspace.jsx:140 inside a hook effect. Likely you’re calling series.update() inside a useEffect with malformed data.
+
+✅ How to fix it
+Fix the time format
+
+js
+// ❌ Wrong: passing a Date object
+series.update({ time: new Date(), value: 100 });
+
+// ✅ Correct: pass a timestamp (seconds)
+series.update({ time: Math.floor(Date.now() / 1000), value: 100 });
+
+// ✅ Or use business day format
+series.update({ time: { year: 2025, month: 12, day: 2 }, value: 100 });
+Do not change the oldest point’s time
+
+If you want to change the value of the first point, keep the same time.
+
+If you want to add new data, ensure the time is strictly greater than the last point’s time.
+
+js
+// Update existing point (same time, new value)
+series.update({ time: 1733145600, value: 105 });
+
+// Append new point (later time)
+series.update({ time: 1733232000, value: 110 });
+Add validation before updating
+
+js
+function safeUpdate(series, point) {
+  if (typeof point.time === "object" && !("year" in point.time)) {
+    console.error("Invalid time format:", point.time);
+    return;
+  }
+  series.update(point);
+}
+🛠️ Next step for you
+Go to ChartWorkspace.jsx:140 and log the data being passed into series.update():
+
+js
+console.log("Updating chart with:", point);
+Verify that point.time is either a valid timestamp or a proper business day object.
+
+Adjust your data pipeline so you never pass raw Date objects or malformed objects.
