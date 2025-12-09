@@ -11,11 +11,13 @@ const ChartWorkspace = () => {
     selectedTimeframe, setSelectedTimeframe,
     payoutAssets,
     marketData, // Get live data
-    activeIndicators, removeIndicator, addIndicator
+    activeIndicators, removeIndicator, addIndicator,
+    lastError, clearError
   } = useMarketStore();
 
   const chartContainerRef = useRef(null);
   const candleSeriesRef = useRef(null);
+  const [isLoading, setIsLoading] = React.useState(false);
 
   // Initialize Chart
   useEffect(() => {
@@ -51,22 +53,9 @@ const ChartWorkspace = () => {
       });
       
       candleSeriesRef.current = candleSeries;
-
-      // Mock Data
-      const data = [
-        { time: '2018-12-22', open: 75.16, high: 82.84, low: 36.16, close: 45.72 },
-        { time: '2018-12-23', open: 45.12, high: 53.90, low: 45.12, close: 48.09 },
-        { time: '2018-12-24', open: 60.71, high: 60.71, low: 53.39, close: 59.29 },
-        { time: '2018-12-25', open: 68.26, high: 68.26, low: 59.04, close: 60.50 },
-        { time: '2018-12-26', open: 67.71, high: 105.85, low: 66.67, close: 91.04 },
-        { time: '2018-12-27', open: 91.04, high: 121.40, low: 82.70, close: 111.40 },
-        { time: '2018-12-28', open: 111.51, high: 142.83, low: 103.34, close: 131.25 },
-        { time: '2018-12-29', open: 131.33, high: 151.17, low: 77.68, close: 96.43 },
-        { time: '2018-12-30', open: 106.33, high: 110.20, low: 90.39, close: 98.10 },
-        { time: '2018-12-31', open: 109.87, high: 114.69, low: 85.66, close: 111.26 },
-      ];
-
-      candleSeries.setData(data);
+      
+      // Initialize with empty data - data comes from Socket.IO
+      candleSeries.setData([]);
 
       const handleResize = () => {
         if (chartContainerRef.current) {
@@ -92,58 +81,87 @@ const ChartWorkspace = () => {
   // Cleanup on Asset Change
   useEffect(() => {
     if (candleSeriesRef.current) {
-      console.log(`Clearing chart for new asset: ${selectedAsset}`);
+      console.log(`Asset changed to: ${selectedAsset}, clearing chart`);
       candleSeriesRef.current.setData([]); // Clear data
       currentCandleRef.current = null; // Reset current candle ref
+      setIsLoading(true); // Show loading state while waiting for new data
     }
   }, [selectedAsset]);
+
+  // Helper function to convert timestamp to business day object
+  const getBusinessDay = (timestamp) => {
+    const date = new Date(timestamp > 10000000000 ? timestamp : timestamp * 1000);
+    return {
+      year: date.getUTCFullYear(),
+      month: date.getUTCMonth() + 1,
+      day: date.getUTCDate(),
+    };
+  };
 
   // Effect to handle tick aggregation
   useEffect(() => {
     const latestData = marketData[selectedAsset];
     if (!latestData || !candleSeriesRef.current) return;
 
-    // If it's a tick
-    if (latestData.price !== undefined && latestData.open === undefined) {
-      const price = latestData.price;
-      const timestamp = latestData.timestamp;
-      const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
-      
-      // Determine timeframe interval (e.g., 60s for 1m)
-      // TODO: Map selectedTimeframe to seconds. Defaulting to 60s.
-      const interval = 60; 
-      const candleTime = Math.floor(time / interval) * interval;
+    // Hide loading state once we receive first data for this asset
+    if (isLoading) {
+      setIsLoading(false);
+    }
 
-      let candle = currentCandleRef.current;
-
-      if (!candle || candle.time !== candleTime) {
-        // Start new candle
-        // If we have a previous candle, ensure it's closed? 
-        // Lightweight charts handles updates automatically.
-        
-        // Initialize new candle
-        candle = {
-          time: candleTime,
-          open: price,
-          high: price,
-          low: price,
-          close: price,
-        };
-      } else {
-        // Update existing candle
-        candle.close = price;
-        candle.high = Math.max(candle.high, price);
-        candle.low = Math.min(candle.low, price);
+    try {
+      // Validate data belongs to selected asset
+      if (latestData.asset && latestData.asset !== selectedAsset) {
+        console.warn(`Data asset mismatch: expected ${selectedAsset}, got ${latestData.asset}`);
+        return;
       }
 
-      currentCandleRef.current = candle;
-      candleSeriesRef.current.update(candle);
-    } 
-    // If it's a candle (e.g. historical data loaded)
-    else if (latestData.open !== undefined) {
-       candleSeriesRef.current.update(latestData);
-       // Update our ref so next tick continues correctly
-       currentCandleRef.current = latestData;
+      // If it's a tick
+      if (latestData.price !== undefined && latestData.open === undefined) {
+        const price = latestData.price;
+        const timestamp = latestData.timestamp;
+        const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
+        
+        // Determine timeframe interval (e.g., 60s for 1m)
+        // TODO: Map selectedTimeframe to seconds. Defaulting to 60s.
+        const interval = 60; 
+        const candleTime = Math.floor(time / interval) * interval;
+        const candleDate = getBusinessDay(candleTime * 1000);
+
+        let candle = currentCandleRef.current;
+
+        if (!candle || candle.time.year !== candleDate.year || candle.time.month !== candleDate.month || candle.time.day !== candleDate.day) {
+          // Start new candle
+          candle = {
+            time: candleDate,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+          };
+        } else {
+          // Update existing candle
+          candle.close = price;
+          candle.high = Math.max(candle.high, price);
+          candle.low = Math.min(candle.low, price);
+        }
+
+        currentCandleRef.current = candle;
+        candleSeriesRef.current.update(candle);
+      } 
+      // If it's a candle (e.g. historical data loaded)
+      else if (latestData.open !== undefined) {
+         // Ensure time is in business day format
+         const candleData = { ...latestData };
+         if (typeof candleData.time === 'string') {
+           const [year, month, day] = candleData.time.split('-').map(Number);
+           candleData.time = { year, month, day };
+         }
+         candleSeriesRef.current.update(candleData);
+         // Update our ref so next tick continues correctly
+         currentCandleRef.current = candleData;
+      }
+    } catch (err) {
+      console.error("Error updating chart data:", err);
     }
   }, [marketData, selectedAsset, selectedTimeframe]);
 
@@ -169,15 +187,27 @@ const ChartWorkspace = () => {
     { label: 'Bollinger Bands', value: 'bb' },
   ];
 
-  // Logic to disable Ticks/Candles based on selection
-  // Note: In a real app, this might depend on available data for the asset
-  // For now, we'll just ensure the UI reflects the selection
   const handleTimeframeChange = (val) => {
-    setSelectedTimeframe(val);
+    setIsLoading(true);
+    setSelectedTimeframe(val).then(() => {
+      // Note: loading state is cleared when new data arrives or timeout
+      setTimeout(() => setIsLoading(false), 3000); // Timeout after 3s
+    }).catch((err) => {
+      console.error("Timeframe change failed:", err);
+      setIsLoading(false);
+    });
   };
 
   return (
     <div className="col-span-9 flex flex-col gap-4 flex-1">
+      
+      {/* Error Message Display */}
+      {lastError && (
+        <div className="p-3 bg-red-900/50 border border-red-600 rounded text-red-200 text-sm flex justify-between items-center">
+          <span>{lastError}</span>
+          <button onClick={clearError} className="text-red-300 hover:text-red-100">✕</button>
+        </div>
+      )}
       
       {/* Top Bar - Selectors */}
       <Card className="p-3 rounded-lg flex flex-wrap items-center gap-3 z-20">
@@ -249,6 +279,15 @@ const ChartWorkspace = () => {
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <span className="bg-black/50 backdrop-blur px-2 py-1 rounded text-xs text-gray-300">Live Feed</span>
         </div>
+        
+        {isLoading && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20 rounded-lg">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 border-2 border-gray-400 border-t-accent-green rounded-full animate-spin"></div>
+              <span className="text-gray-300 text-sm">Loading data for {selectedAsset}...</span>
+            </div>
+          </div>
+        )}
         
         <div ref={chartContainerRef} className="w-full h-full"></div>
       </Card>

@@ -282,29 +282,70 @@ async def select_timeframe(payload: Dict[str, str] = Body(...)):
     timeframe = payload.get("timeframe")
     if not timeframe:
         raise HTTPException(status_code=400, detail="Timeframe required")
+    
+    # Validate timeframe format
+    valid_timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
+    if timeframe not in valid_timeframes:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid timeframe: {timeframe}. Must be one of: {', '.join(valid_timeframes)}"
+        )
         
     try:
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "asset_control.py"))
         
+        logger.info(f"Executing timeframe selection: {timeframe}")
         result = subprocess.run(
             [sys.executable, script_path, "--action", "select_timeframe", "--timeframe", timeframe],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=10  # 10 second timeout
         )
         
         if result.returncode != 0:
-            logger.error(f"Error selecting timeframe: {result.stderr}")
-            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
-            
-        output_json = json.loads(result.stdout)
+            error_msg = result.stderr.strip()
+            logger.error(f"Timeframe script failed (exit code {result.returncode}): {error_msg}")
+            raise HTTPException(
+                status_code=422,  # Unprocessable Entity - UI element not found
+                detail=f"UI selector failed. Pocket Option UI may have changed. Error: {error_msg}"
+            )
+        
+        # Try to parse output
+        try:
+            output_json = json.loads(result.stdout)
+        except json.JSONDecodeError as je:
+            logger.error(f"Invalid JSON from timeframe script: {result.stdout}")
+            raise HTTPException(
+                status_code=502,  # Bad Gateway - invalid script output
+                detail=f"Script output parsing failed: {str(je)}"
+            )
+        
         if not output_json.get("ok"):
-             raise HTTPException(status_code=500, detail=f"Selection failed: {output_json.get('error')}")
-             
+            error_msg = output_json.get("error", "Unknown error")
+            logger.warning(f"Timeframe selection returned error: {error_msg}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Timeframe selection failed: {error_msg}"
+            )
+        
+        logger.info(f"Successfully selected timeframe: {timeframe}")
         return {"status": "success", "message": f"Selected {timeframe}"}
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (already formatted)
+        raise
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeframe selection timeout after 10s")
+        raise HTTPException(
+            status_code=504,  # Gateway Timeout
+            detail="UI interaction timed out. Pocket Option may be unresponsive."
+        )
     except Exception as e:
-        logger.error(f"Select timeframe failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error in select_timeframe: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {type(e).__name__}"
+        )
 
 if __name__ == "__main__":
     import uvicorn

@@ -53,10 +53,10 @@ def _detect_timeframe_from_candles(self, candles: List[List]) -> int:
 ```
 
 **Examples:**
-- `EURRUB_otc_otc_60m_2025_10_01_18_26_09.csv` (H1 timeframe)
-- `EURRUB_otc_otc_15m_2025_10_01_18_26_15.csv` (15M timeframe)
-- `EURRUB_otc_otc_5m_2025_10_01_18_26_20.csv` (5M timeframe)
-- `EURRUB_otc_otc_1m_2025_10_01_18_26_25.csv` (1M timeframe)
+- `EURRUB_otc_60m_2025_10_01_18_26_09.csv` (H1 timeframe)
+- `EURRUB_otc_15m_2025_10_01_18_26_15.csv` (15M timeframe)
+- `EURRUB_otc_5m_2025_10_01_18_26_20.csv` (5M timeframe)
+- `EURRUB_otc_1m_2025_10_01_18_26_25.csv` (1M timeframe)
 
 #### Directory Structure
 ```

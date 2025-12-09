@@ -179,75 +179,100 @@ class AssetControl(Capability):
             '5m': '5 min',
             '15m': '15 min',
             '1h': '1 hour',
-            # Add more as needed
+            '4h': '4 hours',
+            '1d': '1 day',
         }
         target_text = tf_map.get(timeframe.lower(), timeframe)
 
         try:
-            # 1. Find Timeframe/Chart Type button
-            # This is tricky as it varies. We look for the button that shows current timeframe.
-            # Or the button that opens the timeframe menu.
-            
-            # Strategy: Look for the text of the current timeframe (e.g. "1 min") or "Time"
-            # But Pocket Option has "Time" (expiry) and "Timeframe" (chart candle size).
-            # User said: "1M Button". This usually refers to Chart Timeframe.
-            
-            # Try to find the timeframe selector on the chart toolbar
-            # Often has class 'items__link--chart-type' or similar
-            
-            # Let's try to find a button with the target text first (if it's already visible/selected)
-            # If not, find the menu button.
-            
-            # Common selector for chart timeframe menu
+            # Find Timeframe/Chart Type button
             menu_btn = None
             selectors = [
                 "a.items__link--chart-type",
                 ".chart-type-button",
-                "[data-test='chart-timeframe']"
+                "[data-test='chart-timeframe']",
+                "button[class*='timeframe']",
+                ".time-frame-selector",
+                ".tf-selector"
             ]
             
+            tried_selectors = []
             for sel in selectors:
                 try:
                     els = driver.find_elements(By.CSS_SELECTOR, sel)
+                    tried_selectors.append(f"{sel} (found {len(els)} elements)")
                     for el in els:
                         if el.is_displayed():
                             menu_btn = el
+                            print(f"✓ Found timeframe button with selector: {sel}")
                             break
-                except:
+                except Exception as find_err:
+                    tried_selectors.append(f"{sel} (error: {str(find_err)[:50]})")
                     continue
-                if menu_btn: break
+                if menu_btn: 
+                    break
             
-            if menu_btn:
+            if not menu_btn:
+                error_msg = f"Could not find timeframe menu button. Tried selectors: {' | '.join(tried_selectors)}"
+                print(error_msg)
+                return CapResult(ok=False, error=error_msg)
+            
+            # Click menu button
+            try:
                 menu_btn.click()
-                time.sleep(0.5)
-                
-                # Now look for the option
-                # It might be a list of buttons like "S5", "S10", "M1", "M5" etc.
-                # "1m" -> "M1"
-                
-                short_tf = timeframe.upper().replace("M", "M").replace("H", "H") # 1m -> 1M? No, usually M1
-                if timeframe.endswith('m'):
-                    short_tf = "M" + timeframe[:-1] # 1m -> M1
-                elif timeframe.endswith('h'):
-                    short_tf = "H" + timeframe[:-1]
-                elif timeframe.endswith('s'):
-                    short_tf = "S" + timeframe[:-1]
-                    
-                # Look for button with text "M1", "1 min", etc.
-                options = driver.find_elements(By.CSS_SELECTOR, ".items__list .item")
-                for opt in options:
-                    txt = opt.text.strip()
-                    if txt == short_tf or txt == target_text:
-                        opt.click()
-                        return CapResult(ok=True, data={"message": f"Selected timeframe {timeframe}"})
-                        
-                return CapResult(ok=False, error=f"Timeframe option {timeframe} ({short_tf}) not found")
+            except:
+                driver.execute_script("arguments[0].click();", menu_btn)
+            time.sleep(0.5)
             
+            # Build timeframe shortcuts
+            if timeframe.endswith('m'):
+                short_tf = "M" + timeframe[:-1]  # 1m -> M1, 5m -> M5
+            elif timeframe.endswith('h'):
+                short_tf = "H" + timeframe[:-1]  # 1h -> H1, 4h -> H4
+            elif timeframe.endswith('d'):
+                short_tf = "D" + timeframe[:-1]  # 1d -> D1
+            elif timeframe.endswith('s'):
+                short_tf = "S" + timeframe[:-1]  # 30s -> S30
             else:
-                return CapResult(ok=False, error="Timeframe menu button not found")
+                short_tf = timeframe.upper()
+            
+            # Find and click the timeframe option
+            option_selectors = [
+                ".items__list .item",
+                ".timeframe-options button",
+                "[class*='timeframe-option']",
+                ".tf-option"
+            ]
+            
+            option_tried = []
+            for opt_sel in option_selectors:
+                try:
+                    options = driver.find_elements(By.CSS_SELECTOR, opt_sel)
+                    option_tried.append(f"{opt_sel} (found {len(options)})")
+                    for opt in options:
+                        txt = opt.text.strip()
+                        if txt == short_tf or txt == target_text or txt.upper() == short_tf.upper():
+                            try:
+                                opt.click()
+                            except:
+                                driver.execute_script("arguments[0].click();", opt)
+                            print(f"✓ Selected timeframe {timeframe} (matched: {txt})")
+                            return CapResult(ok=True, data={"message": f"Selected timeframe {timeframe}"})
+                except Exception as opt_err:
+                    option_tried.append(f"{opt_sel} (error: {str(opt_err)[:50]})")
+                    continue
+            
+            # If we get here, we found menu but not the option
+            print(f"Available options searched with selectors: {' | '.join(option_tried)}")
+            return CapResult(
+                ok=False, 
+                error=f"Timeframe option '{short_tf}' or '{target_text}' not found in menu. Pocket Option UI may have changed."
+            )
 
         except Exception as e:
-            return CapResult(ok=False, error=f"Error selecting timeframe: {e}")
+            error_detail = f"Exception in _select_timeframe: {type(e).__name__}: {str(e)}"
+            print(error_detail)
+            return CapResult(ok=False, error=error_detail)
 
     # Reuse helpers from favorite_star_select.py or similar
     def _is_assets_panel_open(self, ctx: Ctx) -> bool:
