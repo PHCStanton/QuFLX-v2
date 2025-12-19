@@ -20,6 +20,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 
 from backend.models.market_data import Candle, Tick
 from backend.models.events import Signal, SystemStatus
+from backend.services.ai.service import AIService
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +64,9 @@ socket_app = socketio.ASGIApp(sio, app)
 
 # Redis Configuration
 REDIS_URL = "redis://localhost:6379/0"
+
+# AI Service
+ai_service = AIService()
 
 # Global state
 redis_client = None
@@ -354,6 +358,33 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     except Exception as e:
         logger.error(f"Bootstrap history failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/ai/ask")
+async def ai_ask(payload: Dict[str, Any] = Body(...)):
+    """AI Ask endpoint scaffold.
+
+    Accepts a user prompt and optional structured context, forwards it to the
+    AIService, and returns a normalized response.
+    """
+    prompt = payload.get("prompt")
+    if not prompt or not isinstance(prompt, str):
+        raise HTTPException(status_code=400, detail="prompt (string) is required")
+
+    context = payload.get("context")
+    if context is not None and not isinstance(context, dict):
+        raise HTTPException(status_code=400, detail="context must be an object if provided")
+
+    try:
+        result = await ai_service.ask(prompt=prompt, context=context or {})
+        answer = result.get("answer", "")
+        meta = result.get("meta", {})
+        return {"answer": answer, "meta": meta}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI ask failed: {e}")
+        raise HTTPException(status_code=500, detail="AI service error")
 
 @app.post("/api/v1/select-asset")
 async def select_asset(payload: Dict[str, str] = Body(...)):

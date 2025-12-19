@@ -140,3 +140,40 @@ Returns the global system state.
   "last_tick_asset": "AUDNZDOTC"
 }
 ```
+
+### `POST /api/v1/ai/ask`
+Ask the company AI service a question with optional structured context. This is the
+primary API used by the "Ask AI" button in the Dashboard.
+
+**Request**
+```json
+{
+  "prompt": "string",
+  "context": {
+    "asset": "AUDNZDOTC",
+    "timeframe": "1m",
+    "recent_candles": [
+      {
+        "timestamp": 1702934400,
+        "open": 0.98760,
+        "high": 0.98770,
+        "low": 0.98750,
+        "close": 0.98765,
+        "volume": 100
+      }
+    ],
+    "stream_status": "streaming"
+  }
+}
+```
+
+**Response (scaffold)**
+```json
+{
+  "answer": "This is a placeholder AI response. The real company API can be wired here.",
+  "meta": {
+    "ok": true,
+    "used_context_keys": ["asset", "timeframe", "recent_candles", "stream_status"]
+  }
+}
+```
