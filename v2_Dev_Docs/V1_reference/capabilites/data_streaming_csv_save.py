@@ -160,8 +160,8 @@ class RealtimeDataStreaming(Capability):
         tf_suffix = self.SUFFIX_MAP.get(timeframe_minutes, "1m")
 
         # Create data_collect directory path
-        # __file__ is in capabilities/, so go up 1 level to get project root
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # __file__ is in v2_Dev_Docs/V1_reference/capabilites/, so go up 4 levels to get project root (v2)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         data_collect_dir = os.path.join(project_root, "data", "data_output", "assets_data", "data_collect", folder)
 
         # Ensure directory exists
@@ -216,9 +216,10 @@ class RealtimeDataStreaming(Capability):
         dir_name = self.TIMEFRAME_DIR_MAP.get(timeframe_minutes, f"{timeframe_minutes}M_candles")
 
         # Create data_collect directory path
-        # __file__ is in capabilities/, so go up 1 level to get project root
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        data_collect_dir = os.path.join(project_root, "data", "data_output", "assets_data", "data_collect", dir_name)
+        # __file__ is in v2_Dev_Docs/V1_reference/capabilites/, so go up 4 levels to get project root (v2)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        # Simplified path for V2: data/market_data/history
+        data_collect_dir = os.path.join(project_root, "data", "market_data", "history", dir_name)
 
         # Ensure directory exists
         os.makedirs(data_collect_dir, exist_ok=True)

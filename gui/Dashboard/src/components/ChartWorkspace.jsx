@@ -8,9 +8,12 @@ import { createChart, CandlestickSeries } from 'lightweight-charts';
 const ChartWorkspace = () => {
   const { 
     selectedAsset, setSelectedAsset,
+    selectedAssetKey,
     selectedTimeframe, setSelectedTimeframe,
     payoutAssets,
     marketData, // Get live data
+    historyCandles,
+    historyStatus,
     activeIndicators, removeIndicator, addIndicator,
     lastError, clearError
   } = useMarketStore();
@@ -33,6 +36,10 @@ const ChartWorkspace = () => {
         grid: {
           vertLines: { color: '#374151' }, // gray-700
           horzLines: { color: '#374151' },
+        },
+        timeScale: {
+          timeVisible: true,
+          secondsVisible: false,
         },
         width: chartContainerRef.current.clientWidth,
         height: chartContainerRef.current.clientHeight,
@@ -88,19 +95,48 @@ const ChartWorkspace = () => {
     }
   }, [selectedAsset]);
 
-  // Helper function to convert timestamp to business day object
-  const getBusinessDay = (timestamp) => {
-    const date = new Date(timestamp > 10000000000 ? timestamp : timestamp * 1000);
-    return {
-      year: date.getUTCFullYear(),
-      month: date.getUTCMonth() + 1,
-      day: date.getUTCDate(),
-    };
-  };
+  useEffect(() => {
+    if (!candleSeriesRef.current || !selectedAsset) return;
+
+    const status = historyStatus?.[selectedAsset];
+    const candles = historyCandles?.[selectedAsset];
+    if (!Array.isArray(candles)) return;
+
+    if (candles.length === 0) {
+      if (status === 'loaded' || status === 'empty' || status === 'not_found' || status === 'error') {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    const mapped = candles
+      .map((c) => {
+        const ts = c.time !== undefined ? c.time : c.timestamp;
+        const time = ts > 10000000000 ? Math.floor(ts / 1000) : Math.floor(ts);
+        return {
+          time,
+          open: Number(c.open),
+          high: Number(c.high),
+          low: Number(c.low),
+          close: Number(c.close),
+        };
+      })
+      .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close))
+      .sort((a, b) => a.time - b.time);
+
+    if (mapped.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    candleSeriesRef.current.setData(mapped);
+    currentCandleRef.current = mapped[mapped.length - 1];
+    setIsLoading(false);
+  }, [historyCandles, historyStatus, selectedAsset]);
 
   // Effect to handle tick aggregation
   useEffect(() => {
-    const latestData = marketData[selectedAsset];
+    const latestData = marketData[selectedAssetKey];
     if (!latestData || !candleSeriesRef.current) return;
 
     // Hide loading state once we receive first data for this asset
@@ -110,8 +146,8 @@ const ChartWorkspace = () => {
 
     try {
       // Validate data belongs to selected asset
-      if (latestData.asset && latestData.asset !== selectedAsset) {
-        console.warn(`Data asset mismatch: expected ${selectedAsset}, got ${latestData.asset}`);
+      if (latestData.asset && latestData.asset !== selectedAssetKey) {
+        console.warn(`Data asset mismatch: expected ${selectedAssetKey}, got ${latestData.asset}`);
         return;
       }
 
@@ -125,14 +161,18 @@ const ChartWorkspace = () => {
         // TODO: Map selectedTimeframe to seconds. Defaulting to 60s.
         const interval = 60; 
         const candleTime = Math.floor(time / interval) * interval;
-        const candleDate = getBusinessDay(candleTime * 1000);
-
+        
         let candle = currentCandleRef.current;
 
-        if (!candle || candle.time.year !== candleDate.year || candle.time.month !== candleDate.month || candle.time.day !== candleDate.day) {
+        if (candle && typeof candle.time === 'number' && candleTime < candle.time && candleTime !== candle.time) {
+          return;
+        }
+
+        // Check if we are in a new bucket
+        if (!candle || candle.time !== candleTime) {
           // Start new candle
           candle = {
-            time: candleDate,
+            time: candleTime,
             open: price,
             high: price,
             low: price,
@@ -150,12 +190,21 @@ const ChartWorkspace = () => {
       } 
       // If it's a candle (e.g. historical data loaded)
       else if (latestData.open !== undefined) {
-         // Ensure time is in business day format
          const candleData = { ...latestData };
-         if (typeof candleData.time === 'string') {
-           const [year, month, day] = candleData.time.split('-').map(Number);
-           candleData.time = { year, month, day };
+         
+         // Map timestamp to time if needed (Pydantic model uses timestamp)
+         if (candleData.time === undefined && candleData.timestamp !== undefined) {
+             candleData.time = Math.floor(candleData.timestamp);
          }
+         
+         // Ensure time is a UNIX timestamp for intraday
+         if (typeof candleData.time === 'string') {
+             const date = new Date(candleData.time);
+             if (!isNaN(date.getTime())) {
+                 candleData.time = Math.floor(date.getTime() / 1000);
+             }
+         }
+         
          candleSeriesRef.current.update(candleData);
          // Update our ref so next tick continues correctly
          currentCandleRef.current = candleData;
@@ -163,11 +212,18 @@ const ChartWorkspace = () => {
     } catch (err) {
       console.error("Error updating chart data:", err);
     }
-  }, [marketData, selectedAsset, selectedTimeframe]);
+  }, [marketData, selectedAssetKey, selectedTimeframe, isLoading]);
 
   // Options for Comboboxes
-  const assetOptions = payoutAssets.map(a => ({ label: a, value: a }));
+  const assetList = Array.from(new Set([...(payoutAssets || []), selectedAsset].filter(Boolean)));
+  const assetOptions = assetList.map(a => ({ label: a, value: a }));
   
+  const timeframeOptions = [
+    { label: '1 Minute (Locked)', value: '1m' },
+  ];
+
+  /*
+  // Restore full options when mapping is complete
   const timeframeOptions = [
     { label: 'Ticks', value: 'ticks' },
     { label: '1 Minute', value: '1m' },
@@ -175,6 +231,7 @@ const ChartWorkspace = () => {
     { label: '15 Minutes', value: '15m' },
     { label: '1 Hour', value: '1h' },
   ];
+  */
 
   const csvOptions = [
     { label: 'Upload New...', value: 'upload' },
@@ -199,20 +256,20 @@ const ChartWorkspace = () => {
   };
 
   return (
-    <div className="col-span-9 flex flex-col gap-4 flex-1">
+    <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-lg bg-gray-900 border border-gray-800 shadow-xl relative">
       
       {/* Error Message Display */}
       {lastError && (
-        <div className="p-3 bg-red-900/50 border border-red-600 rounded text-red-200 text-sm flex justify-between items-center">
+        <div className="p-2 bg-red-900/50 border-b border-red-600 text-red-200 text-xs flex justify-between items-center z-50">
           <span>{lastError}</span>
           <button onClick={clearError} className="text-red-300 hover:text-red-100">✕</button>
         </div>
       )}
       
-      {/* Top Bar - Selectors */}
-      <Card className="p-3 rounded-lg flex flex-wrap items-center gap-3 z-20">
+      {/* Unified Top Bar - Compact Controls */}
+      <div className="p-1.5 border-b border-gray-700 bg-gray-800/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
         
-        <div className="w-40">
+        <div className="w-36">
           <Combobox 
             label="Asset" 
             value={selectedAsset} 
@@ -221,9 +278,9 @@ const ChartWorkspace = () => {
           />
         </div>
 
-        <div className="w-32">
+        <div className="w-28">
           <Combobox 
-            label="Timeframe" 
+            label="Time" 
             value={selectedTimeframe} 
             onChange={handleTimeframeChange} 
             options={timeframeOptions}
@@ -231,20 +288,20 @@ const ChartWorkspace = () => {
           />
         </div>
 
-        <div className="w-40">
+        <div className="w-32">
           <Combobox 
             label="Import" 
-            placeholder="Select CSV..."
+            placeholder="CSV..."
             options={csvOptions}
             onChange={() => {}}
             icon={FileText}
           />
         </div>
 
-        <div className="w-40">
+        <div className="w-32">
           <Combobox 
             label="Indicators" 
-            placeholder="Add Indicator..."
+            placeholder="+ Add"
             options={indicatorOptions}
             onChange={(val) => {
               const label = indicatorOptions.find(o => o.value === val)?.label;
@@ -254,34 +311,27 @@ const ChartWorkspace = () => {
           />
         </div>
 
-        <div className="flex-1"></div>
-
-        <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded text-sm font-bold transition-all shadow-lg shadow-indigo-500/20">
-          <Bot size={18} />
-          <span>Ask AI</span>
-        </button>
-      </Card>
-
-      {/* Active Indicators List */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {activeIndicators.map((ind) => (
-          <IndicatorBadge 
-            key={ind.id} 
-            name={ind.name} 
-            value={ind.value} 
-            onRemove={() => removeIndicator(ind.id)} 
-          />
-        ))}
+        {/* Active Indicators Inline if space permits, or they wrap */}
+        <div className="flex-1 flex gap-2 overflow-x-auto items-center justify-end no-scrollbar px-2">
+           {activeIndicators.map((ind) => (
+            <IndicatorBadge 
+              key={ind.id} 
+              name={ind.name} 
+              value={ind.value} 
+              onRemove={() => removeIndicator(ind.id)} 
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Chart Display */}
-      <Card className="flex-1 p-0 rounded-lg relative overflow-hidden flex flex-col min-h-[400px]">
-        <div className="absolute top-4 right-4 z-10 flex gap-2">
-          <span className="bg-black/50 backdrop-blur px-2 py-1 rounded text-xs text-gray-300">Live Feed</span>
+      {/* Chart Display Area */}
+      <div className="flex-1 relative w-full min-h-0">
+        <div className="absolute top-2 right-2 z-10 flex gap-2">
+          <span className="bg-black/50 backdrop-blur px-2 py-0.5 rounded text-[10px] uppercase font-bold text-gray-400 border border-gray-800">Live Feed</span>
         </div>
         
         {isLoading && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20 rounded-lg">
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-2">
               <div className="w-8 h-8 border-2 border-gray-400 border-t-accent-green rounded-full animate-spin"></div>
               <span className="text-gray-300 text-sm">Loading data for {selectedAsset}...</span>
@@ -290,16 +340,16 @@ const ChartWorkspace = () => {
         )}
         
         <div ref={chartContainerRef} className="w-full h-full"></div>
-      </Card>
-    </div>
+      </div>
+    </Card>
   );
 };
 
 const IndicatorBadge = ({ name, value, onRemove }) => (
-  <div className="flex items-center gap-2 px-2 py-1 bg-gray-800 rounded border border-gray-700 text-xs whitespace-nowrap">
+  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-800/80 rounded border border-gray-600 text-[10px] whitespace-nowrap shadow-sm">
     <span className="text-accent-green font-bold">{name}</span>
     <span className="text-gray-400">{value}</span>
-    <X size={12} className="cursor-pointer hover:text-red-400" onClick={onRemove} />
+    <X size={10} className="cursor-pointer hover:text-red-400" onClick={onRemove} />
   </div>
 );
 

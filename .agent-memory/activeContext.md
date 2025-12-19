@@ -3,6 +3,8 @@
 ## Current Focus
 **Phase 5: The UI (Frontend Rebuild)**
 
+Immediate priority: ensure chart candles render at the GUI-selected timeframe (locked to `1m` for now).
+
 We have successfully refactored the frontend into a modular architecture using React, Zustand, and Lightweight Charts. The `DataAnalysis.jsx` monolith has been broken down into focused components (`Sidebar`, `TopBar`, `AssetPanel`, `ChartWorkspace`, `StatsPanel`).
 
 ## Recent Accomplishments
@@ -20,10 +22,17 @@ We have successfully refactored the frontend into a modular architecture using R
     - Added `ErrorBoundary` for robust error handling.
     - Verified build success.
 
+- **Chart Rendering Fix (Intraday Time Handling)**:
+    - Updated `ChartWorkspace.jsx` to use UNIX timestamps for intraday candles.
+    - Enabled intraday time axis rendering via `timeScale.timeVisible`.
+    - Prevented daily “single candle” collapse caused by `BusinessDay`-style time objects.
+
 ## Current State
 - **Frontend**: Modular structure in place. Mock data is currently used for the chart and asset list.
 - **Backend**: Collector, Strategy, and Gateway services are implemented.
 - **Data Flow**: Backend services are ready to stream data. Frontend needs to be wired to the Gateway via Socket.IO.
+
+Known gap: chart aggregation interval is currently fixed to 60s; timeframe selection must remain at `1m` until full mapping is implemented.
 
 ## Next Steps (Phase 5 & 4)
 1.  **Socket.IO Integration (Frontend)**: Connect `marketStore` to the backend Socket.IO server.
@@ -32,6 +41,10 @@ We have successfully refactored the frontend into a modular architecture using R
     -   Bind "92% Payout Assets" list to live data.
     -   Bind Chart to live tick/candle updates.
     -   Bind Connection Status badges to real socket events.
+
+4.  **Timeframe Integrity (Short-Term)**:
+    -   Keep GUI timeframe pinned to `1m`.
+    -   Map `selectedTimeframe` to chart aggregation interval once backend selection is stable.
 
 ## Active Files
 - `gui/Dashboard/src/store/marketStore.js`

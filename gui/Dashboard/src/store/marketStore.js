@@ -1,9 +1,14 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
 
+const normalizeAsset = (asset) => {
+  if (!asset) return '';
+  return String(asset).replace(/[_/\s]/g, '').toUpperCase();
+};
+
 const useMarketStore = create((set, get) => ({
   // UI State
-  isSidebarOpen: true,
+  isSidebarOpen: false,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -14,29 +19,40 @@ const useMarketStore = create((set, get) => ({
 
   // Market Data State
   selectedAsset: 'AUDNZDOTC',
+  selectedAssetKey: normalizeAsset('AUDNZDOTC'),
   setSelectedAsset: async (asset) => {
-    const { socket, selectedAsset: previousAsset } = get();
+    const { socket, selectedAssetKey: previousAssetKey } = get();
+    const nextAssetKey = normalizeAsset(asset);
     
     // Clear previous asset data before switching
     set({ 
       selectedAsset: asset,
+      selectedAssetKey: nextAssetKey,
       marketData: {} // Clear all market data on asset switch
     });
     
     if (socket && socket.connected) {
       // Leave previous asset room
-      if (previousAsset) {
-        socket.emit('leave_room', `market_data:${previousAsset}`);
+      if (previousAssetKey) {
+        socket.emit('leave_room', `market_data:${previousAssetKey}`);
       }
       
       // Join new asset room
-      socket.emit('subscribe_asset', asset);
-      socket.emit('join_room', `market_data:${asset}`);
+      if (nextAssetKey) {
+        socket.emit('subscribe_asset', nextAssetKey);
+        socket.emit('join_room', `market_data:${nextAssetKey}`);
+      }
       
       // Emit select_asset event to backend via Socket.IO
       socket.emit('select_asset', asset);
     } else {
       console.warn("Socket not connected, cannot select asset via Socket.IO");
+    }
+
+    try {
+      await get().loadHistory(asset);
+    } catch (err) {
+      console.error('Failed to load history:', err);
     }
   },
   
@@ -65,12 +81,89 @@ const useMarketStore = create((set, get) => ({
   },
 
   marketData: {}, // Live market data keyed by asset
+
+  historyCandles: {},
+  historyStatus: {},
+  loadHistory: async (asset) => {
+    if (!asset) return;
+
+    set((state) => ({
+      historyStatus: {
+        ...state.historyStatus,
+        [asset]: 'loading',
+      },
+    }));
+
+    const timeframe = get().selectedTimeframe || '1m';
+    const limit = 200;
+
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/bootstrap-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset, timeframe, duration: 0 })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const candles = Array.isArray(data.candles) ? data.candles : [];
+        set((state) => ({
+          historyCandles: {
+            ...state.historyCandles,
+            [asset]: candles,
+          },
+          historyStatus: {
+            ...state.historyStatus,
+            [asset]: 'loaded',
+          },
+        }));
+        return;
+      }
+
+      const histRes = await fetch(`http://localhost:8000/api/v1/history/${encodeURIComponent(asset)}?timeframe=1&limit=${limit}`);
+      if (histRes.ok) {
+        const hist = await histRes.json();
+        const candles = Array.isArray(hist.data) ? hist.data : [];
+        set((state) => ({
+          historyCandles: {
+            ...state.historyCandles,
+            [asset]: candles,
+          },
+          historyStatus: {
+            ...state.historyStatus,
+            [asset]: candles.length ? 'loaded' : 'empty',
+          },
+        }));
+        return;
+      }
+
+      set((state) => ({
+        historyCandles: {
+          ...state.historyCandles,
+          [asset]: [],
+        },
+        historyStatus: {
+          ...state.historyStatus,
+          [asset]: histRes.status === 404 ? 'not_found' : 'error',
+        },
+      }));
+    } catch (err) {
+      console.error('Failed to load history:', err);
+      set((state) => ({
+        historyCandles: {
+          ...state.historyCandles,
+          [asset]: [],
+        },
+        historyStatus: {
+          ...state.historyStatus,
+          [asset]: 'error',
+        },
+      }));
+    }
+  },
   
   // 92% Payout Assets
-  payoutAssets: [
-    'AUDNZDOTC', 'EURUSDOTC', 'GBPUSDOTC', 'USDJPYOTC', 
-    'USDCADOTC', 'AUDUSDOTC', 'NZDUSDOTC', 'EURGBPOTC'
-  ],
+  payoutAssets: [],
   
   // Asset Refresh Logic
   autoRefresh: false,
@@ -109,6 +202,25 @@ const useMarketStore = create((set, get) => ({
       }
     } catch (err) {
       console.error("Failed to refresh assets:", err);
+    }
+  },
+
+  collectHistory: async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/collect-history', {
+        method: 'POST'
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to start collection');
+      }
+      
+      const data = await res.json();
+      console.log('History collection started:', data);
+    } catch (err) {
+      console.error("Failed to start history collection:", err);
+      set({ lastError: `Collection Error: ${err.message}` });
     }
   },
 
@@ -154,10 +266,20 @@ const useMarketStore = create((set, get) => ({
       set({ wsStatus: 'connected', socket });
       
       // Subscribe to currently selected asset
-      const { selectedAsset } = get();
+      const { selectedAsset, selectedAssetKey } = get();
+      if (selectedAssetKey) {
+        socket.emit('subscribe_asset', selectedAssetKey);
+        socket.emit('join_room', `market_data:${selectedAssetKey}`);
+      }
       if (selectedAsset) {
-        socket.emit('subscribe_asset', selectedAsset);
-        socket.emit('join_room', `market_data:${selectedAsset}`);
+        socket.emit('select_asset', selectedAsset);
+      }
+
+      try {
+        get().refreshAssets();
+        get().loadHistory(selectedAsset);
+      } catch (err) {
+        console.error('Post-connect initialization failed:', err);
       }
     });
 
@@ -173,8 +295,8 @@ const useMarketStore = create((set, get) => ({
 
     socket.on('market_data', (data) => {
       // Only update if data belongs to selected asset (asset isolation)
-      const { selectedAsset } = get();
-      if (data && data.asset && data.asset === selectedAsset) {
+      const { selectedAssetKey } = get();
+      if (data && data.asset && data.asset === selectedAssetKey) {
         set((state) => ({
           marketData: {
             ...state.marketData,

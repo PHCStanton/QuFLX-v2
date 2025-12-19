@@ -19,6 +19,57 @@ class WebSocketInterceptor:
         self.driver = driver
         self.processed_messages = set()
 
+    def fetch_history_events(self) -> List[Dict[str, Any]]:
+        """
+        Fetches WebSocket frames that contain history data.
+        Returns a list of history payload dictionaries.
+        """
+        history_events = []
+        try:
+            logs = self.driver.get_log('performance')
+            
+            for entry in logs:
+                try:
+                    message_json = json.loads(entry['message'])
+                    message = message_json.get('message', {})
+                    
+                    if message.get('method') == 'Network.webSocketFrameReceived':
+                        params = message.get('params', {})
+                        response = params.get('response', {})
+                        payload_data = response.get('payloadData')
+                        
+                        if payload_data:
+                            # Create a unique ID for deduplication
+                            msg_id = f"{params.get('requestId')}_{params.get('timestamp')}"
+                            if msg_id in self.processed_messages:
+                                continue
+                            self.processed_messages.add(msg_id)
+                            
+                            if len(self.processed_messages) > 10000:
+                                self.processed_messages.clear()
+
+                            parsed_data = self._parse_payload(payload_data)
+                            
+                            # Check for history in the parsed data
+                            # Socket.IO event: ["event", {"history": [...]}]
+                            if isinstance(parsed_data, list) and len(parsed_data) >= 2:
+                                event_data = parsed_data[1]
+                                if isinstance(event_data, dict) and 'history' in event_data:
+                                    history_events.append(event_data)
+                            
+                            # Direct dict: {"history": [...]}
+                            elif isinstance(parsed_data, dict) and 'history' in parsed_data:
+                                history_events.append(parsed_data)
+                                
+                except Exception as e:
+                    logger.warning(f"Error processing history log entry: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Error fetching history logs: {e}")
+            
+        return history_events
+
     def fetch_ticks(self) -> List[Tick]:
         """
         Fetches new WebSocket frames, parses them, and returns a list of new Ticks.
@@ -170,7 +221,7 @@ class WebSocketInterceptor:
                 
                 asset = self._normalize_asset_name(raw_asset)
                 
-                logger.info(f"Raw Tick: {raw_asset} -> {asset} {price}") # Debugging
+                logger.debug(f"Raw Tick: {raw_asset} -> {asset} {price}")
                 
                 return Tick(
                     timestamp=timestamp,
@@ -178,8 +229,8 @@ class WebSocketInterceptor:
                     price=price,
                     source="pocketoption"
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error parsing single tick list: {item} - {e}")
         return None
 
     def _parse_single_tick_dict(self, item: Dict) -> Optional[Tick]:
@@ -199,6 +250,6 @@ class WebSocketInterceptor:
                     price=float(price),
                     source="pocketoption"
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error parsing single tick dict: {item} - {e}")
         return None

@@ -1,53 +1,45 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, List, Tuple
-import time
 import json
 import sys
+import time
+import logging
 from pathlib import Path
+from typing import Any, Dict
 
-# Add project root to path to import capabilities
+# Add project root to path
 project_root = Path(__file__).resolve().parents[3]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-try:
-    from v2_Dev_Docs.V1_reference.capabilites.base import (
-        Ctx,
-        CapResult,
-        Capability,
-        add_utils_to_syspath,
-    )
-except ImportError:
-    # Fallback if path structure is different
-    sys.path.append(str(project_root / "v2_Dev_Docs" / "V1_reference"))
-    from capabilities.base import (
-        Ctx,
-        CapResult,
-        Capability,
-        add_utils_to_syspath,
-    )
+from capabilities_v2.base import Ctx, CapResult, Capability, add_utils_to_syspath
 
 add_utils_to_syspath()
 
-try:
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-except ImportError:
-    pass
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-# Import HighPriorityControls
+logger = logging.getLogger(__name__)
+
 try:
-    from selenium.selenium_ui_controls import HighPriorityControls
+    from selenium_ui_controls import HighPriorityControls
 except ImportError:
     # Try adding project root to path again if needed
-    sys.path.append(str(project_root))
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
     try:
-        from selenium.selenium_ui_controls import HighPriorityControls
+        # Check local_selenium_utils first
+        local_utils = project_root / "local_selenium_utils"
+        if str(local_utils) not in sys.path:
+            sys.path.insert(0, str(local_utils))
+        from selenium_ui_controls import HighPriorityControls
     except ImportError:
-        HighPriorityControls = None
+        try:
+            # Fallback for old structure or if in path
+            from local_selenium_utils.selenium_ui_controls import HighPriorityControls
+        except ImportError:
+            HighPriorityControls = None
 
 class AssetControl(Capability):
     """
@@ -135,8 +127,8 @@ class AssetControl(Capability):
             search_input.clear()
             search_input.send_keys(asset_name)
             time.sleep(0.5)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to find or interact with search input: {e}")
 
         # Click the asset
         try:
@@ -157,7 +149,8 @@ class AssetControl(Capability):
             if target_el:
                 try:
                     target_el.click()
-                except:
+                except Exception as e:
+                    logger.debug(f"Click failed, trying JS click: {e}")
                     driver.execute_script("arguments[0].click();", target_el)
                 
                 return CapResult(ok=True, data={"message": f"Selected asset {asset_name} from dropdown"})
@@ -220,7 +213,8 @@ class AssetControl(Capability):
             # Click menu button
             try:
                 menu_btn.click()
-            except:
+            except Exception as e:
+                logger.debug(f"Menu click failed, trying JS click: {e}")
                 driver.execute_script("arguments[0].click();", menu_btn)
             time.sleep(0.5)
             

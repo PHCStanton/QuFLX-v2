@@ -24,8 +24,10 @@
 ## Phase 5: The UI (Frontend Rebuild) (In Progress)
 - [x] State Management (Zustand Store created)
 - [x] Chart Components (Lightweight Charts integrated)
+- [x] Intraday candle time rendering fixed (UNIX timestamps)
 - [x] Dashboard Layout (Modular components created)
 - [ ] Socket.IO Integration (Pending)
+- [ ] Timeframe mapping/locking (keep `1m` until stable)
 
 ## Phase 6: Integration & Polish (Pending)
 - [ ] System Orchestration

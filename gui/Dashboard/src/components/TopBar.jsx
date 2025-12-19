@@ -1,5 +1,4 @@
-import React from 'react';
-import { Monitor, Wifi } from 'lucide-react';
+import { Monitor, Wifi, Bot } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 
 const TopBar = () => {
@@ -7,18 +6,7 @@ const TopBar = () => {
     wsStatus, 
     chromeStatus, 
     streamStatus, 
-    connectSocket, 
-    fetchStatus 
   } = useMarketStore();
-
-  const handleStartChrome = () => {
-    // For now, just refresh status as Chrome is started manually
-    fetchStatus();
-  };
-
-  const handleConnectWS = () => {
-    connectSocket();
-  };
 
   return (
     <header className="h-16 bg-card-bg border-b border-gray-700 flex items-center justify-between px-6">
@@ -29,19 +17,9 @@ const TopBar = () => {
       </div>
       
       <div className="flex items-center gap-4">
-        <button 
-          onClick={handleStartChrome}
-          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
-        >
-          <Monitor size={16} />
-          <span>Check Chrome</span>
-        </button>
-        <button 
-          onClick={handleConnectWS}
-          className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm font-medium transition-colors"
-        >
-          <Wifi size={16} />
-          <span>Connect WS</span>
+        <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 rounded text-sm font-bold transition-all shadow-lg shadow-indigo-500/20">
+          <Bot size={18} />
+          <span>Ask AI</span>
         </button>
       </div>
     </header>

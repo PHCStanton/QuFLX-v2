@@ -1,11 +1,9 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import useMarketStore from '../store/marketStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import AssetPanel from './AssetPanel';
-import AutomationsPanel from './AutomationsPanel';
 import ChartWorkspace from './ChartWorkspace';
-import StatsPanel from './StatsPanel';
 import ErrorBoundary from './ErrorBoundary';
 
 const Dashboard = () => {
@@ -28,10 +26,10 @@ const Dashboard = () => {
         <TopBar />
 
         {/* Main Workspace */}
-        <main className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
+        <main className="flex-1 flex flex-col overflow-hidden p-2 gap-2">
           
           {/* Top Row: Assets & Chart (Flexible Height) */}
-          <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+          <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
             {/* Left Panel - Controls & Assets */}
             <AssetPanel />
 
@@ -40,19 +38,6 @@ const Dashboard = () => {
               <ErrorBoundary>
                 <ChartWorkspace />
               </ErrorBoundary>
-            </div>
-          </div>
-
-          {/* Bottom Row: Automations & Stats (Fixed/Auto Height) */}
-          <div className="grid grid-cols-12 gap-4 shrink-0">
-            {/* Left Panel - Automations */}
-            <div className="col-span-3">
-              <AutomationsPanel />
-            </div>
-
-            {/* Center Panel - Stats */}
-            <div className="col-span-9">
-              <StatsPanel />
             </div>
           </div>
 

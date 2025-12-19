@@ -1,0 +1,24 @@
+See the #/.agent-memory for relevant context.
+/Team_Leader.json 
+As the Team_Leader it is your duty to manage the project by delegating the specialized agent personas for optimal Task outputs and excellent robust project results. Invoke specialized agent modes  @/.agents
+
+Please inspect the Legacy Files attached carefully.  I spent many hours figuring out and explaining to Coding Agents the WebSocket Functionalities and behaviour and had to start over many times. I do not wish to start over again or to explain this to a Coding Agent Again. It is important to understand how Pocket Option's Frontend effects the behaviour of the WebSocket and allows the backend to receive and process data for us(Developers)  to use. Which is not always that apparent.
+1. It is in fact the case that streaming might stop or stall if the frontend is not actively being interacted with not visible on the Users Hardware display for given time. Which stops the WebSocket information from feeding the backend. This does not cause any serious issues, but access to data for a period of time might be lost.
+2. When the frontend activity is detected again. it might be the case, that only the focussed Asset or less than what should be, is reaching the backend WebSocket for Visible and usable Data. In these cases a simple Browser refresh gets the WebSocket on track again.
+3. Then It is also the case that the assets need to be physically selected by the user in the frontend to be able to capture streaming data again. So we need to automate a mechanism to select the assets via selenium. See (files 3 & 4) Attached. 
+4. The other significant behaviour which is important for any developer to understand that is working with the Pocket Option WebSocket information. It is possible to collect Historical Data by clicking a specific a Asset and a Specific Timeframe of an Asset which then in turn sends approx. +/- amount of ~100 Candle Stick Data for that specific Asset and for that specific time frame. (See the implementation of . This is how collected historical Data in the previous versions and it works well. This data can be used to fill the charts before streaming. The Asset of timeframe just needs to be physically clicked in the Frontend of Pocket Option for that information to be loaded. I know of no other method and it works well if correctly implemented. See (Files 1&2)
+
+Legacy file functionalities and capabilities to consider.
+1. Historical Data Collecting:
+- #v2_Dev_Docs\V1_reference\capabilites\data_streaming_csv_save.py (file1)
+- #v2_Dev_Docs\V1_reference\capabilites\Saving_Historical_Data_CSV.md (file2)
+2. Selecting Favorites Assets one by one activating historical data loading via selenium Automation:
+- #for global timeframe selected: v2_Dev_Docs\V1_reference\capabilites\favorites_bar_scroll_select.py (file3)
+for various Timeframes and Topdown Analysis:
+- #v2_Dev_Docs\V1_reference\capabilites\favorites_select_topdown_collect.py (file4)
+
+These Asset Selecting Files should also be combined with the option of screenshots for Ai image analysis. Which could be useful in predicting price movements(there is an available argument in `favorites_select_topdown_collect.py`).
+
+Please assess this situation carefully. Use any necessary MCP tools for better and more precise out puts. Maintain the CORE_PRINCIPLES when doing the assessment.  Deligate the specialized agents for the job.
+
+Then compile a report_25-12-17.md san in #reports folder discussing and laying out your finding and next step recommendations.

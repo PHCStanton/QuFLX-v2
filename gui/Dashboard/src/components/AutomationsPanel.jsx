@@ -1,4 +1,3 @@
-import React from 'react';
 import Card from './Card';
 import ToggleSwitch from './ToggleSwitch';
 import useMarketStore from '../store/marketStore';

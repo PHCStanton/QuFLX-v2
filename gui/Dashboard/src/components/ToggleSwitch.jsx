@@ -1,5 +1,3 @@
-import React from 'react';
-
 const ToggleSwitch = ({ checked, onChange }) => (
   <div 
     onClick={onChange}

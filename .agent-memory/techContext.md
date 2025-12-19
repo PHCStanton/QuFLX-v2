@@ -34,6 +34,10 @@
 - **Chrome Dependency**: The Collector requires a running Chrome instance with DevTools Protocol enabled.
 - **Redis Availability**: The system cannot function without Redis.
 
+## Chart Data Conventions
+- **Intraday Candles**: Use UNIX timestamps in seconds for `time` values when rendering intraday series.
+- **Time Axis**: Enable intraday display using `timeScale.timeVisible` (and keep `secondsVisible` disabled for `1m`).
+
 ## Coding Standards
 - **Python**: PEP 8, Type Hints (mypy), Pydantic models for all data structures.
 - **TypeScript**: Strict mode, functional components, hooks for logic.

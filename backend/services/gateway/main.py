@@ -1,10 +1,15 @@
 import sys
 import os
+import csv
+import re
 import logging
 import asyncio
 import json
 import subprocess
 from typing import List, Dict, Any
+from datetime import datetime, timezone
+from pathlib import Path
+from collections import deque
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
@@ -81,15 +86,14 @@ async def redis_listener():
                 parsed_data = json.loads(data)
                 
                 if channel == "market_data":
-                    # Broadcast to 'market_data' event
-                    # We can also emit to specific rooms based on asset if needed
-                    # For now, broadcast to all
-                    await sio.emit('market_data', parsed_data)
-                    
-                    # If it's a candle, we might want to emit to a specific asset room
+                    # Broadcast to specific room for the asset
                     if 'asset' in parsed_data:
                         asset = parsed_data['asset']
-                        await sio.emit(f'market_data:{asset}', parsed_data)
+                        # Emit 'market_data' event to room 'market_data:{asset}'
+                        await sio.emit('market_data', parsed_data, room=f'market_data:{asset}')
+                    else:
+                        # Fallback for non-asset specific data (unlikely for market_data)
+                        await sio.emit('market_data', parsed_data)
                         
                 elif channel == "trading:signals":
                     await sio.emit('trading_signal', parsed_data)
@@ -188,30 +192,54 @@ async def get_status():
     return system_state
 
 @app.get("/api/v1/history/{asset}")
-async def get_history(asset: str, limit: int = 100):
-    """
-    Fetch historical data for an asset.
-    For now, this is a placeholder. In a real implementation, 
-    we would query a database or a Redis Stream/TimeSeries.
-    """
-    # Mock response
-    return {
-        "asset": asset,
-        "data": [],
-        "message": "Historical data storage not yet implemented"
-    }
+async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
+    asset_clean = re.sub(r"[^\w\-_]", "_", asset)
+    root = Path(__file__).resolve().parents[3]
+    csv_path = root / "data" / "data_output" / "history" / asset_clean / f"{int(timeframe)}.csv"
+
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail=f"History not found for {asset} @ {timeframe}m")
+
+    rows: deque[Dict[str, Any]] = deque(maxlen=max(1, int(limit)))
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if header is None:
+            return {"asset": asset, "timeframe": int(timeframe), "data": []}
+
+        for row in reader:
+            if len(row) < 6:
+                continue
+            try:
+                ts = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+                rows.append(
+                    {
+                        "timestamp": ts,
+                        "asset": asset,
+                        "timeframe": f"{int(timeframe)}m",
+                        "open": float(row[1]),
+                        "high": float(row[2]),
+                        "low": float(row[3]),
+                        "close": float(row[4]),
+                        "volume": int(float(row[5])),
+                    }
+                )
+            except Exception:
+                continue
+
+    return {"asset": asset, "timeframe": int(timeframe), "count": len(rows), "data": list(rows)}
 
 @app.post("/api/v1/refresh-assets")
 async def refresh_assets():
     """
-    Executes favorite_star_select.py to refresh the list of 92% payout assets.
+    Executes V2 capability: RefreshAssets
     """
     try:
-        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/favorite_star_select.py"))
+        runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py"))
         
-        # Run the script
+        # Run the runner script
         result = subprocess.run(
-            [sys.executable, script_path, "--min-pct", "92", "--sweep-all", "--unstar-below"],
+            [sys.executable, runner_path, "refresh_assets", "--inputs", json.dumps({"min_pct": 92, "sweep_all": True, "unstar_below": True})],
             capture_output=True,
             text=True
         )
@@ -228,18 +256,74 @@ async def refresh_assets():
                 
             data = output_json.get("data", {})
             processed = data.get("processed", {})
-            
-            # Combine selected_now and already_favorited
-            assets = list(set(processed.get("selected_now", []) + processed.get("already_favorited", [])))
-            
+            selected_now = processed.get("selected_now", []) if isinstance(processed, dict) else []
+            already_favorited = processed.get("already_favorited", []) if isinstance(processed, dict) else []
+            eligible = [a for a in (selected_now + already_favorited) if isinstance(a, str)]
+            assets = sorted({a for a in eligible})
             return {"assets": assets}
             
         except json.JSONDecodeError:
-            logger.error(f"Invalid JSON output from script: {result.stdout}")
-            raise HTTPException(status_code=500, detail="Invalid output from asset refresh script")
+            logger.error(f"Invalid JSON output: {result.stdout}")
+            raise HTTPException(status_code=500, detail="Invalid script output")
             
     except Exception as e:
         logger.error(f"Refresh assets failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/bootstrap-history")
+async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
+    asset = payload.get("asset")
+    if not asset:
+        raise HTTPException(status_code=400, detail="asset required")
+
+    timeframe = payload.get("timeframe", "1m")
+    timeframe_min = 1
+    if isinstance(timeframe, str):
+        tf = timeframe.strip().lower()
+        if tf.endswith("m"):
+            try:
+                timeframe_min = max(1, int(tf[:-1]))
+            except Exception:
+                timeframe_min = 1
+        elif tf.isdigit():
+            timeframe_min = max(1, int(tf))
+
+    duration_s = int(payload.get("duration", 0))
+
+    try:
+        runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py"))
+        result = subprocess.run(
+            [
+                sys.executable,
+                runner_path,
+                "history_collector",
+                "--inputs",
+                json.dumps({"action": "collect", "asset": asset, "timeframe": timeframe_min, "duration": duration_s}),
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Bootstrap history failed: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+
+        try:
+            out = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            logger.error(f"Invalid bootstrap history output: {result.stdout}")
+            raise HTTPException(status_code=502, detail="Invalid script output")
+
+        if not out.get("ok"):
+            raise HTTPException(status_code=500, detail=str(out.get("error")))
+
+        data = out.get("data", {})
+        return {"ok": True, "asset": asset, "timeframe": timeframe_min, "count": data.get("count", 0), "candles": data.get("candles", [])}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bootstrap history failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/select-asset")
@@ -272,6 +356,97 @@ async def select_asset(payload: Dict[str, str] = Body(...)):
         
     except Exception as e:
         logger.error(f"Select asset failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/collect-history")
+async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):
+    """
+    Executes V2 capability: CollectHistory
+    Iterates through high-payout assets to allow data collection.
+    """
+    try:
+        runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py"))
+
+        duration = int(payload.get("duration", 10))
+        timeframe = payload.get("timeframe", "1m")
+
+        log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../data/data_output/logs"))
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, f"collect_history_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log")
+
+        log_f = open(log_path, "w", encoding="utf-8")
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                runner_path,
+                "collect_history",
+                "--verbose",
+                "--inputs",
+                json.dumps({"duration": duration, "timeframe": timeframe}),
+            ],
+            stdout=log_f,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+
+        return {"status": "started", "message": "History collection started in background", "pid": proc.pid, "log_path": log_path}
+
+    except Exception as e:
+        logger.error(f"Collect history failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/get-assets")
+async def get_assets(payload: Dict[str, Any] = Body(...)):
+    min_pct = int(payload.get("min_pct", 92))
+    sweep_all = bool(payload.get("sweep_all", True))
+    unstar_below = bool(payload.get("unstar_below", True))
+    dry_run = bool(payload.get("dry_run", False))
+    close_after = bool(payload.get("close_after", True))
+    filter_mode = payload.get("filter_mode")
+
+    try:
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/favorite_star_select.py"))
+        args = [sys.executable, script_path, "--min-pct", str(min_pct)]
+        if sweep_all:
+            args.append("--sweep-all")
+        else:
+            args.append("--no-sweep")
+        if unstar_below:
+            args.append("--unstar-below")
+        else:
+            args.append("--no-unstar")
+        if dry_run:
+            args.append("--dry-run")
+        if not close_after:
+            args.append("--no-close")
+        if filter_mode == "otc":
+            args.append("--star-otc")
+        elif filter_mode == "fx":
+            args.append("--star-fx")
+
+        result = subprocess.run(args, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+
+        try:
+            out = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=502, detail="Invalid script output")
+
+        if not out.get("ok"):
+            raise HTTPException(status_code=500, detail=str(out.get("error")))
+
+        data = out.get("data", {})
+        processed = data.get("processed", {})
+        eligible = processed.get("selected_now", []) + processed.get("already_favorited", [])
+        return {"ok": True, "data": data, "assets": list({a for a in eligible if isinstance(a, str)})}
+
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/select-timeframe")
