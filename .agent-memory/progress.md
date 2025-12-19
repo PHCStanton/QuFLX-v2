@@ -19,17 +19,20 @@
 ## Phase 4: The Face (API Gateway) (Completed)
 - [x] FastAPI Setup
 - [x] Socket.IO Integration
-- [x] Historical Data API (Placeholder implemented)
+- [x] Historical Data API (Bootstrap + Fallback)
 
 ## Phase 5: The UI (Frontend Rebuild) (In Progress)
-- [x] State Management (Zustand Store created)
-- [x] Chart Components (Lightweight Charts integrated)
+- [x] State Management (Zustand store created and wired to Socket.IO)
+- [x] Chart Components (Lightweight Charts integrated with tick aggregation)
 - [x] Intraday candle time rendering fixed (UNIX timestamps)
 - [x] Dashboard Layout (Modular components created)
-- [ ] Socket.IO Integration (Pending)
-- [ ] Timeframe mapping/locking (keep `1m` until stable)
+- [x] OTC Ticker Panel (List/Ticker modes powered by live quotes)
+- [x] Lint/Build Health (`npm run lint` and `npm run build` passing)
+- [ ] Data Contracts & Validation (frontend + gateway)
+- [ ] Refactor `ChartWorkspace.jsx` into smaller components/hooks
+- [ ] Refine stream status semantics and UI indicators
 
 ## Phase 6: Integration & Polish (Pending)
 - [ ] System Orchestration
 - [ ] Resilience Testing
-- [ ] Documentation
+- [ ] Comprehensive Documentation & Onboarding Guides
