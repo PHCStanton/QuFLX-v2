@@ -1,19 +1,21 @@
 import { Bot } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
+import { useStreamHealth } from '../hooks/useStreamHealth';
 
 const TopBar = () => {
   const { 
     wsStatus, 
     chromeStatus, 
-    streamStatus, 
   } = useMarketStore();
+
+  const health = useStreamHealth();
 
   return (
     <header className="h-16 bg-card-bg border-b border-gray-700 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
         <StatusBadge label="WS" status={wsStatus} />
         <StatusBadge label="Chrome" status={chromeStatus} />
-        <StatusBadge label="Stream" status={streamStatus} />
+        <StatusBadge label="Stream" status={health} />
       </div>
       
       <div className="flex items-center gap-4">

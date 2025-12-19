@@ -26,6 +26,7 @@ class CollectorService:
         self.publisher = RedisPublisher()
         self.channel = "market_data" # Redis channel for ticks
         self.status_channel = "system_status" # Redis channel for service status
+        self.seen_assets = set()
 
     def start(self):
         """
@@ -65,9 +66,16 @@ class CollectorService:
                 ticks = self.interceptor.fetch_ticks()
                 
                 if ticks:
-                    logger.info(f"Collected {len(ticks)} ticks.")
-                    
-                    # Publish to Redis
+                    assets = sorted({getattr(t, "asset", None) for t in ticks if getattr(t, "asset", None)})
+                    if assets:
+                        logger.info(f"Collected {len(ticks)} ticks from assets: {', '.join(assets)}")
+                        new_assets = [a for a in assets if a not in self.seen_assets]
+                        if new_assets:
+                            self.seen_assets.update(new_assets)
+                            logger.info(f"Discovered assets this session: {', '.join(sorted(self.seen_assets))}")
+                    else:
+                        logger.info(f"Collected {len(ticks)} ticks.")
+
                     for tick in ticks:
                         self.publisher.publish(self.channel, tick)
                         # logger.debug(f"Published tick: {tick}")

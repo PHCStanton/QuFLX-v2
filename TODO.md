@@ -88,3 +88,32 @@
   - Toggle to Ticker mode, confirm OTC prices update as data streams.
   - Click an asset, confirm chart loads history first and then streams.
   - Confirm stream continues after switching assets.
+
+## G. Proposed Action Plan (2025-12-19)
+
+### Priority 1 – Data Contracts & Validation
+- [x] Define and document JSON shape of `market_data` payloads.
+- [x] Define and document JSON shape of `bootstrap-history` responses.
+- [x] Define and document JSON shape of `history` responses.
+- [x] Add validation for these payloads in `backend/services/gateway/main.py`.
+- [x] Add defensive field checks for these payloads in `gui/Dashboard/src/store/marketStore.js`.
+
+### Priority 2 – Frontend Separation of Concerns
+- [x] Extract chart lifecycle into a dedicated chart container component from `ChartWorkspace.jsx`.
+- [x] Extract tick aggregation logic into a dedicated hook that feeds the chart.
+- [x] Move indicator and header controls into a separate child component.
+
+### Priority 3 – Connection & Stream Status Clarity
+- [x] Extend `/api/v1/status` to expose last tick timestamp and derived stream health.
+- [x] Update `TopBar` to reflect granular stream health states.
+- [x] Update chart "Live Feed" badge behavior to use the richer stream status.
+
+### Priority 4 – Store Structure Hardening
+- [x] Plan reorganization of `marketStore.js` into connection, market, and ticker slices.
+- [x] Gradually refactor store implementation to align with the planned slices.
+- [x] Review auto-refresh and history collection flows for simplification opportunities.
+
+### Priority 5 – Documentation & Developer Onboarding
+- [x] Update in-repo docs to describe the Collector → Redis → Gateway → Dashboard pipeline.
+- [x] Document how `marketStore.js` subscribes to rooms and filters `market_data`.
+- [x] Document conventions for asset keys and supported timeframes.

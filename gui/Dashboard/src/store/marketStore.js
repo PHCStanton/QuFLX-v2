@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
+import { validateMarketData } from '../utils/validators';
 
 const normalizeAsset = (asset) => {
   if (!asset) return '';
@@ -8,18 +9,49 @@ const normalizeAsset = (asset) => {
 
 const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
 
-const useMarketStore = create((set, get) => ({
-  // UI State
+const createUiSlice = (set) => ({
   isSidebarOpen: false,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
-  
-  // Error State
   lastError: null,
   clearError: () => set({ lastError: null }),
+  activeIndicators: [
+    { id: 'rsi', name: 'RSI', value: '14' },
+    { id: 'ema', name: 'EMA', value: '200' },
+    { id: 'bb', name: 'Bollinger', value: '20, 2' }
+  ],
+  addIndicator: (indicator) =>
+    set((state) => ({
+      activeIndicators: [...state.activeIndicators, indicator]
+    })),
+  removeIndicator: (id) =>
+    set((state) => ({
+      activeIndicators: state.activeIndicators.filter((indicator) => indicator.id !== id)
+    })),
+  automations: {
+    autoSelectFavorites: false,
+    pendingOrders: false
+  },
+  toggleAutomation: (key) =>
+    set((state) => ({
+      automations: {
+        ...state.automations,
+        [key]: !state.automations[key]
+      }
+    }))
+});
 
-  // Market Data State
+const createTickerSlice = () => ({
+  marketData: {},
+  tickerMaxAssets: 15,
+  subscribedAssetKeys: [],
+  quotesByAssetKey: {},
+  baselineByAssetKey: {},
+  lastTickTimestamp: 0
+});
+
+const createMarketSlice = (set, get) => ({
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
   setSelectedAsset: async (asset) => {
@@ -27,7 +59,7 @@ const useMarketStore = create((set, get) => ({
 
     set({
       selectedAsset: asset,
-      selectedAssetKey: nextAssetKey,
+      selectedAssetKey: nextAssetKey
     });
 
     const { socket } = get();
@@ -42,37 +74,29 @@ const useMarketStore = create((set, get) => ({
       console.error('Failed to load history:', err);
     }
   },
-  
   selectedTimeframe: '1m',
   setSelectedTimeframe: async (timeframe) => {
-    // Clear market data when timeframe changes to reset chart
     set({ selectedTimeframe: timeframe, marketData: {} });
-    
-    // Call backend to select timeframe in Pocket Option
+
     try {
       const response = await fetch('http://localhost:8000/api/v1/select-timeframe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeframe })
       });
-      
+
       if (!response.ok) {
         console.error(`Failed to select timeframe: HTTP ${response.status}`);
         const errorData = await response.json().catch(() => ({}));
-        set({ lastError: errorData.detail || `Failed to select timeframe: ${timeframe}` });
+        set({
+          lastError: errorData.detail || `Failed to select timeframe: ${timeframe}`
+        });
       }
     } catch (err) {
-      console.error("Failed to select timeframe in backend:", err);
+      console.error('Failed to select timeframe in backend:', err);
       set({ lastError: `Network error selecting timeframe: ${err.message}` });
     }
   },
-
-  marketData: {},
-  tickerMaxAssets: 15,
-  subscribedAssetKeys: [],
-  quotesByAssetKey: {},
-  baselineByAssetKey: {},
-
   historyCandles: {},
   historyStatus: {},
   loadHistory: async (asset) => {
@@ -81,8 +105,8 @@ const useMarketStore = create((set, get) => ({
     set((state) => ({
       historyStatus: {
         ...state.historyStatus,
-        [asset]: 'loading',
-      },
+        [asset]: 'loading'
+      }
     }));
 
     const timeframe = get().selectedTimeframe || '1m';
@@ -101,29 +125,33 @@ const useMarketStore = create((set, get) => ({
         set((state) => ({
           historyCandles: {
             ...state.historyCandles,
-            [asset]: candles,
+            [asset]: candles
           },
           historyStatus: {
             ...state.historyStatus,
-            [asset]: 'loaded',
-          },
+            [asset]: 'loaded'
+          }
         }));
         return;
       }
 
-      const histRes = await fetch(`http://localhost:8000/api/v1/history/${encodeURIComponent(asset)}?timeframe=1&limit=${limit}`);
+      const histRes = await fetch(
+        `http://localhost:8000/api/v1/history/${encodeURIComponent(
+          asset
+        )}?timeframe=1&limit=${limit}`
+      );
       if (histRes.ok) {
         const hist = await histRes.json();
         const candles = Array.isArray(hist.data) ? hist.data : [];
         set((state) => ({
           historyCandles: {
             ...state.historyCandles,
-            [asset]: candles,
+            [asset]: candles
           },
           historyStatus: {
             ...state.historyStatus,
-            [asset]: candles.length ? 'loaded' : 'empty',
-          },
+            [asset]: candles.length ? 'loaded' : 'empty'
+          }
         }));
         return;
       }
@@ -131,51 +159,47 @@ const useMarketStore = create((set, get) => ({
       set((state) => ({
         historyCandles: {
           ...state.historyCandles,
-          [asset]: [],
+          [asset]: []
         },
         historyStatus: {
           ...state.historyStatus,
-          [asset]: histRes.status === 404 ? 'not_found' : 'error',
-        },
+          [asset]: histRes.status === 404 ? 'not_found' : 'error'
+        }
       }));
     } catch (err) {
       console.error('Failed to load history:', err);
       set((state) => ({
         historyCandles: {
           ...state.historyCandles,
-          [asset]: [],
+          [asset]: []
         },
         historyStatus: {
           ...state.historyStatus,
-          [asset]: 'error',
-        },
+          [asset]: 'error'
+        }
       }));
     }
   },
-  
-  // 92% Payout Assets
   payoutAssets: [],
   panelMode: 'list',
   setPanelMode: (mode) => {
     set({ panelMode: mode });
     get().syncSubscriptions();
   },
-
   computeRequiredAssetKeys: (overrideSelectedAssetKey) => {
     const { panelMode, payoutAssets, selectedAssetKey, tickerMaxAssets } = get();
-    const nextSelectedKey = overrideSelectedAssetKey ?? selectedAssetKey;
+    const nextAssetKey = overrideSelectedAssetKey ?? selectedAssetKey;
 
     if (panelMode !== 'ticker') {
-      return uniq([nextSelectedKey]);
+      return uniq([nextAssetKey]);
     }
 
     const tickerKeys = (payoutAssets || [])
       .slice(0, tickerMaxAssets)
       .map((a) => normalizeAsset(a));
 
-    return uniq([...tickerKeys, nextSelectedKey]);
+    return uniq([...tickerKeys, nextAssetKey]);
   },
-
   syncSubscriptions: (overrideSelectedAssetKey) => {
     const { socket, subscribedAssetKeys } = get();
     if (!socket || !socket.connected) return;
@@ -195,9 +219,8 @@ const useMarketStore = create((set, get) => ({
 
     set({ subscribedAssetKeys: required });
   },
-  
-  // Asset Refresh Logic
   autoRefresh: false,
+  refreshInterval: null,
   toggleAutoRefresh: () => {
     const { autoRefresh, startAutoRefresh, stopAutoRefresh } = get();
     if (autoRefresh) {
@@ -206,22 +229,18 @@ const useMarketStore = create((set, get) => ({
       startAutoRefresh();
     }
   },
-  
-  refreshInterval: null,
   startAutoRefresh: () => {
     set({ autoRefresh: true });
     const { refreshAssets } = get();
-    refreshAssets(); // Initial refresh
-    const interval = setInterval(refreshAssets, 5 * 60 * 1000); // 5 minutes
+    refreshAssets();
+    const interval = setInterval(refreshAssets, 5 * 60 * 1000);
     set({ refreshInterval: interval });
   },
-  
   stopAutoRefresh: () => {
     const { refreshInterval } = get();
     if (refreshInterval) clearInterval(refreshInterval);
     set({ autoRefresh: false, refreshInterval: null });
   },
-  
   refreshAssets: async () => {
     try {
       const res = await fetch('http://localhost:8000/api/v1/refresh-assets', {
@@ -233,70 +252,68 @@ const useMarketStore = create((set, get) => ({
         get().syncSubscriptions();
       }
     } catch (err) {
-      console.error("Failed to refresh assets:", err);
+      console.error('Failed to refresh assets:', err);
     }
   },
-
   collectHistory: async () => {
     try {
       const res = await fetch('http://localhost:8000/api/v1/collect-history', {
         method: 'POST'
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.detail || 'Failed to start collection');
       }
-      
+
       const data = await res.json();
       console.log('History collection started:', data);
     } catch (err) {
-      console.error("Failed to start history collection:", err);
+      console.error('Failed to start history collection:', err);
       set({ lastError: `Collection Error: ${err.message}` });
     }
-  },
+  }
+});
 
-  // Connection State
+const createConnectionSlice = (set, get) => ({
   socket: null,
-  wsStatus: 'disconnected', // 'connected', 'disconnected', 'error'
+  wsStatus: 'disconnected',
   setWsStatus: (status) => set({ wsStatus: status }),
-  
   statusInterval: null,
-
+  chromeStatus: 'disconnected',
+  setChromeStatus: (status) => set({ chromeStatus: status }),
+  streamStatus: 'idle',
+  setStreamStatus: (status) => set({ streamStatus: status }),
   fetchStatus: async () => {
     try {
       const res = await fetch('http://localhost:8000/api/v1/status');
       const data = await res.json();
-      // data: { collector: "connected" | "disconnected", stream: "idle" | "streaming" }
       if (data) {
-        set({ 
+        set({
           chromeStatus: data.collector,
           streamStatus: data.stream
         });
       }
     } catch (err) {
-      console.error("Failed to fetch status:", err);
+      console.error('Failed to fetch status:', err);
     }
   },
-
   connectSocket: () => {
     const socket = io('http://localhost:8000', {
       transports: ['websocket'],
-      autoConnect: true,
+      autoConnect: true
     });
 
-    // Initial status fetch
     const { fetchStatus } = get();
     fetchStatus();
-    
-    // Start polling status every 30s as fallback
+
     const interval = setInterval(fetchStatus, 30000);
     set({ statusInterval: interval });
 
     socket.on('connect', () => {
       console.log('Socket connected');
       set({ wsStatus: 'connected', socket });
-      
+
       const { selectedAsset } = get();
       get().syncSubscriptions();
       if (selectedAsset) socket.emit('select_asset', selectedAsset);
@@ -320,31 +337,30 @@ const useMarketStore = create((set, get) => ({
     });
 
     socket.on('market_data', (data) => {
-      const assetKey = data?.asset;
-      if (!assetKey) return;
+      const validation = validateMarketData(data);
+      if (!validation.valid) {
+        console.warn('Invalid market data ignored:', validation.error, data);
+        return;
+      }
 
-      const { subscribedAssetKeys } = get();
-      if (subscribedAssetKeys.length > 0 && !subscribedAssetKeys.includes(assetKey)) return;
-
-      const rawPrice = data?.price ?? data?.close ?? data?.open;
-      const price = Number(rawPrice);
-      if (!Number.isFinite(price)) return;
-
-      const timestamp = data?.timestamp ?? data?.time;
+      const { asset: assetKey, price, timestamp } = validation;
 
       set((state) => {
-        const prevBaseline = state.baselineByAssetKey?.[assetKey];
-        const baseline = Number.isFinite(prevBaseline) ? prevBaseline : price;
-        const changePct = baseline !== 0 ? ((price - baseline) / baseline) * 100 : 0;
+        const currentData = state.marketData[assetKey] || [];
+        const newData = [...currentData, { price, timestamp }].slice(-100);
+
+        const baseline = state.quotesByAssetKey[assetKey]?.baseline || price;
+        const changePct = ((price - baseline) / baseline) * 100;
 
         return {
+          lastTickTimestamp: Date.now(),
           marketData: {
             ...state.marketData,
-            [assetKey]: data,
+            [assetKey]: newData
           },
           baselineByAssetKey: {
             ...state.baselineByAssetKey,
-            [assetKey]: baseline,
+            [assetKey]: baseline
           },
           quotesByAssetKey: {
             ...state.quotesByAssetKey,
@@ -352,19 +368,16 @@ const useMarketStore = create((set, get) => ({
               price,
               baseline,
               changePct,
-              timestamp,
-            },
-          },
+              timestamp
+            }
+          }
         };
       });
     });
 
     socket.on('system_status', (data) => {
-      // data: { service: "collector", status: "connected" | "disconnected" }
       if (data && data.service === 'collector') {
         set({ chromeStatus: data.status });
-        // If collector is connected, we assume stream is also active (or at least ready)
-        // We can refine this later if we have separate stream status
         set({ streamStatus: data.status === 'connected' ? 'streaming' : 'idle' });
       }
     });
@@ -378,7 +391,6 @@ const useMarketStore = create((set, get) => ({
       set({ lastError: data.error });
     });
   },
-
   disconnectSocket: () => {
     const { socket, statusInterval } = get();
     if (socket) {
@@ -387,39 +399,20 @@ const useMarketStore = create((set, get) => ({
     if (statusInterval) {
       clearInterval(statusInterval);
     }
-    set({ socket: null, wsStatus: 'disconnected', statusInterval: null, subscribedAssetKeys: [] });
-  },
+    set({
+      socket: null,
+      wsStatus: 'disconnected',
+      statusInterval: null,
+      subscribedAssetKeys: []
+    });
+  }
+});
 
-  chromeStatus: 'disconnected',
-  setChromeStatus: (status) => set({ chromeStatus: status }),
-  
-  streamStatus: 'idle', // 'idle', 'streaming', 'error'
-  setStreamStatus: (status) => set({ streamStatus: status }),
-
-  // Chart State
-  activeIndicators: [
-    { id: 'rsi', name: 'RSI', value: '14' },
-    { id: 'ema', name: 'EMA', value: '200' },
-    { id: 'bb', name: 'Bollinger', value: '20, 2' }
-  ],
-  addIndicator: (indicator) => set((state) => ({ 
-    activeIndicators: [...state.activeIndicators, indicator] 
-  })),
-  removeIndicator: (id) => set((state) => ({ 
-    activeIndicators: state.activeIndicators.filter(i => i.id !== id) 
-  })),
-
-  // Automation State
-  automations: {
-    autoSelectFavorites: false,
-    pendingOrders: false
-  },
-  toggleAutomation: (key) => set((state) => ({
-    automations: {
-      ...state.automations,
-      [key]: !state.automations[key]
-    }
-  }))
+const useMarketStore = create((set, get) => ({
+  ...createUiSlice(set),
+  ...createTickerSlice(),
+  ...createMarketSlice(set, get),
+  ...createConnectionSlice(set, get)
 }));
 
 export default useMarketStore;

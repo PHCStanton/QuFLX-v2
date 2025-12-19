@@ -72,17 +72,20 @@ graph TD
 *   **Key Characteristic**: The only entry point for the Frontend. It acts as a bridge between the Redis bus and the User.
 
 ### D. Frontend Architecture ("Smart Store, Dumb Components")
-*   **State Management**: **Zustand** store (`useMarketStore`) holds the "Truth" (candles, indicators, connection status).
+*   **State Management**: **Zustand** store (`useMarketStore`) holds the "Truth" across connection, market, ticker, and UI concerns.
+*   **Connection Slice**: Tracks Socket.IO connection, Chrome or collector status, WebSocket errors, and stream health derived from `/api/v1/status` and recent ticks.
+*   **Market Slice**: Tracks selected asset and timeframe, history candles and status, payout assets, panel mode, and which asset rooms should be subscribed for data.
+*   **Ticker Slice**: Tracks recent ticks per asset, per-asset baselines and change statistics, and a last-tick timestamp heartbeat for stream liveness.
 *   **Visualization**: **Lightweight Charts** wrapped in small, composable components (`<ChartCanvas>`, `<CandlestickSeries>`, `<IndicatorPane>`).
-*   **Logic**: Components do **not** process data. They only render what is in the Store.
+*   **Logic**: Components render what is in the store while side-effects (fetching, subscriptions, auto-refresh) live in the slices.
 
 ## 5. Data Flow Pipeline ("The Golden Path")
 
-1.  **Ingest**: Collector intercepts WebSocket frame -> Normalizes to `Tick(timestamp, price, asset)`.
-2.  **Publish**: Collector publishes `Tick` to Redis Stream.
-3.  **Process**: Strategy Engine reads `Tick` -> Updates Indicators -> Publishes `IndicatorUpdate`.
-4.  **Serve**: Gateway receives `Tick` & `IndicatorUpdate` -> Emits via Socket.IO.
-5.  **Visualize**: Frontend Store receives update -> Mutates State -> Chart Component re-renders efficiently.
+1.  **Ingest**: Collector intercepts WebSocket frame and normalizes it to `Tick(timestamp, price, asset)`.
+2.  **Publish**: Collector publishes `Tick` (and `Candle` aggregates) to Redis channels/streams.
+3.  **Process**: Strategy Engine reads `Tick` events, updates indicators, and publishes `IndicatorUpdate` and `Signal` events.
+4.  **Serve**: Gateway subscribes to Redis, validates payloads, emits Socket.IO events, and maintains `/api/v1/status` (including last tick metadata).
+5.  **Visualize**: Frontend store consumes events; the connection slice tracks stream health, the market slice tracks selections and history, and the ticker slice tracks recent prices that drive charts and spark-lines.
 
 ## 6. Technology Stack
 

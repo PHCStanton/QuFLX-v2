@@ -18,7 +18,7 @@ import redis.asyncio as redis
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
-from backend.models.market_data import Candle
+from backend.models.market_data import Candle, Tick
 from backend.models.events import Signal, SystemStatus
 
 # Configure logging
@@ -27,6 +27,23 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("APIGateway")
+
+def validate_market_data(data: Dict[str, Any]) -> bool:
+    """
+    Validates market data payload against Tick or Candle models.
+    Returns True if valid, False otherwise.
+    """
+    try:
+        # Try validating as Tick
+        Tick(**data)
+        return True
+    except Exception:
+        try:
+            # Try validating as Candle
+            Candle(**data)
+            return True
+        except Exception:
+            return False
 
 # FastAPI Setup
 app = FastAPI(title="QuFLX v2 API Gateway")
@@ -86,14 +103,26 @@ async def redis_listener():
                 parsed_data = json.loads(data)
                 
                 if channel == "market_data":
+                    # Validate payload contract
+                    if not validate_market_data(parsed_data):
+                        logger.warning(f"Invalid market_data contract: {parsed_data}")
+                        # In strict mode we might drop this, but for now we proceed if 'asset' exists
+                        # to avoid total stream breakage during dev.
+                    
                     # Broadcast to specific room for the asset
                     if 'asset' in parsed_data:
                         asset = parsed_data['asset']
+                        
+                        # Update system state
+                        system_state["last_tick_ts"] = parsed_data.get('timestamp', 0)
+                        system_state["last_tick_asset"] = asset
+                        
                         # Emit 'market_data' event to room 'market_data:{asset}'
                         await sio.emit('market_data', parsed_data, room=f'market_data:{asset}')
                     else:
                         # Fallback for non-asset specific data (unlikely for market_data)
-                        await sio.emit('market_data', parsed_data)
+                        logger.warning(f"Dropping market_data without asset: {parsed_data}")
+                        # await sio.emit('market_data', parsed_data) 
                         
                 elif channel == "trading:signals":
                     await sio.emit('trading_signal', parsed_data)
