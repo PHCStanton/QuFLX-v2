@@ -6,6 +6,8 @@ const normalizeAsset = (asset) => {
   return String(asset).replace(/[_/\s]/g, '').toUpperCase();
 };
 
+const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
+
 const useMarketStore = create((set, get) => ({
   // UI State
   isSidebarOpen: false,
@@ -21,32 +23,17 @@ const useMarketStore = create((set, get) => ({
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
   setSelectedAsset: async (asset) => {
-    const { socket, selectedAssetKey: previousAssetKey } = get();
     const nextAssetKey = normalizeAsset(asset);
-    
-    // Clear previous asset data before switching
-    set({ 
+
+    set({
       selectedAsset: asset,
       selectedAssetKey: nextAssetKey,
-      marketData: {} // Clear all market data on asset switch
     });
-    
+
+    const { socket } = get();
     if (socket && socket.connected) {
-      // Leave previous asset room
-      if (previousAssetKey) {
-        socket.emit('leave_room', `market_data:${previousAssetKey}`);
-      }
-      
-      // Join new asset room
-      if (nextAssetKey) {
-        socket.emit('subscribe_asset', nextAssetKey);
-        socket.emit('join_room', `market_data:${nextAssetKey}`);
-      }
-      
-      // Emit select_asset event to backend via Socket.IO
       socket.emit('select_asset', asset);
-    } else {
-      console.warn("Socket not connected, cannot select asset via Socket.IO");
+      get().syncSubscriptions(nextAssetKey);
     }
 
     try {
@@ -80,7 +67,11 @@ const useMarketStore = create((set, get) => ({
     }
   },
 
-  marketData: {}, // Live market data keyed by asset
+  marketData: {},
+  tickerMaxAssets: 15,
+  subscribedAssetKeys: [],
+  quotesByAssetKey: {},
+  baselineByAssetKey: {},
 
   historyCandles: {},
   historyStatus: {},
@@ -164,6 +155,46 @@ const useMarketStore = create((set, get) => ({
   
   // 92% Payout Assets
   payoutAssets: [],
+  panelMode: 'list',
+  setPanelMode: (mode) => {
+    set({ panelMode: mode });
+    get().syncSubscriptions();
+  },
+
+  computeRequiredAssetKeys: (overrideSelectedAssetKey) => {
+    const { panelMode, payoutAssets, selectedAssetKey, tickerMaxAssets } = get();
+    const nextSelectedKey = overrideSelectedAssetKey ?? selectedAssetKey;
+
+    if (panelMode !== 'ticker') {
+      return uniq([nextSelectedKey]);
+    }
+
+    const tickerKeys = (payoutAssets || [])
+      .slice(0, tickerMaxAssets)
+      .map((a) => normalizeAsset(a));
+
+    return uniq([...tickerKeys, nextSelectedKey]);
+  },
+
+  syncSubscriptions: (overrideSelectedAssetKey) => {
+    const { socket, subscribedAssetKeys } = get();
+    if (!socket || !socket.connected) return;
+
+    const required = get().computeRequiredAssetKeys(overrideSelectedAssetKey);
+    const toJoin = required.filter((k) => !subscribedAssetKeys.includes(k));
+    const toLeave = subscribedAssetKeys.filter((k) => !required.includes(k));
+
+    toLeave.forEach((assetKey) => {
+      socket.emit('leave_room', `market_data:${assetKey}`);
+    });
+
+    toJoin.forEach((assetKey) => {
+      socket.emit('subscribe_asset', assetKey);
+      socket.emit('join_room', `market_data:${assetKey}`);
+    });
+
+    set({ subscribedAssetKeys: required });
+  },
   
   // Asset Refresh Logic
   autoRefresh: false,
@@ -199,6 +230,7 @@ const useMarketStore = create((set, get) => ({
       const data = await res.json();
       if (data.assets) {
         set({ payoutAssets: data.assets });
+        get().syncSubscriptions();
       }
     } catch (err) {
       console.error("Failed to refresh assets:", err);
@@ -265,15 +297,9 @@ const useMarketStore = create((set, get) => ({
       console.log('Socket connected');
       set({ wsStatus: 'connected', socket });
       
-      // Subscribe to currently selected asset
-      const { selectedAsset, selectedAssetKey } = get();
-      if (selectedAssetKey) {
-        socket.emit('subscribe_asset', selectedAssetKey);
-        socket.emit('join_room', `market_data:${selectedAssetKey}`);
-      }
-      if (selectedAsset) {
-        socket.emit('select_asset', selectedAsset);
-      }
+      const { selectedAsset } = get();
+      get().syncSubscriptions();
+      if (selectedAsset) socket.emit('select_asset', selectedAsset);
 
       try {
         get().refreshAssets();
@@ -294,16 +320,43 @@ const useMarketStore = create((set, get) => ({
     });
 
     socket.on('market_data', (data) => {
-      // Only update if data belongs to selected asset (asset isolation)
-      const { selectedAssetKey } = get();
-      if (data && data.asset && data.asset === selectedAssetKey) {
-        set((state) => ({
+      const assetKey = data?.asset;
+      if (!assetKey) return;
+
+      const { subscribedAssetKeys } = get();
+      if (subscribedAssetKeys.length > 0 && !subscribedAssetKeys.includes(assetKey)) return;
+
+      const rawPrice = data?.price ?? data?.close ?? data?.open;
+      const price = Number(rawPrice);
+      if (!Number.isFinite(price)) return;
+
+      const timestamp = data?.timestamp ?? data?.time;
+
+      set((state) => {
+        const prevBaseline = state.baselineByAssetKey?.[assetKey];
+        const baseline = Number.isFinite(prevBaseline) ? prevBaseline : price;
+        const changePct = baseline !== 0 ? ((price - baseline) / baseline) * 100 : 0;
+
+        return {
           marketData: {
             ...state.marketData,
-            [data.asset]: data
-          }
-        }));
-      }
+            [assetKey]: data,
+          },
+          baselineByAssetKey: {
+            ...state.baselineByAssetKey,
+            [assetKey]: baseline,
+          },
+          quotesByAssetKey: {
+            ...state.quotesByAssetKey,
+            [assetKey]: {
+              price,
+              baseline,
+              changePct,
+              timestamp,
+            },
+          },
+        };
+      });
     });
 
     socket.on('system_status', (data) => {
@@ -334,7 +387,7 @@ const useMarketStore = create((set, get) => ({
     if (statusInterval) {
       clearInterval(statusInterval);
     }
-    set({ socket: null, wsStatus: 'disconnected', statusInterval: null });
+    set({ socket: null, wsStatus: 'disconnected', statusInterval: null, subscribedAssetKeys: [] });
   },
 
   chromeStatus: 'disconnected',

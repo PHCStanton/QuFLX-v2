@@ -1,9 +1,23 @@
 import React, { useEffect, useRef } from 'react';
 import Card from './Card';
 import Combobox from './Combobox';
-import { Bot, X, Layers, Clock, FileText } from 'lucide-react';
+import { X, Layers, Clock, FileText } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import { createChart, CandlestickSeries } from 'lightweight-charts';
+
+const formatPriceValue = (price) => {
+  if (!Number.isFinite(price)) return '';
+  const abs = Math.abs(price);
+  let decimals = 2;
+  if (abs < 1) {
+    decimals = 6;
+  } else if (abs < 100) {
+    decimals = 5;
+  }
+  let value = price.toFixed(decimals);
+  value = value.replace(/\.0+$/, '').replace(/\.(?=,)/, '.');
+  return value.replace(/\.0+$/, '').replace(/\.$/, '');
+};
 
 const ChartWorkspace = () => {
   const { 
@@ -15,7 +29,8 @@ const ChartWorkspace = () => {
     historyCandles,
     historyStatus,
     activeIndicators, removeIndicator, addIndicator,
-    lastError, clearError
+    lastError, clearError,
+    streamStatus
   } = useMarketStore();
 
   const chartContainerRef = useRef(null);
@@ -50,13 +65,18 @@ const ChartWorkspace = () => {
         return;
       }
 
-      // v5 API: Use addSeries with CandlestickSeries type
+      const priceFormatter = (price) => formatPriceValue(price);
       const candleSeries = chart.addSeries(CandlestickSeries, {
         upColor: '#22c55e', // green-500
         downColor: '#ef4444', // red-500
         borderVisible: false,
         wickUpColor: '#22c55e',
         wickDownColor: '#ef4444',
+        priceFormat: {
+          type: 'custom',
+          minMove: 0.00000001,
+          formatter: priceFormatter,
+        },
       });
       
       candleSeriesRef.current = candleSeries;
@@ -157,9 +177,19 @@ const ChartWorkspace = () => {
         const timestamp = latestData.timestamp;
         const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
         
-        // Determine timeframe interval (e.g., 60s for 1m)
-        // TODO: Map selectedTimeframe to seconds. Defaulting to 60s.
-        const interval = 60; 
+        // Map selectedTimeframe to seconds
+        const timeframeMap = {
+          '1m': 60,
+          '5m': 300,
+          '15m': 900,
+          '1h': 3600,
+          '4h': 14400,
+        };
+
+        // Default to 60s if not found or if 'ticks' is selected (fallback for now)
+        // TODO: distinct visual handling for 'ticks' mode (LineSeries)
+        const interval = timeframeMap[selectedTimeframe] || 60; 
+        
         const candleTime = Math.floor(time / interval) * interval;
         
         let candle = currentCandleRef.current;
@@ -219,19 +249,12 @@ const ChartWorkspace = () => {
   const assetOptions = assetList.map(a => ({ label: a, value: a }));
   
   const timeframeOptions = [
-    { label: '1 Minute (Locked)', value: '1m' },
-  ];
-
-  /*
-  // Restore full options when mapping is complete
-  const timeframeOptions = [
     { label: 'Ticks', value: 'ticks' },
     { label: '1 Minute', value: '1m' },
     { label: '5 Minutes', value: '5m' },
     { label: '15 Minutes', value: '15m' },
     { label: '1 Hour', value: '1h' },
   ];
-  */
 
   const csvOptions = [
     { label: 'Upload New...', value: 'upload' },
@@ -327,7 +350,15 @@ const ChartWorkspace = () => {
       {/* Chart Display Area */}
       <div className="flex-1 relative w-full min-h-0">
         <div className="absolute top-2 right-2 z-10 flex gap-2">
-          <span className="bg-black/50 backdrop-blur px-2 py-0.5 rounded text-[10px] uppercase font-bold text-gray-400 border border-gray-800">Live Feed</span>
+          <span
+            className={`backdrop-blur px-2 py-0.5 rounded text-[10px] uppercase font-bold border transition-all duration-500 ${
+              streamStatus === 'streaming'
+                ? 'bg-accent-green/30 text-accent-green border-accent-green shadow-[0_0_20px_rgba(34,197,94,0.8)] animate-pulse'
+                : 'bg-black/60 text-gray-400 border-gray-800 opacity-80'
+            }`}
+          >
+            Live Feed
+          </span>
         </div>
         
         {isLoading && (

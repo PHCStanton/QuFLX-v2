@@ -1,4 +1,4 @@
-import { Monitor, Wifi, Bot } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 
 const TopBar = () => {
