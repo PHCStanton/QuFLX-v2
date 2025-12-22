@@ -120,7 +120,9 @@ const ChartWorkspace = () => {
           </div>
         )}
         
-        <ChartContainer onChartReady={handleChartReady} />
+        <div id="quflx-chart-screenshot-root" className="w-full h-full">
+          <ChartContainer onChartReady={handleChartReady} />
+        </div>
       </div>
     </Card>
   );

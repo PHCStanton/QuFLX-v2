@@ -2,19 +2,19 @@ import { useState, useEffect } from 'react';
 import useMarketStore from '../store/marketStore';
 
 export const useStreamHealth = () => {
-  const { streamStatus, lastTickTimestamp } = useMarketStore();
+  const { lastTickTimestamp } = useMarketStore();
   const [health, setHealth] = useState('idle');
 
   useEffect(() => {
     const checkHealth = () => {
-      if (streamStatus !== 'streaming') {
-        setHealth(streamStatus || 'idle');
+      if (!lastTickTimestamp || !Number.isFinite(lastTickTimestamp)) {
+        setHealth('idle');
         return;
       }
-      
+
       const diff = Date.now() - lastTickTimestamp;
       if (diff < 5000) {
-        setHealth('streaming'); // healthy/active
+        setHealth('streaming');
       } else if (diff < 30000) {
         setHealth('slow');
       } else {
@@ -23,9 +23,9 @@ export const useStreamHealth = () => {
     };
 
     const interval = setInterval(checkHealth, 1000);
-    checkHealth(); // Initial check
+    checkHealth();
     return () => clearInterval(interval);
-  }, [streamStatus, lastTickTimestamp]);
+  }, [lastTickTimestamp]);
 
   return health;
 };

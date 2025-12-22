@@ -1,4 +1,4 @@
-export async function askAI({ prompt, context = {} }) {
+export async function askAI({ prompt, context = {}, image = null }) {
   if (!prompt || typeof prompt !== 'string') {
     throw new Error('prompt must be a non-empty string');
   }
@@ -8,7 +8,7 @@ export async function askAI({ prompt, context = {} }) {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ prompt, context }),
+    body: JSON.stringify({ prompt, context, image }),
   });
 
   if (!res.ok) {

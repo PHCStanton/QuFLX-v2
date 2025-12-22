@@ -52,6 +52,11 @@ const createTickerSlice = () => ({
 });
 
 const createMarketSlice = (set, get) => ({
+  assetFilterState: {
+    maxAssets: 10,
+    targetAssets: ''
+  },
+  setAssetFilterState: (state) => set({ assetFilterState: state }),
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
   setSelectedAsset: async (asset) => {
@@ -62,16 +67,22 @@ const createMarketSlice = (set, get) => ({
       selectedAssetKey: nextAssetKey
     });
 
-    const { socket } = get();
-    if (socket && socket.connected) {
-      socket.emit('select_asset', asset);
-      get().syncSubscriptions(nextAssetKey);
-    }
+    // Note: Asset selection is now manual - user selects in both QuFLX and Pocket Option UI
+    // We only sync subscriptions for data streaming, not UI control
+    get().syncSubscriptions(nextAssetKey);
 
     try {
       await get().loadHistory(asset);
     } catch (err) {
       console.error('Failed to load history:', err);
+    }
+  },
+  starAsset: async (asset) => {
+    const { socket } = get();
+    if (socket && socket.connected) {
+      socket.emit('star_asset', asset);
+    } else {
+      console.error('Cannot star asset: socket not connected');
     }
   },
   selectedTimeframe: '1m',
@@ -232,8 +243,8 @@ const createMarketSlice = (set, get) => ({
   startAutoRefresh: () => {
     set({ autoRefresh: true });
     const { refreshAssets } = get();
-    refreshAssets();
-    const interval = setInterval(refreshAssets, 5 * 60 * 1000);
+    refreshAssets(); // Uses store filter state
+    const interval = setInterval(() => refreshAssets(), 5 * 60 * 1000);
     set({ refreshInterval: interval });
   },
   stopAutoRefresh: () => {
@@ -241,15 +252,35 @@ const createMarketSlice = (set, get) => ({
     if (refreshInterval) clearInterval(refreshInterval);
     set({ autoRefresh: false, refreshInterval: null });
   },
-  refreshAssets: async () => {
+  refreshAssets: async (passedOptions = null) => {
     try {
+      const filterOptions = passedOptions || {
+        max_assets: get().assetFilterState.maxAssets,
+        target_assets: get().assetFilterState.targetAssets.split(',').map(a => a.trim()).filter(Boolean)
+      };
+      
+      const payload = {
+        min_pct: 92,
+        sweep_all: true,
+        unstar_below: true,
+        ...filterOptions
+      };
+      
       const res = await fetch('http://localhost:8000/api/v1/refresh-assets', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
+      
       const data = await res.json();
       if (data.assets) {
         set({ payoutAssets: data.assets });
         get().syncSubscriptions();
+        
+        // Log metadata for debugging
+        if (data.metadata) {
+          console.log('Asset refresh metadata:', data.metadata);
+        }
       }
     } catch (err) {
       console.error('Failed to refresh assets:', err);
@@ -284,6 +315,16 @@ const createConnectionSlice = (set, get) => ({
   setChromeStatus: (status) => set({ chromeStatus: status }),
   streamStatus: 'idle',
   setStreamStatus: (status) => set({ streamStatus: status }),
+  backendStatus: {
+    redisConnected: false,
+    socketIoReady: false,
+    chromeDebuggingAvailable: false,
+    readyForAssets: false,
+    systemState: {},
+    timestamp: null,
+    error: null
+  },
+  setBackendStatus: (status) => set({ backendStatus: status }),
   fetchStatus: async () => {
     try {
       const res = await fetch('http://localhost:8000/api/v1/status');
@@ -298,9 +339,15 @@ const createConnectionSlice = (set, get) => ({
       console.error('Failed to fetch status:', err);
     }
   },
+  checkBackendStatus: () => {
+    const { socket } = get();
+    if (socket && socket.connected) {
+      socket.emit('check_status');
+    }
+  },
   connectSocket: () => {
     const socket = io('http://localhost:8000', {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       autoConnect: true
     });
 
@@ -317,13 +364,6 @@ const createConnectionSlice = (set, get) => ({
       const { selectedAsset } = get();
       get().syncSubscriptions();
       if (selectedAsset) socket.emit('select_asset', selectedAsset);
-
-      try {
-        get().refreshAssets();
-        get().loadHistory(selectedAsset);
-      } catch (err) {
-        console.error('Post-connect initialization failed:', err);
-      }
     });
 
     socket.on('disconnect', () => {
@@ -382,13 +422,30 @@ const createConnectionSlice = (set, get) => ({
       }
     });
 
-    socket.on('asset_selected', (data) => {
-      console.log('Asset selected successfully:', data.asset);
+    socket.on('asset_starred', (data) => {
+      console.log('Asset starred successfully:', data.asset, data.message);
     });
 
-    socket.on('asset_selection_error', (data) => {
-      console.error('Asset selection error:', data.error);
+    socket.on('asset_star_error', (data) => {
+      console.error('Asset star error:', data.error);
       set({ lastError: data.error });
+    });
+
+    socket.on('backend_status', (data) => {
+      console.log('Backend status received:', data);
+      const { setBackendStatus } = get();
+      setBackendStatus({
+        redisConnected: data.redis_connected || false,
+        socketIoReady: data.socket_io_ready || false,
+        chromeDebuggingAvailable: data.chrome_debugging_available || false,
+        readyForAssets: data.ready_for_assets || false,
+        systemState: data.system_state || {},
+        timestamp: data.timestamp || null,
+        error: data.error || null
+      });
+      set({
+        chromeStatus: data.chrome_debugging_available ? 'connected' : 'disconnected'
+      });
     });
   },
   disconnectSocket: () => {

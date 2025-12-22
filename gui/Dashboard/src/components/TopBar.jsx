@@ -1,21 +1,61 @@
 import { useState } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Camera } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import { useStreamHealth } from '../hooks/useStreamHealth';
 import { askAI } from '../api/aiClient';
+import { saveChartScreenshot } from '../api/screenshotClient';
+import ScreenshotModal from './ScreenshotModal';
+import StatusIndicator from './StatusIndicator';
 
 const TopBar = () => {
   const { 
     wsStatus, 
     chromeStatus, 
+    selectedAsset,
+    selectedTimeframe,
+    activeIndicators,
+    marketData,
+    selectedAssetKey
   } = useMarketStore();
 
   const health = useStreamHealth();
   const [isAsking, setIsAsking] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isScreenshotOpen, setIsScreenshotOpen] = useState(false);
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
+
+  const captureChart = () => {
+    const container = document.getElementById('quflx-chart-screenshot-root');
+    if (!container) return null;
+    const canvas = container.querySelector('canvas');
+    if (!canvas) return null;
+    return canvas.toDataURL('image/png');
+  };
+
+  const handleOpenScreenshot = async () => {
+    if (isCapturing) {
+      return;
+    }
+    try {
+      setIsCapturing(true);
+      const dataUrl = captureChart();
+      if (!dataUrl) {
+        window.alert('Chart not available for screenshot.');
+        return;
+      }
+      setScreenshotDataUrl(dataUrl);
+      setIsScreenshotOpen(true);
+    } catch {
+      window.alert('Failed to capture screenshot.');
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   return (
     <header className="h-16 bg-card-bg border-b border-gray-700 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
+        <StatusIndicator />
         <StatusBadge label="WS" status={wsStatus} />
         <StatusBadge label="Chrome" status={chromeStatus} />
         <StatusBadge label="Stream" status={health} />
@@ -23,13 +63,35 @@ const TopBar = () => {
       
       <div className="flex items-center gap-4">
         <button
+          onClick={handleOpenScreenshot}
+          disabled={isCapturing}
+          className="flex items-center justify-center w-9 h-9 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-500/40 disabled:opacity-60 disabled:cursor-not-allowed"
+          title="Capture chart screenshot"
+        >
+          <Camera size={18} />
+        </button>
+        <button
           onClick={async () => {
             if (isAsking) return;
+            
+            // 1. Capture screenshot automatically (Vision)
+            const image = captureChart();
+            
+            // 2. Prepare Context (Data)
+            const recentTicks = marketData[selectedAssetKey]?.slice(-20) || [];
+            const context = {
+                asset: selectedAsset,
+                timeframe: selectedTimeframe,
+                currentPrice: recentTicks[recentTicks.length - 1]?.price,
+                activeIndicators: activeIndicators.map(i => i.name),
+                recentTicks
+            };
+
             const prompt = window.prompt('Ask AI about the current market context:');
             if (!prompt) return;
             try {
               setIsAsking(true);
-              const response = await askAI({ prompt, context: {} });
+              const response = await askAI({ prompt, context, image });
               // For now, simply show the answer in an alert. A richer UI panel can be added later.
               if (response && response.answer) {
                 window.alert(response.answer);
@@ -51,6 +113,21 @@ const TopBar = () => {
           <span>{isAsking ? 'Asking…' : 'Ask AI'}</span>
         </button>
       </div>
+      <ScreenshotModal
+        isOpen={isScreenshotOpen}
+        imageDataUrl={screenshotDataUrl}
+        asset={selectedAsset}
+        timeframe={selectedTimeframe}
+        onClose={() => setIsScreenshotOpen(false)}
+        onSave={async ({ dataUrl, asset, timeframe }) => {
+          await saveChartScreenshot({
+            imageBase64: dataUrl,
+            annotated: true,
+            asset,
+            timeframe,
+          });
+        }}
+      />
     </header>
   );
 };
