@@ -100,6 +100,38 @@ Returns persisted CSV history.
   "timeframe": 1,
   "count": 100,
   "data": [
+    { "timestamp": 1700000000, "open": 1.0, "high": 1.1, "low": 0.9, "close": 1.0, "volume": 100 }
+  ]
+}
+```
+
+### `POST /api/v1/ai/ask`
+Submit a query to the AI service.
+
+**Request**
+```json
+{
+  "prompt": "What is the trend?",
+  "context": {
+    "asset": "AUDNZDOTC",
+    "price": 0.98765,
+    "indicators": { "rsi": 45 }
+  },
+  "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+}
+```
+
+**Response**
+```json
+{
+  "answer": "Based on the chart and RSI of 45, the trend appears neutral...",
+  "meta": {
+    "ok": true,
+    "model": "grok-4-latest",
+    "usage": { "total_tokens": 150 }
+  }
+}
+```
     {
       "timestamp": 1702934400,
       "asset": "AUDNZDOTC",

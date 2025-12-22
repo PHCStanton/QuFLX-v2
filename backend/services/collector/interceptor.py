@@ -114,26 +114,34 @@ class WebSocketInterceptor:
             
         return ticks
 
+    def _looks_like_base64(self, s: str) -> bool:
+        """
+        Heuristic check to see if a string looks like base64.
+        """
+        if not s:
+            return False
+        # Check for valid base64 characters
+        if not re.fullmatch(r'[A-Za-z0-9+/=]+', s):
+            return False
+        # Length must be a multiple of 4
+        return len(s) % 4 == 0
+
     def _parse_payload(self, payload_data: str) -> Optional[Any]:
         """
         Decodes and parses the WebSocket payload.
         """
         try:
-            # 1. Try to decode base64 (if it is base64) - usually it's just text in the log
-            # But sometimes Chrome sends it as base64 if it's binary.
-            # However, the reference code suggests it might be text or base64.
-            # Let's try to treat it as text first, if that fails, try base64.
+            # 1. Try to decode base64 (if it looks like base64)
+            decoded_text = payload_data
             
-            # Actually, in the reference code:
-            # decoded_payload = base64.b64decode(encoded_payload).decode('utf-8')
-            # So it assumes base64.
+            if self._looks_like_base64(payload_data):
+                try:
+                    decoded_text = base64.b64decode(payload_data).decode('utf-8')
+                except Exception as e:
+                    # Downgrade to debug to reduce log noise for non-base64 data that passed the heuristic
+                    logger.debug(f"Failed to decode potential base64 payload, using raw data: {e}")
+                    decoded_text = payload_data
             
-            decoded_text = ""
-            try:
-                decoded_text = base64.b64decode(payload_data).decode('utf-8')
-            except:
-                decoded_text = payload_data # Fallback if not base64
-
             # 2. Handle Socket.IO format (remove numeric prefix)
             # e.g. "42[...]" -> "[...]"
             if decoded_text and decoded_text[0].isdigit():
@@ -148,7 +156,7 @@ class WebSocketInterceptor:
             return None
 
         except Exception as e:
-            # logger.debug(f"Payload parse error: {e}")
+            logger.warning(f"Payload parse error: {e}")
             return None
 
     def _extract_ticks(self, data: Any) -> List[Tick]:

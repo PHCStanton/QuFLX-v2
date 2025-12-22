@@ -78,6 +78,14 @@ class FavoriteStarSelect(Capability):
         dry_run: bool = bool(inputs.get("dry_run", False))
         close_after: bool = bool(inputs.get("close_after", True))
         filter_mode: Optional[str] = inputs.get("filter_mode", None)
+        max_assets: Optional[int] = inputs.get("max_assets", None)  # NEW: Limit number of assets to star
+        target_assets: Optional[List[str]] = inputs.get("target_assets", None)  # NEW: Specific assets to target
+
+        if isinstance(max_assets, int) and max_assets <= 0:
+            max_assets = None
+
+        if isinstance(target_assets, list) and not target_assets:
+            target_assets = None
 
         data: Dict[str, Any] = {
             "min_pct": min_pct,
@@ -86,6 +94,8 @@ class FavoriteStarSelect(Capability):
             "limit_to_visible": limit_to_visible,
             "dry_run": dry_run,
             "filter_mode": filter_mode,
+            "max_assets": max_assets,  # NEW
+            "target_assets": target_assets,  # NEW
             "attempts": {},
             "processed": {
                 "selected_now": [],
@@ -94,6 +104,7 @@ class FavoriteStarSelect(Capability):
                 "already_unfavorited": [],
                 "skipped_non_eligible": [],
                 "skipped_filtered": [],
+                "skipped_max_limit": [],  # NEW: Track assets skipped due to max limit
                 "errors": [],
                 "counts": {
                     "rows_seen": 0,
@@ -105,6 +116,7 @@ class FavoriteStarSelect(Capability):
                     "already_unfavorited": 0,
                     "skipped": 0,
                     "filtered_out": 0,
+                    "skipped_max_limit": 0,  # NEW
                 },
             },
         }
@@ -133,9 +145,28 @@ class FavoriteStarSelect(Capability):
 
         # Process items
         if sweep_all:
-            self._process_entire_list(ctx, min_pct, unstar_below, dry_run, data, filter_mode=filter_mode)
+            self._process_entire_list(
+                ctx,
+                min_pct,
+                unstar_below,
+                dry_run,
+                data,
+                filter_mode=filter_mode,
+                max_assets=max_assets,
+                target_assets=target_assets,
+            )
         else:
-            self._process_visible_only(ctx, min_pct, unstar_below, limit_to_visible, dry_run, data, filter_mode=filter_mode)
+            self._process_visible_only(
+                ctx,
+                min_pct,
+                unstar_below,
+                limit_to_visible,
+                dry_run,
+                data,
+                filter_mode=filter_mode,
+                max_assets=max_assets,
+                target_assets=target_assets,
+            )
 
         # Close dropdown
         close_meta: Dict[str, Any] = {}
@@ -170,6 +201,8 @@ class FavoriteStarSelect(Capability):
         dry_run: bool,
         data: Dict[str, Any],
         filter_mode: Optional[str] = None,
+        max_assets: Optional[int] = None,
+        target_assets: Optional[List[str]] = None,
     ):
         driver = ctx.driver
         star_sel = "i.alist__icon.fa.fa-star-o.add, i.alist__icon.fa.fa-star.del"
@@ -201,7 +234,18 @@ class FavoriteStarSelect(Capability):
         for star_el in stars_filtered:
             data["processed"]["counts"]["rows_seen"] += 1
             data["processed"]["counts"]["visible_checked"] += 1
-            self._handle_star_on_row(ctx, star_el, min_pct, unstar_below, dry_run, data, seen_assets, filter_mode=filter_mode)
+            self._handle_star_on_row(
+                ctx,
+                star_el,
+                min_pct,
+                unstar_below,
+                dry_run,
+                data,
+                seen_assets,
+                filter_mode=filter_mode,
+                max_assets=max_assets,
+                target_assets=target_assets,
+            )
 
     def _process_entire_list(
         self,
@@ -211,6 +255,8 @@ class FavoriteStarSelect(Capability):
         dry_run: bool,
         data: Dict[str, Any],
         filter_mode: Optional[str] = None,
+        max_assets: Optional[int] = None,
+        target_assets: Optional[List[str]] = None,
     ):
         driver = ctx.driver
         star_sel = "i.alist__icon.fa.fa-star-o.add, i.alist__icon.fa.fa-star.del"
@@ -244,7 +290,18 @@ class FavoriteStarSelect(Capability):
                 except Exception:
                     continue
                 data["processed"]["counts"]["rows_seen"] += 1
-                self._handle_star_on_row(ctx, star_el, min_pct, unstar_below, dry_run, data, seen_assets, filter_mode=filter_mode)
+                self._handle_star_on_row(
+                    ctx,
+                    star_el,
+                    min_pct,
+                    unstar_below,
+                    dry_run,
+                    data,
+                    seen_assets,
+                    filter_mode=filter_mode,
+                    max_assets=max_assets,
+                    target_assets=target_assets,
+                )
 
             progressed = self._scroll_step(ctx, container)
             if not progressed:
@@ -284,6 +341,8 @@ class FavoriteStarSelect(Capability):
         data: Dict[str, Any],
         seen_assets: Set[str],
         filter_mode: Optional[str] = None,
+        max_assets: Optional[int] = None,
+        target_assets: Optional[List[str]] = None,
     ):
         try:
             row_el = self._row_for_star(ctx, star_el)
@@ -291,6 +350,20 @@ class FavoriteStarSelect(Capability):
             if asset_label in seen_assets:
                 return
             seen_assets.add(asset_label)
+
+            if max_assets is not None and data["processed"]["counts"]["star_clicked"] >= max_assets:
+                data["processed"]["counts"]["skipped_max_limit"] += 1
+                data["processed"]["skipped_max_limit"].append(asset_label)
+                return
+
+            if target_assets:
+                # Normalize for comparison (remove spaces, slashes, case insensitive)
+                normalized_target = [a.replace("/", "").replace(" ", "").upper() for a in target_assets]
+                normalized_asset = asset_label.replace("/", "").replace(" ", "").upper()
+                if normalized_asset not in normalized_target:
+                    data["processed"]["counts"]["skipped"] += 1
+                    data["processed"]["skipped_filtered"].append(asset_label)
+                    return
 
             if filter_mode:
                 is_otc = asset_label.endswith("_otc")

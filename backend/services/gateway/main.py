@@ -6,6 +6,8 @@ import logging
 import asyncio
 import json
 import subprocess
+import base64
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +16,13 @@ from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
 import redis.asyncio as redis
+from dotenv import load_dotenv
+
+# Load environment variables
+# Try to find .env in project root (3 levels up)
+project_root = Path(__file__).resolve().parents[3]
+env_path = project_root / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
@@ -28,6 +37,29 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("APIGateway")
+
+def _parse_script_json(stdout: str) -> Dict[str, Any]:
+    """Extract JSON payload from capability stdout.
+
+    Some capabilities print a human-friendly line before the JSON
+    (e.g. Chrome attach status). This helper finds the actual JSON
+    segment so downstream code can rely on structured data.
+    """
+    if not stdout:
+        raise ValueError("Empty script output")
+
+    lines = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
+
+    for line in reversed(lines):
+        if line.startswith("{") or line.startswith("["):
+            return json.loads(line)
+
+    first_brace = stdout.find("{")
+    if first_brace != -1:
+        return json.loads(stdout[first_brace:])
+
+    raise ValueError(f"No JSON object found in script output: {stdout!r}")
+
 
 def validate_market_data(data: Dict[str, Any]) -> bool:
     """
@@ -46,22 +78,6 @@ def validate_market_data(data: Dict[str, Any]) -> bool:
         except Exception:
             return False
 
-# FastAPI Setup
-app = FastAPI(title="QuFLX v2 API Gateway")
-
-# CORS Setup
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify the frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Socket.IO Setup
-sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-socket_app = socketio.ASGIApp(sio, app)
-
 # Redis Configuration
 REDIS_URL = "redis://localhost:6379/0"
 
@@ -75,20 +91,39 @@ system_state = {
     "stream": "idle"
 }
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting API Gateway...")
+# Lifespan context manager (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern lifespan handler for startup/shutdown."""
     global redis_client
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
     
-    # Start Redis Listener Task
+    # === STARTUP ===
+    logger.info("Starting API Gateway...")
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
     asyncio.create_task(redis_listener())
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    
+    yield  # Application runs here
+    
+    # === SHUTDOWN ===
     logger.info("Shutting down API Gateway...")
     if redis_client:
         await redis_client.close()
+
+# FastAPI Setup (with lifespan)
+app = FastAPI(title="QuFLX v2 API Gateway", lifespan=lifespan)
+
+# CORS Setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify the frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Socket.IO Setup
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+socket_app = socketio.ASGIApp(sio, app)
 
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""
@@ -167,12 +202,18 @@ async def subscribe_asset(sid, asset):
     await sio.enter_room(sid, f"market_data:{asset}")
 
 @sio.event
-async def select_asset(sid, asset):
+async def unsubscribe_asset(sid, asset):
+    """Allow client to unsubscribe from specific asset updates"""
+    logger.info(f"Client {sid} unsubscribed from {asset}")
+    await sio.leave_room(sid, f"market_data:{asset}")
+
+@sio.event
+async def star_asset(sid, asset):
     """
-    Handle asset selection request via Socket.IO.
-    Executes asset_control.py to switch asset in browser.
+    Handle asset starring request via Socket.IO.
+    Executes asset_control.py to star asset in browser (add to favorites).
     """
-    logger.info(f"Client {sid} requested to select asset: {asset}")
+    logger.info(f"Client {sid} requested to star asset: {asset}")
     
     try:
         # Run asset_control.py in a separate thread to avoid blocking event loop
@@ -180,9 +221,10 @@ async def select_asset(sid, asset):
         
         def run_script():
             return subprocess.run(
-                [sys.executable, script_path, "--action", "select_asset", "--asset", asset],
+                [sys.executable, script_path, "--action", "star_asset", "--asset", asset],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=10  # 10 second timeout to prevent hanging
             )
             
         # Use asyncio.to_thread for non-blocking execution (Python 3.9+)
@@ -190,27 +232,75 @@ async def select_asset(sid, asset):
         result = await asyncio.to_thread(run_script)
         
         if result.returncode != 0:
-            logger.error(f"Error selecting asset: {result.stderr}")
-            await sio.emit('asset_selection_error', {'error': f"Script failed: {result.stderr}"}, room=sid)
+            logger.error(f"Error starring asset: {result.stderr}")
+            await sio.emit('asset_star_error', {'error': f"Script failed: {result.stderr}"}, room=sid)
             return
 
         try:
             output_json = json.loads(result.stdout)
             if not output_json.get("ok"):
                 error_msg = output_json.get("error", "Unknown error")
-                logger.error(f"Asset selection failed: {error_msg}")
-                await sio.emit('asset_selection_error', {'error': error_msg}, room=sid)
+                logger.error(f"Asset starring failed: {error_msg}")
+                await sio.emit('asset_star_error', {'error': error_msg}, room=sid)
             else:
-                logger.info(f"Successfully selected asset: {asset}")
-                await sio.emit('asset_selected', {'asset': asset}, room=sid)
+                logger.info(f"Successfully starred asset: {asset}")
+                await sio.emit('asset_starred', {'asset': asset, 'message': output_json.get("data", {}).get("message", "Asset starred")}, room=sid)
                 
         except json.JSONDecodeError:
             logger.error(f"Invalid JSON output from script: {result.stdout}")
-            await sio.emit('asset_selection_error', {'error': "Invalid script output"}, room=sid)
+            await sio.emit('asset_star_error', {'error': "Invalid script output"}, room=sid)
 
     except Exception as e:
-        logger.error(f"Exception in select_asset: {e}")
-        await sio.emit('asset_selection_error', {'error': str(e)}, room=sid)
+        logger.error(f"Exception in star_asset: {e}")
+        await sio.emit('asset_star_error', {'error': str(e)}, room=sid)
+
+@sio.event
+async def check_status(sid):
+    """Provide comprehensive backend status to frontend"""
+    try:
+        # Check Redis connection
+        redis_status = False
+        try:
+            if redis_client:
+                await redis_client.ping()
+                redis_status = True
+        except Exception as e:
+            logger.warning(f"Redis health check failed: {e}")
+        
+        # Check Chrome debugging port availability
+        chrome_status = False
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)  # 1 second timeout
+            result = sock.connect_ex(('localhost', 9222))
+            sock.close()
+            chrome_status = (result == 0)
+        except Exception as e:
+            logger.warning(f"Chrome debugging port check failed: {e}")
+        
+        status = {
+            'redis_connected': redis_status,
+            'socket_io_ready': True,
+            'chrome_debugging_available': chrome_status,
+            'ready_for_assets': redis_status and chrome_status,
+            'system_state': system_state,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+        
+        logger.info(f"Status check requested by {sid}: {status}")
+        await sio.emit('backend_status', status, room=sid)
+        
+    except Exception as e:
+        logger.error(f"Error in check_status: {e}")
+        await sio.emit('backend_status', {
+            'error': str(e),
+            'redis_connected': False,
+            'socket_io_ready': False,
+            'chrome_debugging_available': False,
+            'ready_for_assets': False,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }, room=sid)
 
 # REST Endpoints
 @app.get("/health")
@@ -223,6 +313,68 @@ async def get_status():
     Returns the current status of services.
     """
     return system_state
+
+
+@app.post("/api/v1/screenshots/chart")
+async def save_chart_screenshot(payload: Dict[str, Any] = Body(...)):
+    """Persist a chart screenshot sent from the Dashboard.
+
+    Expects a PNG image encoded as base64. Optionally accepts metadata
+    about the current asset and timeframe and whether the image is annotated.
+    """
+    raw_image = payload.get("image_base64")
+    if not isinstance(raw_image, str) or not raw_image.strip():
+        raise HTTPException(status_code=400, detail="image_base64 (non-empty string) is required")
+
+    annotated = bool(payload.get("annotated", False))
+    asset = payload.get("asset") or "chart"
+    timeframe = payload.get("timeframe") or "tf"
+
+    if raw_image.startswith("data:"):
+        _, _, data_part = raw_image.partition(",")
+        if not data_part:
+            raise HTTPException(status_code=400, detail="Invalid data URL for image_base64")
+        image_payload = data_part
+    else:
+        image_payload = raw_image
+
+    try:
+        image_bytes = base64.b64decode(image_payload)
+    except Exception as exc:
+        logger.error("Failed to decode screenshot payload: %s", exc)
+        raise HTTPException(status_code=400, detail="image_base64 is not valid base64 data")
+
+    project_root = Path(__file__).resolve().parents[3]
+    screenshots_dir = project_root / "data" / "screenshots"
+    try:
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.error("Failed to create screenshots directory: %s", exc)
+        raise HTTPException(status_code=500, detail="Unable to prepare screenshots directory")
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_asset = re.sub(r"[^\w\-]+", "_", str(asset)) or "chart"
+    safe_timeframe = re.sub(r"[^\w\-]+", "_", str(timeframe)) or "tf"
+    suffix = "_annotated" if annotated else ""
+    filename = f"{safe_asset}_{safe_timeframe}_{ts}{suffix}.png"
+    file_path = screenshots_dir / filename
+
+    try:
+        with file_path.open("wb") as f:
+            f.write(image_bytes)
+    except Exception as exc:
+        logger.error("Failed to write screenshot file: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to save screenshot")
+
+    relative_path = str(file_path.relative_to(project_root))
+    logger.info("Saved chart screenshot: %s", relative_path)
+
+    return {
+        "status": "ok",
+        "path": relative_path,
+        "filename": filename,
+        "annotated": annotated,
+    }
 
 @app.get("/api/v1/history/{asset}")
 async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
@@ -263,40 +415,71 @@ async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
     return {"asset": asset, "timeframe": int(timeframe), "count": len(rows), "data": list(rows)}
 
 @app.post("/api/v1/refresh-assets")
-async def refresh_assets():
+async def refresh_assets(payload: Dict[str, Any] = Body(...)):
     """
-    Executes V2 capability: RefreshAssets
+    Executes V2 capability: RefreshAssets with configurable parameters
     """
     try:
+        # Extract parameters with defaults
+        min_pct = int(payload.get("min_pct", 92))
+        max_assets = payload.get("max_assets")  # NEW: Optional limit on number of assets to star
+        target_assets = payload.get("target_assets")  # NEW: Optional specific assets to target
+        sweep_all = bool(payload.get("sweep_all", True))
+        unstar_below = bool(payload.get("unstar_below", True))
+        
+        # Build inputs for capability
+        inputs = {
+            "min_pct": min_pct,
+            "sweep_all": sweep_all,
+            "unstar_below": unstar_below,
+            "max_assets": max_assets,  # NEW
+            "target_assets": target_assets,  # NEW
+        }
+        
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py"))
         
-        # Run the runner script
+        # Run the runner script with UTF-8 encoding
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+        
         result = subprocess.run(
-            [sys.executable, runner_path, "refresh_assets", "--inputs", json.dumps({"min_pct": 92, "sweep_all": True, "unstar_below": True})],
+            [sys.executable, runner_path, "refresh_assets", "--inputs", json.dumps(inputs)],
             capture_output=True,
-            text=True
+            text=True,
+            env=env
         )
         
         if result.returncode != 0:
             logger.error(f"Error refreshing assets: {result.stderr}")
             raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
             
-        # Parse output
         try:
-            output_json = json.loads(result.stdout)
+            output_json = _parse_script_json(result.stdout)
             if not output_json.get("ok"):
                 raise HTTPException(status_code=500, detail=f"Script returned error: {output_json.get('error')}")
-                
+
             data = output_json.get("data", {})
             processed = data.get("processed", {})
             selected_now = processed.get("selected_now", []) if isinstance(processed, dict) else []
             already_favorited = processed.get("already_favorited", []) if isinstance(processed, dict) else []
             eligible = [a for a in (selected_now + already_favorited) if isinstance(a, str)]
             assets = sorted({a for a in eligible})
-            return {"assets": assets}
-            
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON output: {result.stdout}")
+
+            return {
+                "assets": assets,
+                "metadata": {
+                    "total_processed": processed.get("counts", {}).get("rows_seen", 0),
+                    "starred_now": len(selected_now),
+                    "already_favorited": len(already_favorited),
+                    "skipped_max_limit": processed.get("counts", {}).get("skipped_max_limit", 0),
+                    "max_assets_limit": max_assets,
+                    "target_assets_specified": bool(target_assets),
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"Invalid JSON output from refresh_assets: {e} | raw={result.stdout}")
             raise HTTPException(status_code=500, detail="Invalid script output")
             
     except Exception as e:
@@ -343,9 +526,9 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
 
         try:
-            out = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            logger.error(f"Invalid bootstrap history output: {result.stdout}")
+            out = _parse_script_json(result.stdout)
+        except Exception as e:
+            logger.error(f"Invalid bootstrap history output: {e} | raw={result.stdout}")
             raise HTTPException(status_code=502, detail="Invalid script output")
 
         if not out.get("ok"):
@@ -375,8 +558,12 @@ async def ai_ask(payload: Dict[str, Any] = Body(...)):
     if context is not None and not isinstance(context, dict):
         raise HTTPException(status_code=400, detail="context must be an object if provided")
 
+    image = payload.get("image")
+    if image is not None and not isinstance(image, str):
+        raise HTTPException(status_code=400, detail="image must be a string (base64) if provided")
+
     try:
-        result = await ai_service.ask(prompt=prompt, context=context or {})
+        result = await ai_service.ask(prompt=prompt, context=context or {}, image=image)
         answer = result.get("answer", "")
         meta = result.get("meta", {})
         return {"answer": answer, "meta": meta}
@@ -408,7 +595,7 @@ async def select_asset(payload: Dict[str, str] = Body(...)):
             logger.error(f"Error selecting asset: {result.stderr}")
             raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
             
-        output_json = json.loads(result.stdout)
+        output_json = _parse_script_json(result.stdout)
         if not output_json.get("ok"):
              raise HTTPException(status_code=500, detail=f"Selection failed: {output_json.get('error')}")
              
@@ -487,7 +674,11 @@ async def get_assets(payload: Dict[str, Any] = Body(...)):
         elif filter_mode == "fx":
             args.append("--star-fx")
 
-        result = subprocess.run(args, capture_output=True, text=True)
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        result = subprocess.run(args, capture_output=True, text=True, env=env)
         if result.returncode != 0:
             raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
 

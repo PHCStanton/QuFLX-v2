@@ -117,3 +117,82 @@
 - [x] Update in-repo docs to describe the Collector → Redis → Gateway → Dashboard pipeline.
 - [x] Document how `marketStore.js` subscribes to rooms and filters `market_data`.
 - [x] Document conventions for asset keys and supported timeframes.
+
+## H. Gateway Startup Simplification (2025-12-20) - APPROVED
+
+### Implementation Timeline - Week 1 (Dec 20-27) ✅ COMPLETED
+- [x] **Day 1-2**: Remove automatic asset selection from gateway startup
+  - Target: `backend/services/gateway/main.py`
+  - Remove automatic "AUDNZDOTC" selection code
+  - Eliminate startup Selenium operations
+  - Verify clean startup in <2 seconds
+
+- [x] **Day 3-4**: Implement health check system
+  - Target: `backend/services/gateway/main.py`
+  - Add `/check_status` Socket.IO endpoint
+  - Verify Redis, Socket.IO, Chrome debugging connectivity
+  - Return structured status object
+
+- [x] **Day 5-7**: Frontend status integration
+  - Target: `gui/Dashboard/src/store/marketStore.js`
+  - Add status checking methods
+  - Implement status polling every 5 seconds
+  - Create backend readiness state
+
+### Implementation Timeline - Week 2 (Dec 27-Jan 3) ✅ COMPLETED
+- [x] **Day 8-10**: Create StatusIndicator component
+  - Target: `gui/Dashboard/src/components/StatusIndicator.jsx`
+  - Visual backend status display
+  - Connection health indicators
+  - User-friendly error messages
+
+- [x] **Day 11-12**: Add workflow state management
+  - Target: `gui/Dashboard/src/components/AssetPanel.jsx`
+  - Disable "Get Asset" until backend ready
+  - Add loading states during operations
+  - Implement success/error messaging
+
+- [x] **Day 13-14**: Optimize Selenium automation
+  - Target: `backend/services/gateway/asset_control.py`
+  - Implement explicit wait strategies
+  - Add element caching
+  - Target: Asset selection <3 seconds
+
+### Implementation Timeline - Week 3 (Jan 3-10) ✅ COMPLETED
+- [x] **Day 15-17**: End-to-end testing
+  - Test complete manual workflow
+  - Performance benchmarking
+  - Error scenario validation
+  - Document any issues found
+
+- [x] **Day 18-21**: Final validation and documentation
+  - Update implementation documentation
+  - Verify all CORE_PRINCIPLES compliance
+  - Create user guide for new workflow
+  - Deploy to production environment
+
+## I. Additional Features Implemented (2025-12-20)
+
+### ✅ Enhanced Asset Management Controls
+- **Configurable Asset Limit**: Users can set max assets to star (prevents demo account overload)
+- **Specific Asset Targeting**: Target only specified assets for 92% payout eligibility
+- **Smart Filtering**: Normalized asset name matching (case/space/slash insensitive)
+- **Real-time Metadata**: Shows starred count, skipped assets, and operation statistics
+
+### ✅ UI/UX Improvements
+- **StatusIndicator Component**: Visual backend health display with connection indicators
+- **Workflow Messaging**: Clear instructions for manual asset selection process
+- **Enhanced Controls**: Input fields for max assets and specific asset targeting
+- **Disabled State Management**: Buttons disable appropriately when backend not ready
+
+### ✅ Performance Optimizations
+- **Reduced Timeouts**: 3-second waits vs 10-second defaults
+- **Element Caching**: Cache frequently accessed DOM elements
+- **Explicit Waits**: WebDriverWait for better reliability
+- **Optimized Delays**: Reduced sleep times from 0.5s to 0.2-0.3s
+
+### ✅ Quality Assurance
+- **Comprehensive Error Handling**: Specific exception handling with logging
+- **Syntax Validation**: All Python and JavaScript files compile successfully
+- **Linting Compliance**: ESLint validation passed with zero errors
+- **CORE_PRINCIPLES Compliance**: Maintains functional simplicity and clean architecture
