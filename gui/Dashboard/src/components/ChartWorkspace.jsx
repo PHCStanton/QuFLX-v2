@@ -5,6 +5,9 @@ import ChartContainer from './ChartContainer';
 import ChartHeader from './ChartHeader';
 import useTickAggregation from '../hooks/useTickAggregation';
 import { useStreamHealth } from '../hooks/useStreamHealth';
+import { askAI } from '../api/aiClient';
+import { saveChartScreenshot } from '../api/screenshotClient';
+import ScreenshotModal from './ScreenshotModal';
 
 const ChartWorkspace = () => {
   const { 
@@ -21,6 +24,10 @@ const ChartWorkspace = () => {
 
   const health = useStreamHealth();
   const [candleSeries, setCandleSeries] = useState(null);
+  const [isAsking, setIsAsking] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isScreenshotOpen, setIsScreenshotOpen] = useState(false);
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
 
   const handleChartReady = useCallback(({ series }) => {
     setCandleSeries(series);
@@ -59,6 +66,12 @@ const ChartWorkspace = () => {
     { label: 'Bollinger Bands', value: 'bb' },
   ];
 
+  const addObjectOptions = [
+    { label: 'Horizontal Line', value: 'horizontal_line' },
+    { label: 'Zone', value: 'zone' },
+    { label: 'Label', value: 'label' }
+  ];
+
   const handleTimeframeChange = (val) => {
     // Ideally pass this loading state management to the hook or store, 
     // but for now we keep the UI optimistic update logic here or in the handler
@@ -67,8 +80,67 @@ const ChartWorkspace = () => {
     });
   };
 
+  const captureChart = () => {
+    const container = document.getElementById('quflx-chart-screenshot-root');
+    if (!container) return null;
+    const canvas = container.querySelector('canvas');
+    if (!canvas) return null;
+    return canvas.toDataURL('image/png');
+  };
+
+  const handleOpenScreenshot = async () => {
+    if (isCapturing) {
+      return;
+    }
+    try {
+      setIsCapturing(true);
+      const dataUrl = captureChart();
+      if (!dataUrl) {
+        window.alert('Chart not available for screenshot.');
+        return;
+      }
+      setScreenshotDataUrl(dataUrl);
+      setIsScreenshotOpen(true);
+    } catch {
+      window.alert('Failed to capture screenshot.');
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const handleAskAi = async () => {
+    if (isAsking) return;
+
+    const image = captureChart();
+    const recentTicks = marketData[selectedAssetKey]?.slice(-20) || [];
+    const context = {
+      asset: selectedAsset,
+      timeframe: selectedTimeframe,
+      currentPrice: recentTicks[recentTicks.length - 1]?.price,
+      activeIndicators: activeIndicators.map((i) => i.name),
+      recentTicks
+    };
+
+    const prompt = window.prompt('Ask AI about the current market context:');
+    if (!prompt) return;
+    try {
+      setIsAsking(true);
+      const response = await askAI({ prompt, context, image });
+      if (response && response.answer) {
+        window.alert(response.answer);
+      } else {
+        window.alert('AI did not return an answer.');
+      }
+    } catch (err) {
+      console.error('Ask AI failed:', err);
+      window.alert(`Ask AI failed: ${err.message}`);
+    } finally {
+      setIsAsking(false);
+    }
+  };
+
   return (
-    <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-lg bg-gray-900 border border-gray-800 shadow-xl relative">
+    <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 shadow-xl relative">
       
       {/* Error Message Display */}
       {lastError && (
@@ -78,7 +150,6 @@ const ChartWorkspace = () => {
         </div>
       )}
       
-      {/* Chart Header Controls */}
       <ChartHeader 
         selectedAsset={selectedAsset}
         setSelectedAsset={setSelectedAsset}
@@ -91,6 +162,28 @@ const ChartWorkspace = () => {
         addIndicator={addIndicator}
         activeIndicators={activeIndicators}
         removeIndicator={removeIndicator}
+        addObjectOptions={addObjectOptions}
+        onAddObjectSelect={() => {}}
+        onOpenScreenshot={handleOpenScreenshot}
+        onAskAi={handleAskAi}
+        isAsking={isAsking}
+        isCapturing={isCapturing}
+      />
+
+      <ScreenshotModal
+        isOpen={isScreenshotOpen}
+        imageDataUrl={screenshotDataUrl}
+        asset={selectedAsset}
+        timeframe={selectedTimeframe}
+        onClose={() => setIsScreenshotOpen(false)}
+        onSave={async ({ dataUrl, asset, timeframe }) => {
+          await saveChartScreenshot({
+            imageBase64: dataUrl,
+            annotated: true,
+            asset,
+            timeframe
+          });
+        }}
       />
 
       {/* Chart Display Area */}

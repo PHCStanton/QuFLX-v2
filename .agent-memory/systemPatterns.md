@@ -5,28 +5,37 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
 - **Central Nervous System**: Redis (Pub/Sub for real-time, Streams for history).
 - **Services**:
     - **Collector**: Stateless data miner (Chrome -> Redis).
-    - **Strategy**: Independent analysis engine (Redis -> Redis).
+    - **Strategy**: Independent analysis engine (Redis -> Redis) that calculates indicators and emits signals.
     - **Gateway**: API and WebSocket server (Redis <-> Frontend).
-- **Frontend**: "Smart Store, Dumb Components" pattern using Zustand and Lightweight Charts.
+    - (Planned) **AI Gateway**: Dedicated module/service that wraps all xAI API calls (chat, vision, voice) and exposes a stable interface to other backend components.
+- **Frontend**: "Smart Store, Dumb Components" pattern using Zustand and Lightweight Charts, with planned Ask-AI and voice assistant panels.
 
 ## Key Design Patterns
 - **Event Sourcing**: The state of the market is derived from a stream of `Tick` events.
 - **Pub/Sub**: Decouples producers (Collector) from consumers (Strategy, Gateway).
-- **Adapter Pattern**: The Collector acts as an adapter for the Chrome DevTools Protocol.
+- **Adapter Pattern**:
+  - The Collector acts as an adapter for the Chrome DevTools Protocol.
+  - Indicator adapters (in V1 docs) and future AI Gateway act as adapters between internal data structures and external APIs (xAI).
 - **Repository Pattern**: Abstract data access for historical data (Redis Streams).
+- **Context Injection (AI)**: AI calls do not introspect the app directly; instead, the backend builds a `TradingContext` (candles, indicators, regimes, positions) and injects it into xAI requests, optionally with chart screenshots.
 
 ## Data Flow
-1.  **Ingest**: Collector intercepts WebSocket frame -> Normalizes to `Tick`.
-2.  **Publish**: Collector publishes `Tick` to Redis Stream.
-3.  **Process**: Strategy Engine reads `Tick` -> Updates Indicators -> Publishes `IndicatorUpdate`.
-4.  **Serve**: Gateway receives `Tick` & `IndicatorUpdate` -> Emits via Socket.IO.
-5.  **Visualize**: Frontend Store receives update -> Mutates State -> Chart Component re-renders.
+1. **Ingest**: Collector intercepts WebSocket frame -> Normalizes to `Tick`.
+2. **Publish**: Collector publishes `Tick` to Redis Stream.
+3. **Process**: Strategy Engine reads `Tick` -> Updates Indicators -> Publishes `IndicatorUpdate` / signals.
+4. **Serve**: Gateway receives `Tick` & `IndicatorUpdate` -> Emits via Socket.IO / REST.
+5. **Visualize**: Frontend Store receives update -> Mutates State -> Chart components re-render (price, overlays, planned oscillators).
+6. (Planned) **Advise**: AI Gateway builds `TradingContext` from Strategy data + optional chart image -> Calls xAI -> Returns advisory output to Gateway -> Exposed to UI via `/api/v1/ai/ask` and voice.
 
 ## Significant Technical Decisions
 - **Redis as Backbone**: Chosen for low latency (<1ms) and decoupling capabilities.
 - **FastAPI for Gateway**: High performance, async support, and easy WebSocket integration.
 - **Zustand for Frontend State**: Simpler and more performant than Redux for high-frequency updates.
-- **Lightweight Charts**: Optimized for financial time-series data.
+- **Lightweight Charts**: Optimized for financial time-series data and supports clean separation between overlays and oscillator panes.
+- **AI Gateway Isolation**: All interactions with xAI are funneled through a single backend module to:
+  - Centralize authentication and error handling.
+  - Prevent scattering of external API calls.
+  - Make it easy to mock and test AI integrations.
 
 ## Capability & Status Patterns (QuFLX v2)
 
@@ -59,3 +68,19 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
   - After changing any Gateway–Capability integration:
     - Run the capability directly (e.g. `python capabilities_v2/runner.py refresh_assets`) and confirm its stdout format.
     - Hit the corresponding REST endpoint and verify the JSON shape matches what the Dashboard expects.
+
+## AI & Voice Integration Patterns
+
+- **Context Injection**
+  - For all xAI calls (text, vision, voice), the backend constructs a concise `TradingContext` from strategy data rather than relying on the frontend for truth.
+  - Chart screenshots are captured in the Dashboard and sent as base64 images to the backend, which attaches them to xAI vision requests.
+
+- **Tool/Function Calling**
+  - Trading-related actions exposed to xAI are modeled as explicit tools (e.g. `get_market_snapshot`, `simulate_entry`) with clear JSON schemas and server-side validation.
+  - xAI may request tool calls; the backend executes them via existing strategy/market modules and feeds the results back into the conversation.
+
+- **Voice Agent Bridge**
+  - The voice assistant uses a WebSocket bridge:
+    - Browser ↔ Backend (local WebSocket for PCM audio).
+    - Backend ↔ xAI Voice Agent API (`wss://api.x.ai/v1/realtime`).
+  - The backend voice gateway is stateless per session and integrates with the same `TradingContext` builder and tool layer used by the text assistant.

@@ -1,5 +1,6 @@
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText } from 'lucide-react';
+import { X, Layers, Clock, FileText, Plus } from 'lucide-react';
+import ChartActions from './ChartActions';
 
 const ChartHeader = ({
   selectedAsset,
@@ -12,62 +13,82 @@ const ChartHeader = ({
   indicatorOptions,
   addIndicator,
   activeIndicators,
-  removeIndicator
+  removeIndicator,
+  addObjectOptions,
+  onAddObjectSelect,
+  onOpenScreenshot,
+  onAskAi,
+  isAsking,
+  isCapturing
 }) => {
   return (
     <div className="p-1.5 border-b border-gray-700 bg-gray-800/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
-      <div className="w-36">
-        <Combobox 
-          label="Asset" 
-          value={selectedAsset} 
-          onChange={setSelectedAsset} 
-          options={assetOptions} 
-        />
-      </div>
-
-      <div className="w-28">
-        <Combobox 
-          label="Time" 
-          value={selectedTimeframe} 
-          onChange={handleTimeframeChange} 
-          options={timeframeOptions}
-          icon={Clock}
-        />
-      </div>
-
-      <div className="w-32">
-        <Combobox 
-          label="Import" 
-          placeholder="CSV..."
-          options={csvOptions}
-          onChange={() => {}}
-          icon={FileText}
-        />
-      </div>
-
-      <div className="w-32">
-        <Combobox 
-          label="Indicators" 
-          placeholder="+ Add"
-          options={indicatorOptions}
-          onChange={(val) => {
-            const label = indicatorOptions.find(o => o.value === val)?.label;
-            addIndicator({ id: val + Date.now(), name: label, value: 'Default' });
-          }}
-          icon={Layers}
-        />
-      </div>
-
-      {/* Active Indicators */}
-      <div className="flex-1 flex gap-2 overflow-x-auto items-center justify-end no-scrollbar px-2">
-         {activeIndicators.map((ind) => (
-          <IndicatorBadge 
-            key={ind.id} 
-            name={ind.name} 
-            value={ind.value} 
-            onRemove={() => removeIndicator(ind.id)} 
+      <div className="flex items-center gap-2">
+        <div className="w-36">
+          <Combobox 
+            value={selectedAsset} 
+            onChange={setSelectedAsset} 
+            options={assetOptions} 
           />
-        ))}
+        </div>
+
+        <div className="w-28">
+          <Combobox 
+            value={selectedTimeframe} 
+            onChange={handleTimeframeChange} 
+            options={timeframeOptions}
+            icon={Clock}
+          />
+        </div>
+
+        <div className="w-32">
+          <Combobox 
+            placeholder="CSV..."
+            options={csvOptions}
+            onChange={() => {}}
+            icon={FileText}
+          />
+        </div>
+
+        <div className="w-32">
+          <Combobox 
+            placeholder="+ Add"
+            options={indicatorOptions}
+            onChange={(val) => {
+              const label = indicatorOptions.find((o) => o.value === val)?.label;
+              addIndicator({ id: val + Date.now(), name: label, value: 'Default' });
+            }}
+            icon={Layers}
+          />
+        </div>
+
+        <div className="w-36">
+          <Combobox 
+            placeholder="Add Object"
+            options={addObjectOptions}
+            onChange={onAddObjectSelect}
+            icon={Plus}
+          />
+        </div>
+      </div>
+
+      <div className="ml-auto flex items-center gap-3 px-2">
+        <div className="flex-1 flex gap-2 overflow-x-auto items-center justify-end no-scrollbar">
+          {activeIndicators.map((ind) => (
+            <IndicatorBadge 
+              key={ind.id} 
+              name={ind.name} 
+              value={ind.value} 
+              onRemove={() => removeIndicator(ind.id)} 
+            />
+          ))}
+        </div>
+        <ChartActions
+          onOpenScreenshot={onOpenScreenshot}
+          onAskAi={onAskAi}
+          isAsking={isAsking}
+          isCapturing={isCapturing}
+        />
       </div>
     </div>
   );

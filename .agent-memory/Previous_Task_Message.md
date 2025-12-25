@@ -1,16 +1,23 @@
-I have completed the thorough assessment and generated the report `reports/AssetPanel_Select_Report_25-11-30.md`.
+I have completed several architecture and documentation tasks to prepare QuFLX v2 for indicator integration and AI-assisted trading.
 
-**Summary of Findings:**
-- **Option B (Socket.IO Event)** is the recommended approach. It unifies the control and data plane, reducing latency and complexity.
-- **Frontend**: `AssetPanel.jsx` and `ChartWorkspace.jsx` are ready but `marketStore.js` needs refactoring to use Socket.IO events instead of REST calls for asset selection.
-- **Backend**: `gateway/main.py` needs a new Socket.IO event handler for `select_asset` that invokes `AssetControl`.
-- **Asset Control**: The current `asset_control.py` uses a simple search. It should be improved by integrating the robust `HighPriorityControls` from V1 (`selenium_ui_controls.py`) to handle favorites bar scrolling and selection reliably.
-- **Configuration**: Implementing `92_Percent_config.json` is recommended to cache high-payout assets and speed up the UI.
+**Recent Major Tasks:**
+- Generated `reports/report_25-12-22.md` and `reports/implementation_report_25-12-22.md` covering:
+  - Stream health semantics (tick-driven).
+  - Status polling consolidation.
+  - OTC-only asset filter and AssetPanel UX improvements.
+- Created `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md` mapping indicators to market regimes (trending with pullbacks, strong momentum, ranging, breakout, reversal).
+- Produced `Research/research_lightweight-charts-indicators_2025-12-23.md` detailing how to implement overlay and oscillator indicators with TradingView Lightweight Charts in a way that respects streaming and timeframe semantics.
+- Produced `Research/research_ai_integration_vision_files_2025-12-20.md` outlining the xAI integration strategy (context injection, data + vision, future file tools).
 
-**Next Steps (as per report):**
-1.  Create `config_files/92_Percent_config.json`.
-2.  Update `gateway/main.py` to handle `select_asset` via Socket.IO.
-3.  Update `marketStore.js` to use Socket.IO for selection.
-4.  Verify `interceptor.py` parsing logic.
+**Summary of Current Direction:**
+- Indicators will be computed canonically in the backend (`TechnicalIndicatorsPipeline`) and mapped to regimes per `Indicators_vs_Market_Structures.md`.
+- The frontend will visualize indicators using Lightweight Charts (overlays on the main pane, oscillators in a secondary pane) and will not re-implement heavy math.
+- An AI Gateway module will centralize all xAI calls and use a `TradingContext` object built from existing strategy and indicator data, plus optional chart screenshots, to power:
+  - A text+vision trading assistant (Ask-AI panel in the Dashboard).
+  - A voice agent using the xAI Voice Agent API via a backend WebSocket bridge.
 
-I await your feedback on the report before proceeding with implementation.
+**Next Steps (high level):**
+1. Implement AI Gateway skeleton (text + vision) and `TradingContext` builder.
+2. Add `/api/v1/ai/ask` in the Gateway and wire it to the Dashboard (Ask-AI UI + chart capture hook).
+3. Implement indicator visualization (overlays + oscillator pane) following the research paper patterns.
+4. Design and implement the voice gateway and frontend voice assistant UI, reusing the same TradingContext and tool layer.

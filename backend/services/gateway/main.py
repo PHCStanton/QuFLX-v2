@@ -309,19 +309,38 @@ async def health_check():
 
 @app.get("/api/v1/status")
 async def get_status():
-    """
-    Returns the current status of services.
-    """
     return system_state
+
+@app.post("/api/v1/ai/ask")
+async def ask_ai(payload: Dict[str, Any] = Body(...)):
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    asset = payload.get("asset")
+    timeframe = payload.get("timeframe")
+
+    context: Dict[str, Any] = {}
+    if isinstance(asset, str) and asset.strip():
+        context["asset"] = asset.strip()
+    if isinstance(timeframe, str) and timeframe.strip():
+        context["timeframe"] = timeframe.strip()
+
+    image_raw = payload.get("image_base64")
+    image: Optional[str] = None
+    if isinstance(image_raw, str) and image_raw.strip():
+        image = image_raw.strip()
+
+    try:
+        result = await ai_service.ask(prompt=prompt, context=context or None, image=image)
+        return result
+    except Exception as exc:
+        logger.error("AI ask failed: %s", exc)
+        raise HTTPException(status_code=500, detail="AI request failed")
 
 
 @app.post("/api/v1/screenshots/chart")
 async def save_chart_screenshot(payload: Dict[str, Any] = Body(...)):
-    """Persist a chart screenshot sent from the Dashboard.
-
-    Expects a PNG image encoded as base64. Optionally accepts metadata
-    about the current asset and timeframe and whether the image is annotated.
-    """
     raw_image = payload.get("image_base64")
     if not isinstance(raw_image, str) or not raw_image.strip():
         raise HTTPException(status_code=400, detail="image_base64 (non-empty string) is required")
@@ -426,12 +445,17 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
         target_assets = payload.get("target_assets")  # NEW: Optional specific assets to target
         sweep_all = bool(payload.get("sweep_all", True))
         unstar_below = bool(payload.get("unstar_below", True))
+        filter_mode = payload.get("filter_mode")
+
+        if filter_mode not in ("otc", "fx"):
+            filter_mode = None
         
         # Build inputs for capability
         inputs = {
             "min_pct": min_pct,
             "sweep_all": sweep_all,
             "unstar_below": unstar_below,
+            "filter_mode": filter_mode,
             "max_assets": max_assets,  # NEW
             "target_assets": target_assets,  # NEW
         }
@@ -475,6 +499,7 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
                     "skipped_max_limit": processed.get("counts", {}).get("skipped_max_limit", 0),
                     "max_assets_limit": max_assets,
                     "target_assets_specified": bool(target_assets),
+                    "filter_mode": filter_mode,
                 },
             }
 

@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import Card from './Card';
-import { Upload, Activity, Search, RefreshCw, List, MonitorPlay, History } from 'lucide-react';
+import { Upload, Activity, Search, RefreshCw, List, MonitorPlay, History, HelpCircle } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import ToggleSwitch from './ToggleSwitch';
 import TickerTape from './TickerTape';
@@ -18,12 +18,40 @@ const AssetPanel = () => {
     quotesByAssetKey,
     tickerMaxAssets,
     backendStatus,
-    collectHistory
+    collectHistory,
+    setAssetFilterState
   } = useMarketStore();
 
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
   const [maxAssetsToStar, setMaxAssetsToStar] = useState(10); // NEW: Configurable limit
   const [specificAssets, setSpecificAssets] = useState(''); // NEW: Specific assets to target
+  const [otcOnly, setOtcOnly] = useState(false);
+  const [topHeight, setTopHeight] = useState(220);
+  const dragStartYRef = useRef(0);
+  const dragStartHeightRef = useRef(220);
+
+  const handleResizeStart = (event) => {
+    dragStartYRef.current = event.clientY;
+    dragStartHeightRef.current = topHeight;
+
+    const onMouseMove = (e) => {
+      const delta = e.clientY - dragStartYRef.current;
+      let next = dragStartHeightRef.current + delta;
+      const minHeight = 140;
+      const maxHeight = 400;
+      if (next < minHeight) next = minHeight;
+      if (next > maxHeight) next = maxHeight;
+      setTopHeight(next);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   const rawTickerAssets = (payoutAssets || []).slice(0, tickerMaxAssets);
   const tickerAssets = Array.from(new Set([selectedAsset, ...rawTickerAssets].filter(Boolean))).slice(0, tickerMaxAssets);
@@ -47,8 +75,12 @@ const AssetPanel = () => {
     <div className="col-span-3 flex flex-col gap-2 h-full min-h-0">
       
       {/* Data Source Controls */}
-      <Card className="p-3 rounded-lg shrink-0">
-        <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wider">Data Source</h3>
+      <div
+        className="shrink-0 min-h-[140px]"
+        style={{ height: topHeight }}
+      >
+        <Card className="p-3 rounded-lg h-full overflow-y-auto quflx-section-light">
+          <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wider">Data Source</h3>
         
         {!backendStatus.readyForAssets && (
           <div className="mb-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-xs text-yellow-300">
@@ -71,8 +103,21 @@ const AssetPanel = () => {
                 options.max_assets = maxAssetsToStar;
               }
               if (specificAssets.trim()) {
-                options.target_assets = specificAssets.split(',').map(a => a.trim()).filter(Boolean);
+                options.target_assets = specificAssets
+                  .split(',')
+                  .map((a) => a.trim())
+                  .filter(Boolean);
               }
+              if (otcOnly) {
+                options.filter_mode = 'otc';
+              }
+
+              setAssetFilterState({
+                maxAssets: maxAssetsToStar,
+                targetAssets: specificAssets,
+                filterMode: otcOnly ? 'otc' : null
+              });
+
               refreshAssets(options);
             }}
             disabled={!backendStatus.readyForAssets}
@@ -86,12 +131,30 @@ const AssetPanel = () => {
             title={backendStatus.readyForAssets ? "Collect history data from favorites" : "Backend not ready - check status"}
           />
         </div>
+        
         <div className="mt-2 flex items-center justify-between p-1.5 bg-gray-800 rounded border border-gray-700">
             <span className="text-[10px] uppercase font-bold text-gray-400">Auto Refresh (5m)</span>
             <ToggleSwitch 
               checked={autoRefresh} 
               onChange={toggleAutoRefresh} 
             />
+        </div>
+
+        <div className="mt-2 flex items-center justify-between p-1.5 bg-gray-800 rounded border border-gray-700">
+          <span className="text-[10px] uppercase font-bold text-gray-400">OTC Only</span>
+          <button
+            type="button"
+            onClick={() => setOtcOnly((prev) => !prev)}
+            className={`w-9 h-5 flex items-center rounded-full border transition-colors ${
+              otcOnly ? 'bg-accent-green border-accent-green' : 'bg-gray-700 border-gray-500'
+            }`}
+          >
+            <span
+              className={`w-4 h-4 bg-black rounded-full transform transition-transform ${
+                otcOnly ? 'translate-x-4' : 'translate-x-1'
+              }`}
+            />
+          </button>
         </div>
         
         {/* NEW: Asset Limit Control */}
@@ -120,22 +183,37 @@ const AssetPanel = () => {
             title="Comma-separated list of specific assets to target (leave empty for all eligible)"
           />
         </div>
-      </Card>
+        </Card>
+      </div>
+
+      <div
+        onMouseDown={handleResizeStart}
+        className="h-2 cursor-row-resize bg-gray-800 hover:bg-accent-green/60 transition-colors rounded flex items-center justify-center"
+      >
+        <div className="flex gap-1">
+          <span className="w-1 h-1 rounded-full bg-gray-500" />
+          <span className="w-1 h-1 rounded-full bg-gray-500" />
+          <span className="w-1 h-1 rounded-full bg-gray-500" />
+        </div>
+      </div>
 
       {/* Assets / Ticker Container */}
-      <Card className="p-3 rounded-lg flex-1 flex flex-col min-h-0">
-        <div className="mb-2 p-2 bg-blue-900/20 border border-blue-700/50 rounded text-xs text-blue-300">
-          <div className="flex items-center gap-2">
-            <span>💡</span>
-            <span><strong>Workflow:</strong> Set max assets & specific targets below, then click &quot;Get Assets&quot; to star them. Manually select in Pocket Option UI.</span>
-          </div>
-        </div>
+      <Card className="p-3 rounded-lg flex-1 flex flex-col min-h-0 quflx-section-light">
         <div className="flex justify-between items-center mb-2 shrink-0">
             <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
                 {panelMode === 'list' ? '92% Payout Assets' : 'OTC Ticker'}
                 {panelMode === 'list' && (
                     <span className="text-xs bg-accent-green text-black px-1.5 py-0.5 rounded font-bold">{payoutAssets.length}</span>
                 )}
+                <div className="relative group">
+                  <HelpCircle className="w-3 h-3 text-gray-400 group-hover:text-gray-200 cursor-help" />
+                  <div className="absolute left-0 mt-2 w-64 rounded bg-gray-900 border border-gray-700 p-2 text-[11px] text-gray-200 shadow-lg z-20 hidden group-hover:block">
+                    <span className="font-semibold">Workflow:</span>{' '}
+                    <span>
+                      Set max assets and specific targets in the controls above, then click &quot;Get Assets&quot; to star them in Pocket Option. Select assets manually in the Pocket Option UI to trade.
+                    </span>
+                  </div>
+                </div>
             </h3>
             
             {/* View Toggle */}

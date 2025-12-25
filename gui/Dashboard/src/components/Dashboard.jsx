@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import useMarketStore from '../store/marketStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
-import AssetPanel from './AssetPanel';
 import ChartWorkspace from './ChartWorkspace';
 import ErrorBoundary from './ErrorBoundary';
+import ContextPanelRouter from './ContextPanelRouter';
 
 const Dashboard = () => {
   const { connectSocket, disconnectSocket } = useMarketStore();
@@ -28,12 +28,8 @@ const Dashboard = () => {
         {/* Main Workspace */}
         <main className="flex-1 flex flex-col overflow-hidden p-2 gap-2">
           
-          {/* Top Row: Assets & Chart (Flexible Height) */}
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
-            {/* Left Panel - Controls & Assets */}
-            <AssetPanel />
-
-            {/* Center Panel - Chart */}
+            <ContextPanelRouter />
             <div className="col-span-9 flex flex-col h-full min-h-0">
               <ErrorBoundary>
                 <ChartWorkspace />

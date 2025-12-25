@@ -54,7 +54,8 @@ const createTickerSlice = () => ({
 const createMarketSlice = (set, get) => ({
   assetFilterState: {
     maxAssets: 10,
-    targetAssets: ''
+    targetAssets: '',
+    filterMode: null
   },
   setAssetFilterState: (state) => set({ assetFilterState: state }),
   selectedAsset: 'AUDNZDOTC',
@@ -254,9 +255,14 @@ const createMarketSlice = (set, get) => ({
   },
   refreshAssets: async (passedOptions = null) => {
     try {
+      const filterState = get().assetFilterState;
       const filterOptions = passedOptions || {
-        max_assets: get().assetFilterState.maxAssets,
-        target_assets: get().assetFilterState.targetAssets.split(',').map(a => a.trim()).filter(Boolean)
+        max_assets: filterState.maxAssets,
+        target_assets: filterState.targetAssets
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean),
+        filter_mode: filterState.filterMode
       };
       
       const payload = {
@@ -310,7 +316,6 @@ const createConnectionSlice = (set, get) => ({
   socket: null,
   wsStatus: 'disconnected',
   setWsStatus: (status) => set({ wsStatus: status }),
-  statusInterval: null,
   chromeStatus: 'disconnected',
   setChromeStatus: (status) => set({ chromeStatus: status }),
   streamStatus: 'idle',
@@ -325,20 +330,6 @@ const createConnectionSlice = (set, get) => ({
     error: null
   },
   setBackendStatus: (status) => set({ backendStatus: status }),
-  fetchStatus: async () => {
-    try {
-      const res = await fetch('http://localhost:8000/api/v1/status');
-      const data = await res.json();
-      if (data) {
-        set({
-          chromeStatus: data.collector,
-          streamStatus: data.stream
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch status:', err);
-    }
-  },
   checkBackendStatus: () => {
     const { socket } = get();
     if (socket && socket.connected) {
@@ -350,12 +341,6 @@ const createConnectionSlice = (set, get) => ({
       transports: ['websocket', 'polling'],
       autoConnect: true
     });
-
-    const { fetchStatus } = get();
-    fetchStatus();
-
-    const interval = setInterval(fetchStatus, 30000);
-    set({ statusInterval: interval });
 
     socket.on('connect', () => {
       console.log('Socket connected');
@@ -449,17 +434,13 @@ const createConnectionSlice = (set, get) => ({
     });
   },
   disconnectSocket: () => {
-    const { socket, statusInterval } = get();
+    const { socket } = get();
     if (socket) {
       socket.disconnect();
-    }
-    if (statusInterval) {
-      clearInterval(statusInterval);
     }
     set({
       socket: null,
       wsStatus: 'disconnected',
-      statusInterval: null,
       subscribedAssetKeys: []
     });
   }

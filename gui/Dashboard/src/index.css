@@ -2,6 +2,137 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --dashboard-bg: 4 5 10;
+  --card-bg: 17 14 24;
+  --text-primary: 249 250 251;
+  --text-secondary: 161 172 187;
+}
+
+.theme-orange-dark {
+  --dashboard-bg: 15 20 25;
+  --card-bg: 26 31 46;
+  --text-primary: 248 250 252;
+  --text-secondary: 148 163 184;
+}
+
+.quflx-card {
+  background-color: rgb(var(--card-bg));
+  background-image:
+    radial-gradient(circle at top left, rgba(21, 89, 178, 0.671), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(35, 46, 51, 0.663), transparent 55%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+}
+
+.theme-orange-dark .quflx-card {
+  background-image:
+    radial-gradient(circle at top left, rgba(251, 146, 60, 0.32), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(248, 113, 113, 0.24), transparent 55%);
+}
+
+.quflx-topbar {
+  background-color: rgb(var(--card-bg));
+  background-image:
+    linear-gradient(90deg, rgba(35, 46, 51, 0.663), rgba(21, 89, 178, 0.72)),
+    radial-gradient(circle at top left, rgba(22, 24, 25, 0.835), transparent 75%);
+}
+
+.theme-orange-dark .quflx-topbar {
+  background-image:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.72)),
+    radial-gradient(circle at top left, rgba(251, 146, 60, 0.4), transparent 55%);
+}
+
+.quflx-sidebar {
+  background-color: rgb(var(--card-bg));
+  background-image:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.96), rgba(0, 0, 0, 0.76)),
+    radial-gradient(circle at bottom, rgba(238, 243, 241, 0.745), transparent 55%);
+}
+
+.theme-orange-dark .quflx-sidebar {
+  background-image:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.76)),
+    radial-gradient(circle at bottom, rgba(16, 185, 129, 0.28), transparent 55%);
+}
+
+.quflx-sidebar-item-active {
+  background-color: rgba(21, 89, 178, 0.245);
+  color: #113e78;
+  border-right-color: #113e78;
+}
+
+.theme-orange-dark .quflx-sidebar-item-active {
+  background-color: rgba(251, 146, 60, 0.18);
+  color: #fed7aa;
+  border-right-color: #fb923c;
+}
+
+.quflx-logo {
+  position: relative;
+}
+
+.quflx-logo-glow {
+  position: absolute;
+  inset: -6px -10px;
+  border-radius: 9999px;
+  opacity: 1;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(103, 162, 252, 0.6), transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(2, 36, 108, 0.4), transparent 60%);
+  box-shadow:
+    0 0 24px rgba(214, 208, 203, 0.65),
+    0 0 40px rgba(245, 246, 247, 0.55);
+}
+
+.quflx-logo:hover .quflx-logo-glow {
+  transform: scale(1.02);
+}
+
+.quflx-logo-text {
+  background-image: linear-gradient(120deg, #feffff, #0b7dda, #243cf6);
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.quflx-section-light {
+  background-image:
+    radial-gradient(circle at top left, rgba(21, 89, 178, 0.5), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(15, 23, 42, 0.9), transparent 55%);
+}
+
+.theme-orange-dark .quflx-section-light {
+  background: linear-gradient(135deg, #4a1f0a, #fb923c);
+}
+
+.quflx-ask-ai {
+  background-image: linear-gradient(45deg, #020204, #7b7e81);
+  background-size: 100% 100%;
+  background-position: 50% 50%;
+  transition:
+    transform 160ms ease,
+    background-image 200ms ease,
+    color 200ms ease;
+  color: #f9fafb;
+}
+
+.quflx-ask-ai:hover {
+  transform: translateY(-1px) scale(1.03);
+}
+
+.theme-orange-dark .quflx-ask-ai {
+  background-image: linear-gradient(120deg, #f1f1f6, #4707b5);
+  background-size: 100% 100%;
+  background-position: 50% 50%;
+}
+
+.theme-orange-dark .quflx-ask-ai:hover {
+  background-image: linear-gradient(120deg, #ffffff, #6366f1);
+  color: #111827;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #374151 #1a1f2e;

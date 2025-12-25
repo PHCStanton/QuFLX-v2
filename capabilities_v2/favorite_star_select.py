@@ -366,7 +366,10 @@ class FavoriteStarSelect(Capability):
                     return
 
             if filter_mode:
-                is_otc = asset_label.endswith("_otc")
+                normalized_label = (
+                    asset_label.replace("/", "").replace(" ", "").replace("_", "").upper()
+                )
+                is_otc = normalized_label.endswith("OTC")
                 if (filter_mode == "otc" and not is_otc) or (filter_mode == "fx" and is_otc):
                     data["processed"]["counts"]["skipped"] += 1
                     data["processed"]["counts"]["filtered_out"] += 1
