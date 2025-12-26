@@ -1,12 +1,13 @@
 # Active Context
 
 ## Current Focus
-**Phase 5: UI + Streaming Stable; Designing Indicators + AI Integration**
+**Phase 5: UI + Streaming Stable; Designing Indicators, AI Integration, and Settings Architecture**
 
 We are now beyond basic Dashboard wiring. The current focus is to:
 - Finalize chart/stream semantics for indicators (overlays + oscillators) using Lightweight Charts.
 - Design a clean backend–frontend contract for indicators that reuses the existing Python indicator pipeline.
 - Architect the xAI-powered trading assistant (text + vision) and voice agent so they integrate cleanly with the existing Gateway/Strategy stack.
+- Establish and refine a unified settings architecture (Global/User/AI + per-tab sections) backed by a versioned settings store and clearly defined endpoints.
 
 ## Recent Accomplishments
 - **Streaming & UI Foundation** (Phase 5 baseline):
@@ -41,11 +42,16 @@ We are now beyond basic Dashboard wiring. The current focus is to:
   - Collector/Strategy/Gateway are functioning as described in `systemPatterns.md`.
   - Indicator pipeline is implemented and documented; regime mapping doc exists but regime detection logic is not yet wired into runtime.
   - AI integration is at the research/specification stage (no production `ai_gateway` module yet).
+  - Settings architecture foundation implemented:
+    - Versioned settings schema with persisted JSON in `data/settings/settings.json`.
+    - `GET /api/v1/settings` and `PUT /api/v1/settings` endpoints in the Gateway for centralized configuration.
 
 - **Frontend**:
   - Core Dashboard is stable for streaming and basic visualization.
   - Indicator visualization (overlays + oscillator panes) is designed on paper but not implemented.
   - Ask-AI UI and voice UI are not implemented yet; architecture and UX expectations are documented.
+  - A dedicated `useSettingsStore` (Zustand) and `settingsClient` are in place to manage Global/User/AI + per-tab settings separately from `useMarketStore`.
+  - Sidebar ordering updated so `Calendar & Journal` and `Settings` are the final two sidebar items; `Settings` can host global and profile configuration views.
 
 ## Next Steps
 1. **Implement AI Gateway Skeleton (Backend)**
@@ -60,8 +66,7 @@ We are now beyond basic Dashboard wiring. The current focus is to:
      - Open positions / risk parameters when available.
 
 3. **API Contract for Ask-AI**
-   - Add `POST /api/v1/ai/ask` in the Gateway, accepting `prompt`, optional `image_base64`, `asset`, and `timeframe`.
-   - Wire this endpoint to `context_builder` + `ai_gateway`.
+   - Consolidate and refine the existing `/api/v1/ai/ask` behavior in the Gateway so it works seamlessly with the future `ai_gateway` and `TradingContext` builder.
 
 4. **Frontend Ask-AI Panel + Chart Capture Hook**
    - Implement `useChartCapture()` to grab the current chart canvas and produce base64 PNG.
@@ -77,6 +82,9 @@ We are now beyond basic Dashboard wiring. The current focus is to:
 6. **Voice Agent Planning**
    - Design a small backend voice gateway that proxies browser WebSocket audio to xAI’s Voice Agent API.
    - Define how voice sessions share the same `TradingContext` and session history as the text assistant.
+
+7. **Settings Architecture Wiring**
+   - Gradually wire Global, Risk Manager, AI Assistant, and per-tab settings to `useSettingsStore` and `/api/v1/settings` following `v2_Dev_Docs/Settings_Architecture_Endpoints.md`, starting with Essential (High Priority) items.
 
 ## Active Files
 - Frontend:

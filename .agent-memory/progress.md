@@ -53,6 +53,14 @@
 - [ ] Design frontend voice assistant UI (mic control, transcripts, session state).
 - [ ] Define shared session model between text and voice assistants.
 
+## Phase 5.4: Settings & Configuration Architecture (Foundation Complete)
+- [x] Define settings architecture across Global, User Profile, AI Assistant, and each Sidebar tab section in `v2_Dev_Docs/Settings_Architecture_Endpoints.md`.
+- [x] Implement versioned settings storage in the Gateway using `data/settings/settings.json` and helper functions in `backend/services/gateway/main.py`.
+- [x] Add `GET /api/v1/settings` and `PUT /api/v1/settings` endpoints for centralized configuration management.
+- [x] Create a dedicated `useSettingsStore` (Zustand) in `gui/Dashboard/src/store/settingsStore.js` that mirrors the documented settings sections and keeps configuration separate from `useMarketStore`.
+- [x] Add `gui/Dashboard/src/api/settingsClient.js` to communicate with the new settings endpoints.
+- [x] Align sidebar tab ordering so `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last, matching the settings/layout design.
+
 ## Phase 6: Integration & Polish (Pending)
 - [ ] System Orchestration and resilience testing (restart tolerance, degraded modes).
 - [ ] Comprehensive Documentation & Onboarding Guides, including AI usage and limitations.

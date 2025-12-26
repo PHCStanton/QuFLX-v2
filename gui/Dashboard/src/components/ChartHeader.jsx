@@ -52,7 +52,7 @@ const ChartHeader = ({
 
         <div className="w-32">
           <Combobox 
-            placeholder="+ Add"
+            placeholder="+ Indicator"
             options={indicatorOptions}
             onChange={(val) => {
               const label = indicatorOptions.find((o) => o.value === val)?.label;
@@ -64,7 +64,7 @@ const ChartHeader = ({
 
         <div className="w-36">
           <Combobox 
-            placeholder="Add Object"
+            placeholder="+ Object"
             options={addObjectOptions}
             onChange={onAddObjectSelect}
             icon={Plus}

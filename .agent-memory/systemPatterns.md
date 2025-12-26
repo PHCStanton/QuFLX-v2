@@ -27,6 +27,11 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
 5. **Visualize**: Frontend Store receives update -> Mutates State -> Chart components re-render (price, overlays, planned oscillators).
 6. (Planned) **Advise**: AI Gateway builds `TradingContext` from Strategy data + optional chart image -> Calls xAI -> Returns advisory output to Gateway -> Exposed to UI via `/api/v1/ai/ask` and voice.
 
+## Sidebar & Layout Patterns
+- Sidebar tabs follow the set: `Dashboard`, `Analysis`, `AI Insights`, `Live Trading`, `Risk Manager`, `Strategy Lab`, `Calendar & Journal`, `Settings`.
+- `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last.
+- All tabs except `Calendar & Journal` and `Settings` are expected to keep the main chart visible on the right while swapping contextual panels on the left; `Calendar & Journal` and `Settings` may use layouts without the chart when appropriate.
+
 ## Significant Technical Decisions
 - **Redis as Backbone**: Chosen for low latency (<1ms) and decoupling capabilities.
 - **FastAPI for Gateway**: High performance, async support, and easy WebSocket integration.
@@ -36,6 +41,7 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
   - Centralize authentication and error handling.
   - Prevent scattering of external API calls.
   - Make it easy to mock and test AI integrations.
+ - **Versioned Settings Architecture**: A dedicated, versioned settings object (Global/User/AI + per-tab sections) is persisted in `data/settings/settings.json` via the Gateway, exposed through `GET/PUT /api/v1/settings`, and mirrored by a separate `useSettingsStore` in the Dashboard so configuration is clearly separated from live market state.
 
 ## Capability & Status Patterns (QuFLX v2)
 

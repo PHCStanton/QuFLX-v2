@@ -193,6 +193,13 @@ const createMarketSlice = (set, get) => ({
     }
   },
   payoutAssets: [],
+  removePayoutAsset: (asset) => {
+    if (!asset) return;
+    set((state) => ({
+      payoutAssets: (state.payoutAssets || []).filter((a) => a !== asset)
+    }));
+    get().syncSubscriptions();
+  },
   panelMode: 'list',
   setPanelMode: (mode) => {
     set({ panelMode: mode });
@@ -284,8 +291,13 @@ const createMarketSlice = (set, get) => ({
         get().syncSubscriptions();
         
         // Log metadata for debugging
-        if (data.metadata) {
-          console.log('Asset refresh metadata:', data.metadata);
+        if (data.metadata && import.meta.env && import.meta.env.MODE === 'development') {
+          const metaKeys = Object.keys(data.metadata || {});
+          const assetCount = Array.isArray(data.assets) ? data.assets.length : 0;
+          console.log('Asset refresh metadata summary:', {
+            assetCount,
+            metaKeys
+          });
         }
       }
     } catch (err) {

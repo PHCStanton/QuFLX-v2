@@ -2,14 +2,14 @@ import { Menu, Activity, TrendingUp, Bot, Settings } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 
 const SIDEBAR_TABS = [
-  { id: 'dashboard', label: 'Dashboard', icon: Activity },
-  { id: 'analysis', label: 'Analysis', icon: TrendingUp },
-  { id: 'ai_insights', label: 'AI Insights', icon: Bot },
-  { id: 'live_trading', label: 'Live Trading', icon: Activity },
-  { id: 'risk_manager', label: 'Risk Manager', icon: TrendingUp },
-  { id: 'calendar_journal', label: 'Calendar & Journal', icon: Activity },
-  { id: 'strategy_lab', label: 'Strategy Lab', icon: Bot },
-  { id: 'settings', label: 'Settings', icon: Settings }
+	{ id: 'dashboard', label: 'Dashboard', icon: Activity },
+	{ id: 'analysis', label: 'Analysis', icon: TrendingUp },
+	{ id: 'ai_insights', label: 'AI Insights', icon: Bot },
+	{ id: 'live_trading', label: 'Live Trading', icon: Activity },
+	{ id: 'risk_manager', label: 'Risk Manager', icon: TrendingUp },
+	{ id: 'strategy_lab', label: 'Strategy Lab', icon: Bot },
+	{ id: 'calendar_journal', label: 'Calendar & Journal', icon: Activity },
+	{ id: 'settings', label: 'Settings', icon: Settings }
 ];
 
 const Sidebar = () => {

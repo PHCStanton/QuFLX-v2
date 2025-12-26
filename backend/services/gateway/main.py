@@ -91,6 +91,53 @@ system_state = {
     "stream": "idle"
 }
 
+SETTINGS_VERSION = 1
+SETTINGS_FILE = project_root / "data" / "settings" / "settings.json"
+
+
+def _default_settings() -> Dict[str, Any]:
+    return {
+        "version": SETTINGS_VERSION,
+        "global": {},
+        "userProfile": {},
+        "aiAssistant": {},
+        "dashboard": {},
+        "analysis": {},
+        "liveTrading": {},
+        "riskManager": {},
+        "calendarJournal": {},
+        "strategyLab": {}
+    }
+
+
+def load_settings() -> Dict[str, Any]:
+    try:
+        if not SETTINGS_FILE.exists():
+            SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            settings = _default_settings()
+            SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
+            return settings
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return _default_settings()
+        if "version" not in data:
+            data["version"] = SETTINGS_VERSION
+        return data
+    except Exception as exc:
+        logger.error("Failed to load settings: %s", exc)
+        return _default_settings()
+
+
+def save_settings(settings: Dict[str, Any]) -> None:
+    try:
+        SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if "version" not in settings:
+            settings["version"] = SETTINGS_VERSION
+        SETTINGS_FILE.write_text(json.dumps(settings), encoding="utf-8")
+    except Exception as exc:
+        logger.error("Failed to save settings: %s", exc)
+        raise
+
 # Lifespan context manager (replaces deprecated on_event)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -310,6 +357,21 @@ async def health_check():
 @app.get("/api/v1/status")
 async def get_status():
     return system_state
+
+
+@app.get("/api/v1/settings")
+async def get_settings():
+    return load_settings()
+
+
+@app.put("/api/v1/settings")
+async def update_settings(payload: Dict[str, Any] = Body(...)):
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="settings payload must be an object")
+    current = load_settings()
+    merged = {**current, **payload}
+    save_settings(merged)
+    return merged
 
 @app.post("/api/v1/ai/ask")
 async def ask_ai(payload: Dict[str, Any] = Body(...)):

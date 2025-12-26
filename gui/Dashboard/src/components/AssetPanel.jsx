@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import Card from './Card';
-import { Upload, Activity, Search, RefreshCw, List, MonitorPlay, History, HelpCircle } from 'lucide-react';
+import { Upload, Activity, Search, RefreshCw, List, MonitorPlay, History, HelpCircle, X } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import ToggleSwitch from './ToggleSwitch';
 import TickerTape from './TickerTape';
@@ -10,6 +10,7 @@ const AssetPanel = () => {
     payoutAssets, 
     selectedAsset, 
     setSelectedAsset,
+    removePayoutAsset,
     refreshAssets,
     autoRefresh,
     toggleAutoRefresh,
@@ -265,7 +266,20 @@ const AssetPanel = () => {
                           : 'hover:bg-gray-700 text-text-secondary'
                       }`}
                     >
-                      <span className="font-medium text-sm">{asset}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removePayoutAsset(asset);
+                          }}
+                          className="w-4 h-4 flex items-center justify-center rounded-full border border-gray-600 text-gray-400 hover:bg-red-600/80 hover:border-red-500 hover:text-white text-[10px] flex-shrink-0"
+                          title="Remove asset from this list"
+                        >
+                          <X size={10} />
+                        </button>
+                        <span className="font-medium text-sm">{asset}</span>
+                      </div>
                       <span className="text-[10px] opacity-70">92%</span>
                     </div>
                   ))

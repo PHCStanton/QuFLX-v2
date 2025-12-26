@@ -3,15 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --dashboard-bg: 4 5 10;
-  --card-bg: 17 14 24;
+  --dashboard-bg: 255 255 255;
+  --card-bg: 0 0 0;
   --text-primary: 249 250 251;
   --text-secondary: 161 172 187;
 }
 
 .theme-orange-dark {
   --dashboard-bg: 15 20 25;
-  --card-bg: 26 31 46;
+  --card-bg: 6 87 226;
   --text-primary: 248 250 252;
   --text-secondary: 148 163 184;
 }
@@ -19,9 +19,9 @@
 .quflx-card {
   background-color: rgb(var(--card-bg));
   background-image:
-    radial-gradient(circle at top left, rgba(21, 89, 178, 0.671), transparent 60%),
-    radial-gradient(circle at bottom right, rgba(35, 46, 51, 0.663), transparent 55%);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+    radial-gradient(circle at top left, rgb(7, 56, 169)),
+    radial-gradient(circle at bottom right, rgb(0, 0, 0), transparent 55%);
+  box-shadow: 0 10px 25px rgb(0, 0, 0);
 }
 
 .theme-orange-dark .quflx-card {
@@ -33,21 +33,34 @@
 .quflx-topbar {
   background-color: rgb(var(--card-bg));
   background-image:
-    linear-gradient(90deg, rgba(35, 46, 51, 0.663), rgba(21, 89, 178, 0.72)),
-    radial-gradient(circle at top left, rgba(22, 24, 25, 0.835), transparent 75%);
+    linear-gradient(90deg, rgba(5, 5, 5, 0.744), rgba(7, 56, 169, 0.72)),
+    radial-gradient(circle at top left, rgba(37, 41, 43, 0.764));
 }
 
 .theme-orange-dark .quflx-topbar {
   background-image:
-    linear-gradient(90deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.72)),
-    radial-gradient(circle at top left, rgba(251, 146, 60, 0.4), transparent 55%);
+    linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(4, 31, 96, 0.72)),
+    radial-gradient(circle at top left, rgba(248, 245, 245, 0.4), transparent 55%);
 }
 
 .quflx-sidebar {
+  position: relative;
   background-color: rgb(var(--card-bg));
-  background-image:
+  /* background-image:
     linear-gradient(180deg, rgba(0, 0, 0, 0.96), rgba(0, 0, 0, 0.76)),
-    radial-gradient(circle at bottom, rgba(238, 243, 241, 0.745), transparent 55%);
+    radial-gradient(circle at bottom, rgba(238, 243, 241, 0.745), transparent 55%); */
+  overflow: hidden;
+}
+
+.quflx-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url('.\assets\textures\Blue_Dark_BG2.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.25;
+  pointer-events: none;
 }
 
 .theme-orange-dark .quflx-sidebar {
@@ -58,14 +71,16 @@
 
 .quflx-sidebar-item-active {
   background-color: rgba(21, 89, 178, 0.245);
-  color: #113e78;
-  border-right-color: #113e78;
+  color: #4f77ab;
+  border-right-color: #4f77ab;
+  box-shadow: 0 0 8px rgba(79, 119, 171, 0.75);
 }
 
 .theme-orange-dark .quflx-sidebar-item-active {
   background-color: rgba(251, 146, 60, 0.18);
   color: #fed7aa;
   border-right-color: #fb923c;
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.65);
 }
 
 .quflx-logo {
@@ -131,6 +146,134 @@
 .theme-orange-dark .quflx-ask-ai:hover {
   background-image: linear-gradient(120deg, #ffffff, #6366f1);
   color: #111827;
+}
+
+.quflx-screenshot-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, #2d3748, #1e293b);
+  box-shadow:
+    6px 6px 12px rgba(0, 0, 0, 0.55),
+    -6px -6px 12px rgba(255, 255, 255, 0.06),
+    0 0 6px rgba(255, 0, 0, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quflx-screenshot-btn::before {
+  content: '';
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 70%);
+  border-radius: 9999px;
+  filter: blur(6px);
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.quflx-screenshot-btn::after {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 10px 4px;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 55%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.quflx-screenshot-btn > svg {
+  position: relative;
+  z-index: 1;
+  color: #fecaca;
+  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.7));
+}
+
+.quflx-screenshot-btn:hover {
+  box-shadow:
+    5px 5px 10px rgba(0, 0, 0, 0.6),
+    -5px -5px 10px rgba(255, 255, 255, 0.08),
+    0 0 10px rgba(255, 0, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+.quflx-screenshot-btn:active {
+  box-shadow:
+    inset 5px 5px 10px rgba(0, 0, 0, 0.5),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.04),
+    0 0 18px rgba(255, 0, 0, 0.35);
+  transform: translateY(1px);
+}
+
+.quflx-ai-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, #374151, #1f2933);
+  box-shadow:
+    6px 6px 12px rgba(0, 0, 0, 0.65),
+    -6px -6px 12px rgba(255, 255, 255, 0.06),
+    0 0 10px rgba(248, 250, 252, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quflx-ai-btn::before {
+  content: '';
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  background: radial-gradient(circle, rgba(249, 250, 251, 0.9) 0%, transparent 70%);
+  border-radius: 9999px;
+  filter: blur(6px);
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.quflx-ai-btn::after {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 10px 4px;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 55%);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.quflx-ai-btn > svg {
+  position: relative;
+  z-index: 1;
+  color: #f9fafb;
+  filter: drop-shadow(0 0 5px rgba(249, 250, 251, 0.75));
+}
+
+.quflx-ai-btn:hover {
+  box-shadow:
+    5px 5px 10px rgba(0, 0, 0, 0.7),
+    -5px -5px 10px rgba(255, 255, 255, 0.08),
+    0 0 12px rgba(249, 250, 251, 0.55);
+  transform: translateY(-2px);
+}
+
+.quflx-ai-btn:active {
+  box-shadow:
+    inset 5px 5px 10px rgba(0, 0, 0, 0.6),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.04),
+    0 0 18px rgba(249, 250, 251, 0.35);
+  transform: translateY(1px);
 }
 
 * {

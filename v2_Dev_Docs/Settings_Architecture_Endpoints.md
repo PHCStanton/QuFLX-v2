@@ -34,12 +34,10 @@ Focus is on **foundational, structurally sound** configuration that supports fut
 ---
 
 ### 2. User Profile Settings  
-*(Personal identification & preferences – visible in ProfileMenu)*
+*(Personal identification & preferences – visible in ProfileMenu; focused on account-level settings, not trading configuration)*
 
 **ESSENTIAL (High Priority)**  
 - Username / Display name  
-- Default stake size (for risk calculations)  
-- Preferred payout threshold (default 92%, adjustable for filtering)  
 
 **NICE-TO-HAVE (Medium Priority)**  
 - Avatar upload / placeholder selection  
@@ -190,5 +188,9 @@ Focus is on **foundational, structurally sound** configuration that supports fut
 - Versioned settings schema (for future migrations)  
 - Audit log for critical changes (e.g., risk limits adjusted) – optional but recommended  
 - Rate limiting / cost monitoring for AI queries (display usage warnings)  
+
+**Sidebar & Layout Alignment**  
+- "Calendar & Journal" and "Settings" are the only sidebar tabs that may use views without the chart visible; all other tabs should keep the chart area visible while their contextual panels change.  
+- In the sidebar order, place "Calendar & Journal" and "Settings" as the last two tabs, with "Calendar & Journal" immediately above and "Settings" pinned at the bottom, to clearly signal their different layout behavior.  
 
 This structure provides a clean, prioritized foundation: implement **Essential High Priority** items first across all sections to achieve a stable, safe production-ready state, then layer in Medium and Low priority features iteratively. The modular approach ensures new tabs or features can add their own settings without destabilizing existing ones.

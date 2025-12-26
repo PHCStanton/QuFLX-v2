@@ -33,6 +33,11 @@
 - `lightweight-charts`: Frontend charting.
 - `xai-sdk` or HTTP client: Integration with xAI chat/vision/voice APIs.
 
+## Settings & Configuration
+- Gateway exposes `GET /api/v1/settings` and `PUT /api/v1/settings` as the central API for platform settings, backed by a versioned JSON file in `data/settings/settings.json`.
+- Dashboard uses a dedicated Zustand `useSettingsStore` (separate from `useMarketStore`) to manage Global, User Profile, AI Assistant, and per-tab settings in a single, structured object.
+- A small `settingsClient` module in the Dashboard handles HTTP communication with the settings endpoints.
+
 ## Technical Constraints
 - **Latency**: Must process ticks and update charts within ~100ms for a responsive UI.
 - **Chrome Dependency**: The Collector requires a running Chrome instance with DevTools Protocol enabled.

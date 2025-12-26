@@ -49,9 +49,11 @@ const ChartWorkspace = () => {
   
   const timeframeOptions = [
     { label: 'Ticks', value: 'ticks' },
+    { label: '15 Second', value: '15s' },
     { label: '1 Minute', value: '1m' },
     { label: '5 Minutes', value: '5m' },
     { label: '15 Minutes', value: '15m' },
+    { label: '30 Minutes', value: '30m' },
     { label: '1 Hour', value: '1h' },
   ];
 
@@ -140,7 +142,7 @@ const ChartWorkspace = () => {
   };
 
   return (
-    <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 shadow-xl relative">
+    <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-2xl quflx-section-light border border-gray-800 shadow-xl relative">
       
       {/* Error Message Display */}
       {lastError && (
