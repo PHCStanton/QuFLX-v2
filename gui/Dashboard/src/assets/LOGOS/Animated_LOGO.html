@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuFLX_v.2 - Logo with Overlap</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      position: relative; /* Needed for absolute positioning of text */
+    }
+
+    /* Glowing Ring */
+    .glowing-ring {
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: #000;
+      position: relative;
+      box-shadow: 
+        0 0 30px rgba(0, 200, 255, 0.8),
+        inset 0 0 30px rgba(0, 200, 255, 0.4);
+      transition: all 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+      flex-shrink: 0;
+      z-index: 1;
+    }
+
+    .glowing-ring::before {
+      content: '';
+      position: absolute;
+      inset: -20px;
+      border-radius: 50%;
+      box-shadow: 
+        0 0 60px 20px rgba(0, 200, 255, 0.9),
+        0 0 100px 40px rgba(0, 150, 255, 0.5);
+      opacity: 0.9;
+      transition: all 0.6s ease;
+    }
+
+    .glowing-ring::after {
+      content: '';
+      position: absolute;
+      inset: -40px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 200, 255, 0.3) 0%, transparent 60%);
+      filter: blur(30px);
+      opacity: 0.7;
+      transition: all 0.6s ease;
+    }
+
+    /* Logo Text - positioned to overlap the ring on the left */
+    .logo-text {
+      font-family: 'Arial Black', 'Helvetica', sans-serif;
+      font-size: 80px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      white-space: nowrap;
+      position: absolute;
+      left: 50px; /* Adjust this value to control how much the "Q" overlaps the ring */
+      z-index: 2; /* Text above the ring */
+    }
+
+    .quflx {
+      background: linear-gradient(90deg, #003366, #00ccff, #00ffff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 
+        0 0 20px rgba(0, 200, 255, 0.6),
+        0 0 40px rgba(0, 220, 255, 0.4);
+      transition: all 0.6s ease;
+    }
+
+    .version {
+      font-size: 40px;
+      color: #00ccff;
+      opacity: 0.7;
+      text-shadow: 0 0 15px rgba(0, 200, 255, 0.5);
+      margin-left: 8px;
+    }
+
+    /* Unified Hover Effect */
+    .container:hover .glowing-ring {
+      transform: scale(1.08);
+      box-shadow: 
+        0 0 50px rgba(0, 255, 255, 1),
+        inset 0 0 50px rgba(0, 255, 255, 0.6);
+    }
+
+    .container:hover .glowing-ring::before {
+      box-shadow: 
+        0 0 80px 30px rgba(0, 255, 255, 1),
+        0 0 140px 60px rgba(0, 200, 255, 0.8);
+      opacity: 1;
+      animation: pulse 2s infinite alternate;
+    }
+
+    .container:hover .glowing-ring::after {
+      opacity: 1;
+      transform: scale(1.15);
+      filter: blur(40px);
+    }
+
+    .container:hover .quflx {
+      background: linear-gradient(90deg, #00ffff, #00ccff, #003366);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 
+        0 0 30px rgba(0, 255, 255, 1),
+        0 0 60px rgba(0, 220, 255, 0.8),
+        0 0 90px rgba(0, 255, 255, 0.6);
+    }
+
+    .container:hover .version {
+      color: #00ffff;
+      text-shadow: 0 0 25px rgba(0, 255, 255, 0.8);
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 
+          0 0 80px 30px rgba(0, 255, 255, 1),
+          0 0 140px 60px rgba(0, 200, 255, 0.8);
+      }
+      100% {
+        box-shadow: 
+          0 0 100px 40px rgba(0, 255, 255, 1),
+          0 0 180px 80px rgba(0, 220, 255, 0.9);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="glowing-ring"></div>
+    <div class="logo-text">
+      <span class="quflx">QuFLX</span><span class="version">_v.2</span>
+    </div>
+  </div>
+</body>
+</html>

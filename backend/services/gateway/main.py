@@ -12,6 +12,8 @@ from typing import List, Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import deque
+
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
@@ -30,6 +32,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 from backend.models.market_data import Candle, Tick
 from backend.models.events import Signal, SystemStatus
 from backend.services.ai.service import AIService
+from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
 
 # Configure logging
 logging.basicConfig(
@@ -494,6 +497,118 @@ async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
                 continue
 
     return {"asset": asset, "timeframe": int(timeframe), "count": len(rows), "data": list(rows)}
+
+
+@app.post("/api/v1/indicators")
+async def get_indicators(payload: Dict[str, Any] = Body(...)):
+    asset = payload.get("asset")
+    if not asset:
+        raise HTTPException(status_code=400, detail="asset required")
+
+    timeframe = payload.get("timeframe", "1m")
+    timeframe_min = 1
+    if isinstance(timeframe, str):
+        tf = timeframe.strip().lower()
+        if tf.endswith("m"):
+            try:
+                timeframe_min = max(1, int(tf[:-1]))
+            except Exception:
+                timeframe_min = 1
+        elif tf.isdigit():
+            timeframe_min = max(1, int(tf))
+
+    indicator_keys = payload.get("indicators") or []
+    if not isinstance(indicator_keys, list):
+        raise HTTPException(status_code=400, detail="indicators must be a list if provided")
+
+    limit = int(payload.get("limit", 300))
+    asset_clean = re.sub(r"[^\w\-_]", "_", asset)
+    root = Path(__file__).resolve().parents[3]
+    csv_path = root / "data" / "data_output" / "history" / asset_clean / f"{int(timeframe_min)}.csv"
+
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail=f"History not found for {asset} @ {timeframe_min}m")
+
+    records: List[Dict[str, Any]] = []
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if header is None:
+            return {
+                "asset": asset,
+                "timeframe_minutes": timeframe_min,
+                "series": {},
+                "latest_timestamp": None,
+            }
+
+        for row in reader:
+            if len(row) < 6:
+                continue
+            try:
+                ts = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+                records.append(
+                    {
+                        "timestamp": ts,
+                        "asset": asset,
+                        "open": float(row[1]),
+                        "high": float(row[2]),
+                        "low": float(row[3]),
+                        "close": float(row[4]),
+                    }
+                )
+            except Exception:
+                continue
+
+    if not records:
+        return {
+            "asset": asset,
+            "timeframe_minutes": timeframe_min,
+            "series": {},
+            "latest_timestamp": None,
+        }
+
+    if limit > 0 and len(records) > limit:
+        records = records[-limit:]
+
+    df = pd.DataFrame.from_records(records)
+
+    pipeline = TechnicalIndicatorsPipeline()
+    df_ind = pipeline.calculate_indicators(df)
+
+    if indicator_keys:
+        available_cols = set(df_ind.columns)
+        indicator_keys = [k for k in indicator_keys if k in available_cols]
+
+    if not indicator_keys:
+        indicator_keys = [
+            "rsi_14",
+            "macd",
+            "macd_signal",
+            "macd_histogram",
+            "cci",
+            "demarker",
+        ]
+
+    latest_ts = float(df_ind["timestamp"].iloc[-1]) if "timestamp" in df_ind.columns else float(records[-1]["timestamp"])
+
+    series: Dict[str, List[Dict[str, Any]]] = {}
+    for key in indicator_keys:
+        if key not in df_ind.columns:
+            continue
+        series_data: List[Dict[str, Any]] = []
+        for _, row in df_ind[["timestamp", key]].iterrows():
+            value = row.get(key)
+            if pd.isna(value):
+                continue
+            series_data.append({"time": float(row["timestamp"]), "value": float(value)})
+        series[key] = series_data
+
+    return {
+        "asset": asset,
+        "timeframe_minutes": timeframe_min,
+        "series": series,
+        "latest_timestamp": latest_ts,
+    }
 
 @app.post("/api/v1/refresh-assets")
 async def refresh_assets(payload: Dict[str, Any] = Body(...)):

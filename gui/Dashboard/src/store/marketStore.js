@@ -16,14 +16,16 @@ const createUiSlice = (set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   lastError: null,
   clearError: () => set({ lastError: null }),
-  activeIndicators: [
-    { id: 'rsi', name: 'RSI', value: '14' },
-    { id: 'ema', name: 'EMA', value: '200' },
-    { id: 'bb', name: 'Bollinger', value: '20, 2' }
-  ],
+  activeIndicators: [],
   addIndicator: (indicator) =>
     set((state) => ({
       activeIndicators: [...state.activeIndicators, indicator]
+    })),
+  updateIndicator: (id, patch) =>
+    set((state) => ({
+      activeIndicators: state.activeIndicators.map((indicator) =>
+        indicator.id === id ? { ...indicator, ...patch } : indicator
+      )
     })),
   removeIndicator: (id) =>
     set((state) => ({
@@ -107,6 +109,81 @@ const createMarketSlice = (set, get) => ({
     } catch (err) {
       console.error('Failed to select timeframe in backend:', err);
       set({ lastError: `Network error selecting timeframe: ${err.message}` });
+    }
+  },
+  indicatorSeries: {},
+  indicatorStatus: {},
+  loadIndicators: async ({ asset, timeframe, indicators }) => {
+    if (!asset || !timeframe || !Array.isArray(indicators) || indicators.length === 0) {
+      return;
+    }
+
+    const { historyStatus, historyCandles } = get();
+    const historyState = historyStatus && historyStatus[asset];
+    const candles = historyCandles && historyCandles[asset];
+    const hasHistoryCandles = Array.isArray(candles) && candles.length > 0;
+
+    if (historyState === 'not_found' || historyState === 'error' || historyState === 'empty') {
+      set({
+        lastError: `No historical data available for ${asset} @ ${timeframe}. Run history collection first.`
+      });
+      return;
+    }
+
+    if (!hasHistoryCandles && historyState !== 'loaded') {
+      return;
+    }
+
+    const key = `${asset}|${timeframe}`;
+
+    set((state) => ({
+      indicatorStatus: {
+        ...state.indicatorStatus,
+        [key]: 'loading'
+      }
+    }));
+
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/indicators', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset, timeframe, indicators })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        set((state) => ({
+          indicatorStatus: {
+            ...state.indicatorStatus,
+            [key]: 'error'
+          },
+          lastError: errorData.detail || `Failed to load indicators for ${asset}`
+        }));
+        return;
+      }
+
+      const data = await res.json();
+      const series = data.series || {};
+
+      set((state) => ({
+        indicatorSeries: {
+          ...state.indicatorSeries,
+          [key]: series
+        },
+        indicatorStatus: {
+          ...state.indicatorStatus,
+          [key]: 'loaded'
+        }
+      }));
+    } catch (err) {
+      console.error('Failed to load indicators:', err);
+      set((state) => ({
+        indicatorStatus: {
+          ...state.indicatorStatus,
+          [key]: 'error'
+        },
+        lastError: `Network error loading indicators: ${err.message}`
+      }));
     }
   },
   historyCandles: {},
