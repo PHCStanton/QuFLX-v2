@@ -20,7 +20,8 @@ const AssetPanel = () => {
     tickerMaxAssets,
     backendStatus,
     collectHistory,
-    setAssetFilterState
+    setAssetFilterState,
+    syncAssetUi,
   } = useMarketStore();
 
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
@@ -216,7 +217,16 @@ const AssetPanel = () => {
                   </div>
                 </div>
             </h3>
-            
+            <button
+              type="button"
+              onClick={() => syncAssetUi()}
+              className="ml-2 inline-flex items-center px-2 py-1 text-[10px] rounded-md bg-gray-800 border border-gray-700 hover:bg-gray-700"
+              title="Sync selected asset to Pocket Option UI"
+            >
+              <RefreshCw size={12} className="mr-1" />
+              Sync UI
+            </button>
+
             {/* View Toggle */}
             <div className="flex bg-gray-800 rounded p-0.5 border border-gray-700">
                 <button 

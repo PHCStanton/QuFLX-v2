@@ -116,6 +116,36 @@ const createMarketSlice = (set, get) => ({
       });
     }
   },
+  syncAssetUi: async () => {
+    const { selectedAsset, selectedAssetKey, payoutAssets } = get();
+    if (!selectedAsset) {
+      set({ lastError: 'No selected asset to sync UI' });
+      return;
+    }
+
+    const source = Array.isArray(payoutAssets) ? payoutAssets : [];
+    const normKey = selectedAssetKey || normalizeAsset(selectedAsset);
+    const mapped = source.find((a) => normalizeAsset(a) === normKey);
+    const uiAsset = mapped || selectedAsset;
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/sync-asset-ui', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset: uiAsset, min_pct: 92 })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const detail = errorData.detail || `Failed to sync asset UI for: ${uiAsset}`;
+        console.error('Sync asset UI failed:', detail);
+        set({ lastError: detail });
+      }
+    } catch (err) {
+      console.error('Sync asset UI request failed:', err);
+      set({ lastError: `Network error syncing asset UI: ${err.message}` });
+    }
+  },
   syncTimeframeUi: async () => {
     const timeframe = get().selectedTimeframe;
     if (!timeframe) return;
