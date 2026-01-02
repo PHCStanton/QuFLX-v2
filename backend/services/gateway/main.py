@@ -1157,6 +1157,77 @@ async def sync_timeframe_ui(payload: Dict[str, Any] = Body(...)):
         logger.error(f"Sync timeframe UI failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/api/v1/sync-asset-ui")
+async def sync_asset_ui(payload: Dict[str, Any] = Body(...)):
+    asset = payload.get("asset")
+    if not asset or not isinstance(asset, str):
+        raise HTTPException(status_code=400, detail="Asset required")
+
+    min_pct = payload.get("min_pct", 92)
+    try:
+        min_pct_int = int(min_pct)
+    except Exception:
+        raise HTTPException(status_code=400, detail="min_pct must be an integer")
+
+    try:
+        runner_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py")
+        )
+
+        inputs = {
+            "assets": [asset],
+            "min_pct": min_pct_int,
+            "all": False,
+        }
+
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                runner_path,
+                "favorites_walk_select",
+                "--inputs",
+                json.dumps(inputs),
+                "--verbose",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Sync asset UI failed: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+
+        try:
+            out = _parse_script_json(result.stdout)
+        except Exception as e:
+            logger.error(f"Invalid sync asset UI output: {e} | raw={result.stdout}")
+            raise HTTPException(status_code=502, detail="Invalid script output")
+
+        if not out.get("ok"):
+            detail = str(out.get("error") or "asset sync failed")
+            raise HTTPException(status_code=500, detail=detail)
+
+        data = out.get("data", {})
+
+        return {
+            "status": "success",
+            "asset": asset,
+            "min_pct": min_pct_int,
+            "data": data,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Sync asset UI failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:socket_app", host="0.0.0.0", port=8000, reload=True)

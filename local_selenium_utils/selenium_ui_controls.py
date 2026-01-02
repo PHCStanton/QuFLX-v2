@@ -189,6 +189,22 @@ class HighPriorityControls:
             except Exception:
                 return False
 
+    def ensure_clickable_anchor(self, element: Any) -> Any:
+        """
+        If the element is a <span> (common label in PO buttons), find its closest <a> parent.
+        Returns the original element if it's already an <a> or if no <a> parent is found.
+        """
+        try:
+            tag = (element.tag_name or "").lower()
+            if tag == "span":
+                # Platform specific: Anchor tags are the reliable event listeners
+                parent_a = element.find_element(By.XPATH, "ancestor::a[1]")
+                if parent_a:
+                    return parent_a
+        except Exception:
+            pass
+        return element
+
     # ---------- Right Panel (Expand/Verify) ----------
 
     def _get_element_width(self, el) -> Optional[float]:

@@ -18,6 +18,7 @@ from capabilities_v2.favorite_star_select import FavoriteStarSelect
 from capabilities_v2.collect_history_loop import CollectHistoryLoop
 from capabilities_v2.topdown_select_test_2 import TopdownSelectTest2
 from capabilities_v2.timeframe_select_sync import TimeframeSelectSync
+from capabilities_v2.favorites_walk_select import FavoritesWalkSelect
 
 CAPABILITY_MAP = {
     "history_collector": HistoryCollector,
@@ -28,6 +29,7 @@ CAPABILITY_MAP = {
     "refresh_assets": FavoriteStarSelect,
     "topdown_select_test_2": TopdownSelectTest2,
     "timeframe_select_sync": TimeframeSelectSync,
+    "favorites_walk_select": FavoritesWalkSelect,
 }
 
 def main():
@@ -47,11 +49,14 @@ def main():
         }))
         sys.exit(1)
         
-    try:
-        inputs = json.loads(args.inputs)
-    except json.JSONDecodeError:
-        print(json.dumps({"ok": False, "error": "Invalid JSON inputs"}))
-        sys.exit(1)
+    inputs = {}
+    if args.inputs and args.inputs.strip():
+        try:
+            maybe_inputs = json.loads(args.inputs)
+            if isinstance(maybe_inputs, dict):
+                inputs = maybe_inputs
+        except json.JSONDecodeError:
+            inputs = {}
         
     try:
         import qf  # type: ignore

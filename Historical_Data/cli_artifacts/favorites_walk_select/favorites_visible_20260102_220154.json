@@ -1,0 +1,72 @@
+{
+  "visible": [
+    {
+      "asset": "EUR/USD OTC",
+      "data_id": "EURUSD_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "EUR/NZD OTC",
+      "data_id": "EURNZD_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "EUR/JPY OTC",
+      "data_id": "EURJPY_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "EUR/HUF OTC",
+      "data_id": "EURHUF_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "CAD/JPY OTC",
+      "data_id": "CADJPY_otc",
+      "payout": "+41"
+    },
+    {
+      "asset": "CAD/CHF OTC",
+      "data_id": "CADCHF_otc",
+      "payout": "+84"
+    },
+    {
+      "asset": "AUD/USD OTC",
+      "data_id": "AUDUSD_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "AUD/CHF OTC",
+      "data_id": "AUDCHF_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "AUD/CAD OTC",
+      "data_id": "AUDCAD_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "AED/CNY OTC",
+      "data_id": "AEDCNY_otc",
+      "payout": "+92"
+    },
+    {
+      "asset": "AUD/NZD OTC",
+      "data_id": "AUDNZD_otc",
+      "payout": "+57"
+    }
+  ],
+  "assets": [
+    "EUR/USD OTC",
+    "EUR/NZD OTC",
+    "EUR/JPY OTC",
+    "EUR/HUF OTC",
+    "CAD/JPY OTC",
+    "CAD/CHF OTC",
+    "AUD/USD OTC",
+    "AUD/CHF OTC",
+    "AUD/CAD OTC",
+    "AED/CNY OTC",
+    "AUD/NZD OTC"
+  ]
+}

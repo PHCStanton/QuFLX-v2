@@ -110,10 +110,34 @@ class FavoritesBar(Capability):
                     continue
         except Exception as e:
             return CapResult(ok=False, data={}, error=str(e))
-        return CapResult(ok=True, data={"visible": items, "assets": [it.get("asset") for it in items if it.get("asset")]})
+        data = {
+            "visible": items,
+            "assets": [it.get("asset") for it in items if it.get("asset")],
+        }
+
+        artifacts: List[str] = []
+        if getattr(ctx, "debug", False):
+            try:
+                diag = save_json(
+                    ctx,
+                    f"favorites_visible_{timestamp()}.json",
+                    data,
+                    subfolder="favorites_walk_select",
+                )
+                artifacts.append(diag)
+            except Exception:
+                pass
+
+        return CapResult(ok=True, data=data, artifacts=tuple(artifacts))
 
     def _click_favorite(self, ctx: Ctx, label: str) -> CapResult:
         drv = ctx.driver
+        hpc = None
+        if HighPriorityControls is not None:
+            try:
+                hpc = HighPriorityControls(drv)
+            except Exception:
+                hpc = None
         try:
             nodes = drv.find_elements(By.CSS_SELECTOR, ".assets-favorites-item__line")
             target = None
@@ -124,19 +148,32 @@ class FavoritesBar(Capability):
                     lbl = n.find_element(By.CSS_SELECTOR, ".assets-favorites-item__label")
                     txt = (lbl.text or "").strip()
                     if txt == label:
-                        try:
-                            target = n.find_element(By.XPATH, "ancestor::div[contains(@class,'assets-favorites-item')][1]")
-                        except Exception:
-                            target = n
+                        # Harden: Traverse from label (span) to clickable parent anchor if possible
+                        if hpc:
+                            target = hpc.ensure_clickable_anchor(lbl)
+                        else:
+                            try:
+                                target = n.find_element(By.XPATH, "ancestor::div[contains(@class,'assets-favorites-item')][1]")
+                            except Exception:
+                                target = n
                         break
                 except Exception:
                     continue
+
             if not target:
                 return CapResult(ok=False, data={}, error="favorite not visible")
-            try:
-                target.click()
-            except Exception:
-                drv.execute_script("arguments[0].click();", target)
+
+            # Resilient click pipeline
+            if hpc:
+                ok_click = hpc._click_element_safely(target)
+                if not ok_click:
+                    return CapResult(ok=False, data={}, error=f"failed to click {label}")
+            else:
+                try:
+                    target.click()
+                except Exception:
+                    drv.execute_script("arguments[0].click();", target)
+
             return CapResult(ok=True, data={"clicked": label})
         except Exception as e:
             return CapResult(ok=False, data={}, error=str(e))
