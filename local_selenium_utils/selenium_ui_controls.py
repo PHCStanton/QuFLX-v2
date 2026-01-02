@@ -804,19 +804,32 @@ class HighPriorityControls:
         try:
             self._scroll_into_view(button_el)
 
+            # Special handling for PocketOption: if we found a <span>, move to its parent <a>
+            # as per Chrome Dev analysis in v2_Dev_Docs/Timeframe_Button_Chrome_Dev-Ai.md
+            try:
+                tag = (button_el.tag_name or "").lower()
+                if tag == "span":
+                    parent_a = button_el.find_element(By.XPATH, "ancestor::a[1]")
+                    if parent_a:
+                        button_el = parent_a
+                        meta["clicked_target_adjusted"] = "span_to_parent_a"
+            except Exception:
+                pass
+
             # Try regular click first
             try:
                 button_el.click()
                 meta["clicked"] = True
                 meta["click_method"] = "native"
-            except Exception:
+            except Exception as e:
                 # Fallback to JavaScript click
+                meta["click_attempts"].append({"method": "native", "error": str(e)})
                 self.driver.execute_script("arguments[0].click();", button_el)
                 meta["clicked"] = True
                 meta["click_method"] = "javascript"
 
             # Brief wait for dropdown to open
-            time.sleep(0.3)
+            time.sleep(0.4)
 
             # Verify dropdown opened by looking for common dropdown indicators
             dropdown_indicators = [
@@ -824,12 +837,22 @@ class HighPriorityControls:
                 ("css", "[role='menu'], [role='listbox']"),
                 ("xpath", "//*[contains(@class,'dropdown') and contains(@class,'open')]"),
                 ("xpath", "//div[contains(@class,'chart-types') or contains(@class,'timeframes')]"),
+                ("css", ".items__list"), # PO specific
             ]
 
             dropdown_el, _, _, _ = self._find_first_visible(dropdown_indicators)
             if dropdown_el:
                 meta["dropdown_opened"] = True
                 meta["ok"] = True
+            else:
+                # Force a check via is_displayed on the button classes to see if it toggled
+                try:
+                    classes = button_el.get_attribute("class") or ""
+                    if "active" in classes.lower() or "open" in classes.lower():
+                        meta["dropdown_opened"] = True
+                        meta["ok"] = True
+                except Exception:
+                    pass
 
         except Exception as e:
             meta["click_error"] = str(e)

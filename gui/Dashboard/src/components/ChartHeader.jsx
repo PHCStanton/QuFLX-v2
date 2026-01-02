@@ -1,5 +1,5 @@
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText, Plus } from 'lucide-react';
+import { X, Layers, Clock, FileText, Plus, RefreshCcw } from 'lucide-react';
 import ChartActions from './ChartActions';
 
 const ChartHeader = ({
@@ -20,7 +20,9 @@ const ChartHeader = ({
   onAskAi,
   isAsking,
   isCapturing,
-  onIndicatorClick
+  onIndicatorClick,
+  onSyncTimeframe,
+  isSyncingTimeframe
 }) => {
   return (
     <div className="p-1.5 border-b border-gray-700 bg-gray-800/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
@@ -41,6 +43,18 @@ const ChartHeader = ({
             icon={Clock}
           />
         </div>
+
+        {onSyncTimeframe && (
+          <button
+            type="button"
+            onClick={onSyncTimeframe}
+            disabled={isSyncingTimeframe}
+            className="inline-flex items-center px-2 py-1 text-[11px] rounded-md bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-60"
+          >
+            <RefreshCcw className="w-3 h-3 mr-1" />
+            {isSyncingTimeframe ? 'Syncing' : 'Sync UI'}
+          </button>
+        )}
 
         <div className="w-32">
           <Combobox 

@@ -90,3 +90,13 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
     - Browser ↔ Backend (local WebSocket for PCM audio).
     - Backend ↔ xAI Voice Agent API (`wss://api.x.ai/v1/realtime`).
   - The backend voice gateway is stateless per session and integrates with the same `TradingContext` builder and tool layer used by the text assistant.
+
+
+## PocketOption Topdown v2 Capability Pattern
+- Selenium automation for PocketOption is now centralized in `capabilities_v2/` rather than in ad-hoc scripts.
+- Low-level UI controls (`session_foundations`, `favorites_bar`, `timeframe_menu`) are composed into higher-level orchestrators (`topdown_select_test_2`, `collect_history_loop`) and a robust control primitive (`timeframe_select_sync`).
+- Data collection follows a layered pattern:
+  1. Selenium selects asset + timeframe.
+  2. Backend WebSocket interceptor (`HistoryCollector`) extracts history and ticks.
+  3. Aggregated candles are saved to CSV for offline analysis.
+- The Gateway should invoke these capabilities via `capabilities_v2/runner.py` and treat stdout as semi-structured (status lines + trailing JSON), rather than importing Selenium code directly.

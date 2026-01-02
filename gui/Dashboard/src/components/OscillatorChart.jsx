@@ -47,18 +47,41 @@ const OscillatorChart = ({
     chartRef.current = chart;
     seriesRef.current = series;
 
-    if (mainChart && mainChart.timeScale) {
-      const mainTimeScale = mainChart.timeScale();
-      const oscTimeScale = chart.timeScale();
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.remove();
+      }
+      chartRef.current = null;
+      seriesRef.current = null;
+      syncSubscriptionRef.current = null;
+    };
+  }, [type]);
 
-      const sync = (range) => {
-        if (!range) return;
-        oscTimeScale.setVisibleRange(range);
-      };
-
-      mainTimeScale.subscribeVisibleTimeRangeChange(sync);
-      syncSubscriptionRef.current = { mainTimeScale, sync };
+  useEffect(() => {
+    if (!mainChart || !chartRef.current || !mainChart.timeScale) {
+      return;
     }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      return;
+    }
+
+    const mainTimeScale = mainChart.timeScale();
+    const oscTimeScale = chartRef.current.timeScale();
+
+    const sync = (range) => {
+      if (!range || range.from == null || range.to == null) {
+        return;
+      }
+      try {
+        oscTimeScale.setVisibleRange(range);
+      } catch (err) {
+        console.error('Failed to sync oscillator time scale', err);
+      }
+    };
+
+    mainTimeScale.subscribeVisibleTimeRangeChange(sync);
+    syncSubscriptionRef.current = { mainTimeScale, sync };
 
     return () => {
       if (syncSubscriptionRef.current) {
@@ -67,15 +90,9 @@ const OscillatorChart = ({
           mainTimeScale.unsubscribeVisibleTimeRangeChange(sync);
         }
       }
-
-      if (chartRef.current) {
-        chartRef.current.remove();
-      }
-      chartRef.current = null;
-      seriesRef.current = null;
       syncSubscriptionRef.current = null;
     };
-  }, [mainChart, type]);
+  }, [mainChart, data]);
 
   useEffect(() => {
     if (!seriesRef.current) return;
@@ -83,7 +100,21 @@ const OscillatorChart = ({
       seriesRef.current.setData([]);
       return;
     }
-    seriesRef.current.setData(data);
+    const cleaned = data.filter((point) => point && point.time != null && point.value != null);
+
+    if (cleaned.length === 0) {
+      seriesRef.current.setData([]);
+      return;
+    }
+
+    const sorted = [...cleaned].sort((a, b) => {
+      const ta = typeof a.time === 'string' ? Number(a.time) : a.time;
+      const tb = typeof b.time === 'string' ? Number(b.time) : b.time;
+      if (ta == null || tb == null) return 0;
+      return ta - tb;
+    });
+
+    seriesRef.current.setData(sorted);
   }, [data]);
 
   return (

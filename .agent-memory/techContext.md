@@ -62,3 +62,13 @@
 - **Unit Tests**: For core logic (parsers, indicators, regime detection, AI Gateway request shaping).
 - **Integration Tests**: Verify Redis pub/sub flow and Gateway endpoints (including `/api/v1/ai/ask` once implemented).
 - **End-to-End Tests**: Verify full pipeline from Chrome to Chart; later, add flows that include Ask-AI interactions to ensure context injection wiring is correct.
+
+
+## Selenium Capabilities for PocketOption Topdown v2
+- v2 Selenium capabilities under `capabilities_v2/` formalize the PocketOption automation layer:
+  - `session_foundations.py`: validates that the current Chrome session is on a suitable PocketOption layout and that key UI elements (chart, favorites bar, timeframe control) are present.
+  - `favorites_bar.py`: provides `reset_to_left`, `scroll_right`, `get_visible_favorites`, and `click_favorite` actions over the PocketOption favorites bar.
+  - `timeframe_menu.py`: encapsulates timeframe dropdown opening and label selection, including alias normalization and iframe-aware search.
+  - `timeframe_select_sync.py`: adds retries, chart-focus recovery, and diagnostics around `timeframe_menu` to stabilize timeframe selection.
+  - `history_collector.py` + `collect_history_loop.py`: bridge from Selenium-attached Chrome to WebSocket-based candle collection and CSV output.
+- `capabilities_v2/runner.py` exposes these via a generic CLI entry point, and the Gateway is expected to call `runner.py` rather than importing Selenium code directly.

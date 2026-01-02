@@ -5,7 +5,14 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Set
 
-from .base import Ctx, CapResult, Capability, take_screenshot_if, save_json, timestamp
+try:
+    from .base import Ctx, CapResult, Capability, take_screenshot_if, save_json, timestamp
+except ImportError:
+    this_file = Path(__file__).resolve()
+    project_root = this_file.parents[1]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    from capabilities_v2.base import Ctx, CapResult, Capability, take_screenshot_if, save_json, timestamp  # type: ignore
 
 try:
     from selenium.webdriver.common.by import By
@@ -47,11 +54,31 @@ class TimeframeMenu(Capability):
     def _is_open(self, ctx: Ctx) -> bool:
         drv = ctx.driver
         try:
-            inds = drv.find_elements(By.CSS_SELECTOR, ".dropdown.open, [role='menu'], [role='listbox']")
-            for el in inds:
+            # PocketOption specific indicators and common roles
+            # We look for containers that have 'open' or 'show' classes, or are explicitly menus/listboxes
+            selectors = [
+                ".dropdown.open", 
+                ".dropdown.show", 
+                ".menu.open", 
+                ".menu.show",
+                "[role='menu']", 
+                "[role='listbox']",
+                ".items__list", # The container for PO timeframe items
+                ".dropdown-menu",
+                ".popover"
+            ]
+            for sel in selectors:
                 try:
-                    if el.is_displayed():
-                        return True
+                    els = drv.find_elements(By.CSS_SELECTOR, sel)
+                    for el in els:
+                        if el.is_displayed():
+                            # Additional check for PO: the timeframe container usually has items
+                            if sel == ".items__list":
+                                items = el.find_elements(By.CSS_SELECTOR, ".item")
+                                if items:
+                                    return True
+                            else:
+                                return True
                 except Exception:
                     continue
             return False
@@ -64,31 +91,56 @@ class TimeframeMenu(Capability):
         shot = take_screenshot_if(ctx, f"screenshots/timeframe_open_pre_{timestamp()}.png")
         if shot:
             arts.append(shot)
-        btn = None
+        
         try:
             if HighPriorityControls is not None:
                 hpc = HighPriorityControls(drv)
-                meta = hpc.find_chart_timeframe_dropdown_with_meta()
-                btn = meta.get("button_element")
-            if btn is None:
-                for b in drv.find_elements(By.CSS_SELECTOR, "a.items__link--chart-type"):
-                    try:
-                        if b.is_displayed():
-                            btn = b
-                            break
-                    except Exception:
-                        continue
+                # Use the robust click method which handles scrolling, native vs JS clicks, and dropdown verification
+                meta = hpc.click_chart_timeframe_dropdown_with_meta()
+                ok = bool(meta.get("ok"))
+                
+                # Carry over rich metadata for diagnostics
+                res_data = {
+                    "opened": ok,
+                    "hpc_meta": {k: v for k, v in meta.items() if k != "button_element"}
+                }
+                
+                if ok:
+                    post = take_screenshot_if(ctx, f"screenshots/timeframe_open_post_{timestamp()}.png")
+                    if post:
+                        arts.append(post)
+                    return CapResult(ok=True, data=res_data, artifacts=tuple(arts))
+                
+                # If HPC failed, check if we're actually open anyway (maybe detector missed it)
+                if self._is_open(ctx):
+                    return CapResult(ok=True, data={"opened": True, "note": "HPC reported failure but _is_open is True"}, artifacts=tuple(arts))
+
+            # Legacy fallback if HighPriorityControls fails or is unavailable
+            btn = None
+            for b in drv.find_elements(By.CSS_SELECTOR, "a.items__link--chart-type"):
+                try:
+                    if b.is_displayed():
+                        btn = b
+                        break
+                except Exception:
+                    continue
+            
             if btn is None:
                 return CapResult(ok=False, data={}, error="menu button not found", artifacts=tuple(arts))
+            
             try:
+                drv.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
                 btn.click()
             except Exception:
                 drv.execute_script("arguments[0].click();", btn)
+            
+            time.sleep(0.3)
             ok = self._is_open(ctx)
             post = take_screenshot_if(ctx, f"screenshots/timeframe_open_post_{timestamp()}.png")
             if post:
                 arts.append(post)
-            return CapResult(ok=ok, data={"opened": ok}, error=None if ok else "open failed", artifacts=tuple(arts))
+            return CapResult(ok=ok, data={"opened": ok, "method": "legacy_fallback"}, error=None if ok else "open failed", artifacts=tuple(arts))
+            
         except Exception as e:
             return CapResult(ok=False, data={}, error=str(e), artifacts=tuple(arts))
 
@@ -152,12 +204,13 @@ class TimeframeMenu(Capability):
 
         opts = []
         try:
-            opts = drv.find_elements(By.CSS_SELECTOR, ".items__list .item")
+            # PO primary selector for items in the timeframe menu
+            opts = drv.find_elements(By.CSS_SELECTOR, ".items__list .item, .items__list .items__item")
         except Exception:
             opts = []
         if not opts:
             try:
-                opts = drv.find_elements(By.CSS_SELECTOR, "[role='option'], .tf-option, .timeframe-options button")
+                opts = drv.find_elements(By.CSS_SELECTOR, "[role='option'], .tf-option, .timeframe-options button, a span, a")
             except Exception:
                 opts = []
 
@@ -167,12 +220,40 @@ class TimeframeMenu(Capability):
                 txt = (el.text or "").strip()
                 if txt:
                     option_texts.append(txt)
-                if self._normalize_label(txt) in aliases:
+                
+                norm_txt = self._normalize_label(txt)
+                if norm_txt in aliases:
                     try:
-                        el.click()
-                    except Exception:
-                        drv.execute_script("arguments[0].click();", el)
-                    return True, {"method": "selenium", "clicked_text": txt, "options": option_texts[:40]}
+                        # Ensure visible before clicking
+                        drv.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                        
+                        target = el
+                        # Important: pocketoption items are often <span> inside <a>
+                        # We must click the <a> for the event to fire correctly
+                        try:
+                            tag = (el.tag_name or "").lower()
+                            if tag != "a":
+                                parent = el.find_element(By.XPATH, "ancestor::a[1]")
+                                if parent is not None:
+                                    target = parent
+                        except Exception:
+                            target = el
+                        
+                        try:
+                            target.click()
+                        except Exception:
+                            # Fallback to JS click on the best guess target
+                            drv.execute_script(
+                                "var t=arguments[0]; var p=t.closest ? t.closest('a') : null; (p||t).click();",
+                                el,
+                            )
+                    except Exception as click_e:
+                        # Last ditch attempt with pure JS if everything else fails
+                        drv.execute_script(
+                            "arguments[0].click();", el
+                        )
+                    
+                    return True, {"method": "selenium_with_traversal", "clicked_text": txt, "options": option_texts[:40]}
             except Exception:
                 continue
 
@@ -188,7 +269,9 @@ class TimeframeMenu(Capability):
                   '.items__list button',
                   '[role="option"]',
                   '.tf-option',
-                  '.timeframe-options button'
+                  '.timeframe-options button',
+                  'a span',
+                  'a'
                 ];
                 const nodes = selectors.flatMap(sel => Array.from(document.querySelectorAll(sel)));
                 const visible = (el) => {
@@ -209,7 +292,12 @@ class TimeframeMenu(Capability):
                   const t = (el.innerText || el.textContent || '').trim();
                   const n = normalize(t);
                   if (aliases.includes(n)) {
-                    el.click();
+                    let target = el;
+                    if (target && target.closest) {
+                      const a = target.closest('a');
+                      if (a) target = a;
+                    }
+                    target.click();
                     return { ok: true, clicked_text: t, options: options.slice(0, 40) };
                   }
                 }
@@ -280,6 +368,21 @@ class TimeframeMenu(Capability):
             out.add(f"d{n}")
             out.add(f"{n} day")
             out.add(f"{n} days")
+
+        s = re.match(r"^(\d+)s$", norm.replace(" ", ""))
+        if s:
+            n = s.group(1)
+            out.add(f"s{n}")
+            out.add(f"{n} sec")
+            out.add(f"{n} secs")
+            out.add(f"{n} second")
+            out.add(f"{n} seconds")
+
+        sc = re.match(r"^(\d+)\s*sec(?:s)?$", norm)
+        if sc:
+            n = sc.group(1)
+            out.add(f"{n}s")
+            out.add(f"s{n}")
 
         ms = re.match(r"^(\d+)\s*min$", norm)
         if ms:

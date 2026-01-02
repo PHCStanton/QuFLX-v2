@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Neomorphic AI Button</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #e0e0e0;
+      font-family: system-ui, sans-serif;
+    }
+
+    .neo-button {
+      width: 120px;
+      height: 120px;
+      background: #e0e0e0;
+      border-radius: 30px;
+      box-shadow: 
+        12px 12px 24px #bebebe,
+        -12px -12px 24px #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      user-select: none;
+    }
+
+    .neo-button:active {
+      box-shadow: 
+        inset 8px 8px 16px #bebebe,
+        inset -8px -8px 16px #ffffff;
+      transform: scale(0.95);
+    }
+
+    .neo-button svg {
+      width: 60px;
+      height: 90px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="neo-button">
+    <svg viewBox="0 0 200 300" xmlns="http://www.w3.org/2000/svg">
+      <!-- Large sparkle (center-right) -->
+      <path d="M140 200 L100 140 L140 80 L180 140 Z
+               M140 240 C120 220 110 190 110 160
+               C110 130 120 100 140 80
+               C160 100 170 130 170 160
+               C170 190 160 220 140 240 Z" fill="#333"/>
+
+      <!-- Medium sparkle (top-left) -->
+      <g transform="translate(20,20) scale(0.7)">
+        <path d="M60 60 L30 30 L60 0 L90 30 Z
+                 M60 90 C45 75 35 50 35 30
+                 C35 10 45 0 60 0
+                 C75 0 85 10 85 30
+                 C85 50 75 75 60 90 Z" fill="#333"/>
+      </g>
+
+      <!-- Small sparkle (bottom-left) -->
+      <path d="M50 240 L30 220 L50 200 L70 220 Z
+               M50 260 C40 250 35 235 35 220
+               C35 205 40 190 50 190
+               C60 190 65 205 65 220
+               C65 235 60 250 50 260 Z" fill="#333"/>
+    </svg>
+  </div>
+
+</body>
+</html>

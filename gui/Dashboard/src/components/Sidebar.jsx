@@ -19,9 +19,12 @@ const Sidebar = () => {
 	<div className={`${isSidebarOpen ? 'w-64' : 'w-16'} quflx-sidebar bg-card-bg border-r border-gray-700 transition-all duration-300 flex flex-col`}>
       <div className="p-4 flex items-center justify-between border-b border-gray-700">
 		{isSidebarOpen && (
-		  <div className="quflx-logo flex items-center">
+		  <div className="quflx-logo">
 			<div className="quflx-logo-glow" />
-			<span className="quflx-logo-text relative font-bold text-xl text-accent-green">QuFLX</span>
+			<div className="quflx-logo-text">
+			  <span className="quflx-logo-text-main">QuFLX</span>
+			  <span className="quflx-logo-text-version">_v.2</span>
+			</div>
 		  </div>
 		)}
         <button onClick={toggleSidebar} className="p-1 hover:bg-gray-700 rounded">

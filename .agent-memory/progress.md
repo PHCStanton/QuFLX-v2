@@ -21,6 +21,14 @@
 - [x] Socket.IO Integration
 - [x] Historical Data API (Bootstrap + Fallback)
 
+## Phase 4.1: Pocket Option Timeframe Sync (Completed)
+- [x] Wire timeframe sync endpoint in Gateway and Selenium capability (`capabilities_v2/timeframe_menu.py`) to the Dashboard Sync button.
+- [x] improve Gateway error messaging for timeframe menu selection failures.
+- [x] Extend timeframe menu automation selectors to handle `a`/`span` label elements.
+- [x] Capture DOM ground truth for timeframe controls (identified span-to-anchor tangle).
+- [x] Implement parent-anchor traversal in `local_selenium_utils/selenium_ui_controls.py`.
+- [x] Validate end-to-end Sync flow via `TopdownSelectTest2` with robust sync enabled.
+
 ## Phase 5: The UI (Frontend Rebuild) (Core Streaming Complete)
 - [x] State Management (Zustand store created and wired to Socket.IO)
 - [x] Chart Components (Lightweight Charts integrated with tick aggregation)
@@ -53,15 +61,25 @@
 - [ ] Design frontend voice assistant UI (mic control, transcripts, session state).
 - [ ] Define shared session model between text and voice assistants.
 
-## Phase 5.4: Settings & Configuration Architecture (Foundation Complete)
+## Phase 5.4: Settings & Configuration Architecture (Foundation & Scaffolding Complete)
 - [x] Define settings architecture across Global, User Profile, AI Assistant, and each Sidebar tab section in `v2_Dev_Docs/Settings_Architecture_Endpoints.md`.
 - [x] Implement versioned settings storage in the Gateway using `data/settings/settings.json` and helper functions in `backend/services/gateway/main.py`.
 - [x] Add `GET /api/v1/settings` and `PUT /api/v1/settings` endpoints for centralized configuration management.
 - [x] Create a dedicated `useSettingsStore` (Zustand) in `gui/Dashboard/src/store/settingsStore.js` that mirrors the documented settings sections and keeps configuration separate from `useMarketStore`.
 - [x] Add `gui/Dashboard/src/api/settingsClient.js` to communicate with the new settings endpoints.
-- [x] Align sidebar tab ordering so `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last, matching the settings/layout design.
+- [x] Provision Recommended Platform Settings Scaffolding in `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`.
+- [x] Align sidebar tab ordering so `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last.
 
 ## Phase 6: Integration & Polish (Pending)
 - [ ] System Orchestration and resilience testing (restart tolerance, degraded modes).
 - [ ] Comprehensive Documentation & Onboarding Guides, including AI usage and limitations.
 - [ ] Automated tests for indicator visualization and AI workflows.
+
+
+## Phase 4.2: Pocket Option Topdown v2 (Timeframe + Data Collection Foundation)
+- [x] Implemented `capabilities_v2/timeframe_select_sync.py` for robust timeframe selection with retries and chart-focus recovery.
+- [x] Extended `capabilities_v2/topdown_select_test_2.py` to optionally use `timeframe_select_sync` and expose CLI flags (`--use-tf-sync`, `--tf-attempts`, `--tf-wait-s`, etc.).
+- [x] Updated `capabilities_v2/collect_history_loop.py` to integrate `timeframe_select_sync` for enforcing a per-asset timeframe before history collection.
+- [x] Confirmed that `capabilities_v2/history_collector.py` and `collect_history_loop.py` together provide a v2-native path from Selenium-attached Chrome → WebSocket interceptor → CSV candle output.
+- [x] Created `capabilities_v2/topdown_select_v2_guide.md` documenting the topdown v2 flow and capabilities.
+- [x] Re-ran `python -m pytest -q` after changes to ensure no regressions.

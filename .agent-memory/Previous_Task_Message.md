@@ -29,3 +29,11 @@ I have completed several architecture and documentation tasks to prepare QuFLX v
   - A new Zustand `useSettingsStore` in `gui/Dashboard/src/store/settingsStore.js` that keeps settings separate from `useMarketStore` while mirroring the Global/User/AI + per-tab sections.
   - A frontend `settingsClient` in `gui/Dashboard/src/api/settingsClient.js` that talks to the new settings endpoints.
   - Sidebar tab ordering updated so `Calendar & Journal` and `Settings` are the final two sidebar items, with `Settings` pinned last, matching the settings/layout design notes.
+
+
+Additional tasks completed around PocketOption topdown v2 capabilities:
+- Implemented `capabilities_v2/timeframe_select_sync.py` as a robust timeframe selection capability with retries, chart-focus recovery, and diagnostics.
+- Updated `capabilities_v2/topdown_select_test_2.py` to optionally call `timeframe_select_sync`, enabling A/B testing between direct `timeframe_menu` usage and the robust sync wrapper.
+- Integrated `timeframe_select_sync` into `capabilities_v2/collect_history_loop.py` so that history collection can enforce a specific timeframe per asset before invoking `history_collector`.
+- Wired all relevant capabilities into `capabilities_v2/runner.py` and verified that `python -m pytest -q` still passes.
+- Authored `capabilities_v2/topdown_select_v2_guide.md` summarizing the architecture, flows, and usage patterns for topdown v2 and data collection.

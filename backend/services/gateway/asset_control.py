@@ -268,8 +268,9 @@ class AssetControl(Capability):
         """
         driver = ctx.driver
         
-        # Map '1m' to '1 min' or whatever the UI uses
+        # Map timeframe keys to common UI labels
         tf_map = {
+            '15s': '15 sec',
             '1m': '1 min',
             '5m': '5 min',
             '15m': '15 min',

@@ -26,6 +26,7 @@ const ChartWorkspace = () => {
     indicatorStatus,
     loadIndicators,
     lastError, clearError,
+    syncTimeframeUi,
   } = useMarketStore();
 
   const health = useStreamHealth();
@@ -38,6 +39,7 @@ const ChartWorkspace = () => {
   const [settingsIndicator, setSettingsIndicator] = useState(null);
   const [oscillatorHeight, setOscillatorHeight] = useState(120);
   const oscDragStateRef = useRef(null);
+  const [isSyncingTimeframe, setIsSyncingTimeframe] = useState(false);
 
   const handleChartReady = useCallback(({ chart, series }) => {
     setCandleSeries(series);
@@ -109,15 +111,33 @@ const ChartWorkspace = () => {
       return;
     }
 
-    const indicators = oscillatorIndicators
-      .map((ind) => ind.key)
-      .filter((key) => typeof key === 'string');
+    const indicators = [];
+    const paramsByKey = {};
+
+    oscillatorIndicators.forEach((ind) => {
+      if (!ind || typeof ind.key !== 'string') {
+        return;
+      }
+
+      indicators.push(ind.key);
+
+      if (ind.params && typeof ind.params === 'object' && !Array.isArray(ind.params)) {
+        paramsByKey[ind.key] = ind.params;
+      }
+    });
 
     if (indicators.length === 0) {
       return;
     }
 
-    loadIndicators({ asset: selectedAsset, timeframe: selectedTimeframe, indicators });
+    const hasParams = Object.keys(paramsByKey).length > 0;
+
+    loadIndicators({
+      asset: selectedAsset,
+      timeframe: selectedTimeframe,
+      indicators,
+      params: hasParams ? paramsByKey : undefined
+    });
   }, [selectedAsset, selectedTimeframe, oscillatorIndicators, loadIndicators]);
 
   // Options for Comboboxes
@@ -248,6 +268,18 @@ const ChartWorkspace = () => {
     });
   };
 
+  const handleSyncTimeframe = async () => {
+    if (isSyncingTimeframe) return;
+    try {
+      setIsSyncingTimeframe(true);
+      await syncTimeframeUi();
+    } catch (err) {
+      console.error('Timeframe UI sync failed:', err);
+    } finally {
+      setIsSyncingTimeframe(false);
+    }
+  };
+
   const captureChart = () => {
     const container = document.getElementById('quflx-chart-screenshot-root');
     if (!container) return null;
@@ -337,6 +369,8 @@ const ChartWorkspace = () => {
         isAsking={isAsking}
         isCapturing={isCapturing}
         onIndicatorClick={handleIndicatorClick}
+        onSyncTimeframe={handleSyncTimeframe}
+        isSyncingTimeframe={isSyncingTimeframe}
       />
 
       <ScreenshotModal

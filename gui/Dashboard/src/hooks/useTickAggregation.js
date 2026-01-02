@@ -91,15 +91,18 @@ const useTickAggregation = ({
         
         // Map selectedTimeframe to seconds
         const timeframeMap = {
+          ticks: 0,
+          '15s': 15,
           '1m': 60,
           '5m': 300,
           '15m': 900,
+          '30m': 1800,
           '1h': 3600,
           '4h': 14400,
         };
 
-        // Default to 60s if not found or if 'ticks' is selected (fallback for now)
-        const interval = timeframeMap[selectedTimeframe] || 60; 
+        const rawInterval = timeframeMap[selectedTimeframe];
+        const interval = rawInterval && rawInterval > 0 ? rawInterval : 60;
         
         const candleTime = Math.floor(time / interval) * interval;
         

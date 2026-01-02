@@ -16,6 +16,8 @@ from capabilities_v2.favorites_bar import FavoritesBar
 from capabilities_v2.timeframe_menu import TimeframeMenu
 from capabilities_v2.favorite_star_select import FavoriteStarSelect
 from capabilities_v2.collect_history_loop import CollectHistoryLoop
+from capabilities_v2.topdown_select_test_2 import TopdownSelectTest2
+from capabilities_v2.timeframe_select_sync import TimeframeSelectSync
 
 CAPABILITY_MAP = {
     "history_collector": HistoryCollector,
@@ -24,6 +26,8 @@ CAPABILITY_MAP = {
     "favorite_star_select": FavoriteStarSelect,
     "collect_history": CollectHistoryLoop,
     "refresh_assets": FavoriteStarSelect,
+    "topdown_select_test_2": TopdownSelectTest2,
+    "timeframe_select_sync": TimeframeSelectSync,
 }
 
 def main():

@@ -1,0 +1,98 @@
+{
+  "inputs": {
+    "labels": [
+      "M1"
+    ],
+    "min_pct": 92,
+    "delay_ms": 300,
+    "stack": "1m",
+    "save_screenshots": false,
+    "screenshots_subdir": "topdown_test_2",
+    "reopen_each": false,
+    "use_tf_sync": true,
+    "tf_attempts": 3,
+    "tf_wait_s": 0.0,
+    "focus_on_chart": true,
+    "save_tf_diag": true
+  },
+  "foundations": {
+    "favorites_bar_present": true,
+    "timeframe_control_present": true,
+    "performance_log_readable": true,
+    "raw": {
+      "favorites_items_count": 5,
+      "performance_log_count": 52
+    }
+  },
+  "favorite_candidate": {
+    "asset": "BHD/CNY OTC",
+    "eligible_count_visible": 4
+  },
+  "topdown_result": {
+    "ok": true,
+    "error": null,
+    "labels": [
+      "M1"
+    ],
+    "stack": "1m",
+    "attempts_total": 1,
+    "attempts_ok": 1,
+    "attempts": [
+      {
+        "label": "M1",
+        "ok": true,
+        "error": null,
+        "data": {
+          "label": "M1",
+          "ok": true,
+          "attempts": [
+            {
+              "label": "M1",
+              "attempt": 1,
+              "select_ok": true,
+              "select_error": null,
+              "select_data": {
+                "selected": "M1"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "screenshots_count": 0
+  },
+  "timeframe_select_sync": {
+    "ok": true,
+    "error": null,
+    "data": {
+      "inputs": {
+        "labels": [
+          "M1"
+        ],
+        "attempts": 3,
+        "delay_ms": 300,
+        "tf_wait_s": 0.0,
+        "focus_on_chart": true
+      },
+      "per_label": [
+        {
+          "label": "M1",
+          "ok": true,
+          "attempts": [
+            {
+              "label": "M1",
+              "attempt": 1,
+              "select_ok": true,
+              "select_error": null,
+              "select_data": {
+                "selected": "M1"
+              }
+            }
+          ]
+        }
+      ],
+      "labels_total": 1,
+      "labels_ok": 1
+    }
+  }
+}

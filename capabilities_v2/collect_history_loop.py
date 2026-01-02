@@ -7,6 +7,7 @@ from .base import Capability, Ctx, CapResult
 from .favorites_bar import FavoritesBar
 from .timeframe_menu import TimeframeMenu
 from .history_collector import HistoryCollector
+from .timeframe_select_sync import TimeframeSelectSync
 
 class CollectHistoryLoop(Capability):
     id = "collect_history"
@@ -15,10 +16,17 @@ class CollectHistoryLoop(Capability):
     def run(self, ctx: Ctx, inputs: Dict[str, Any]) -> CapResult:
         duration = int(inputs.get("duration", 10))
         timeframe = inputs.get("timeframe", "1m")
+        use_tf_sync = bool(inputs.get("use_tf_sync", False))
+        tf_attempts = int(inputs.get("tf_attempts", 3))
+        tf_delay_ms = int(inputs.get("tf_delay_ms", 300))
+        tf_wait_s = float(inputs.get("tf_wait_s", 0.0))
+        focus_on_chart = bool(inputs.get("focus_on_chart", True))
+        save_tf_diag = bool(inputs.get("save_tf_diag", True))
         
         fav_bar = FavoritesBar()
         tf_menu = TimeframeMenu()
         collector = HistoryCollector()
+        tf_sync = TimeframeSelectSync() if use_tf_sync else None
         
         results = []
 
@@ -65,14 +73,39 @@ class CollectHistoryLoop(Capability):
                     continue
                 time.sleep(2.0)
 
-                # User requested to skip timeframe selection for now to focus on history capture
-                # tf_res = tf_menu.run(ctx, {"action": "select_timeframe", "label": timeframe})
-                # if not tf_res.ok:
-                #     if ctx.verbose:
-                #         print(f"Failed to select timeframe {timeframe}: {tf_res.error}")
-                #         if tf_res.data:
-                #             print(tf_res.data)
-                #     continue
+                if use_tf_sync and tf_sync is not None:
+                    sync_res = tf_sync.run(ctx, {
+                        "labels": [timeframe],
+                        "attempts": tf_attempts,
+                        "delay_ms": tf_delay_ms,
+                        "tf_wait_s": tf_wait_s,
+                        "focus_on_chart": focus_on_chart,
+                        "save_diag": save_tf_diag,
+                    })
+                    if not sync_res.ok:
+                        if ctx.verbose:
+                            print(f"Failed to sync timeframe {timeframe} for {asset}: {sync_res.error}")
+                        results.append({
+                            "asset": asset,
+                            "status": "timeframe_error",
+                            "details": sync_res.error,
+                        })
+                        processed_assets.add(asset)
+                        continue
+                else:
+                    tf_res = tf_menu.run(ctx, {"action": "select_timeframe", "label": timeframe})
+                    if not tf_res.ok:
+                        if ctx.verbose:
+                            print(f"Failed to select timeframe {timeframe}: {tf_res.error}")
+                            if tf_res.data:
+                                print(tf_res.data)
+                        results.append({
+                            "asset": asset,
+                            "status": "timeframe_error",
+                            "details": tf_res.error,
+                        })
+                        processed_assets.add(asset)
+                        continue
 
                 col_res = collector.run(ctx, {
                     "action": "collect_and_save", 

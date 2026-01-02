@@ -1,0 +1,30 @@
+{
+  "inputs": {
+    "labels": [
+      "M1"
+    ],
+    "attempts": 3,
+    "delay_ms": 300,
+    "tf_wait_s": 0.0,
+    "focus_on_chart": true
+  },
+  "per_label": [
+    {
+      "label": "M1",
+      "ok": true,
+      "attempts": [
+        {
+          "label": "M1",
+          "attempt": 1,
+          "select_ok": true,
+          "select_error": null,
+          "select_data": {
+            "selected": "M1"
+          }
+        }
+      ]
+    }
+  ],
+  "labels_total": 1,
+  "labels_ok": 1
+}

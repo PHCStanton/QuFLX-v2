@@ -287,6 +287,7 @@ logs/
 Chrome_profile/
 
 # Screenshots and large data files (uncomment if you want to ignore)
+data/
 # data/data_output/screenshots/
 # data/Historical_Data/
 

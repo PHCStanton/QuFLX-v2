@@ -1,0 +1,9 @@
+{
+  "favorites_bar_present": true,
+  "timeframe_control_present": true,
+  "performance_log_readable": true,
+  "raw": {
+    "favorites_items_count": 5,
+    "performance_log_count": 52
+  }
+}

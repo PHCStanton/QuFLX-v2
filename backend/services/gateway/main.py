@@ -64,6 +64,42 @@ def _parse_script_json(stdout: str) -> Dict[str, Any]:
     raise ValueError(f"No JSON object found in script output: {stdout!r}")
 
 
+def _persist_history_csv(asset: str, timeframe_min: int, candles: List[Dict[str, Any]]) -> None:
+    """Persist candles to CSV so indicator endpoint can reuse the same history.
+
+    Uses the same directory structure as capabilities_v2.history_collector._save_csv:
+    data/data_output/history/{asset_clean}/{timeframe}.csv
+    """
+    if not candles:
+        return
+
+    root = Path(__file__).resolve().parents[3]
+    asset_clean = re.sub(r"[^\w\-_]", "_", asset)
+    save_dir = root / "data" / "data_output" / "history" / asset_clean
+    save_dir.mkdir(parents=True, exist_ok=True)
+    filepath = save_dir / f"{int(timeframe_min)}.csv"
+
+    file_exists = filepath.exists()
+    mode = "a" if file_exists else "w"
+
+    with filepath.open(mode, newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
+        for c in candles:
+            try:
+                ts = float(c.get("timestamp"))
+                ts_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+                open_ = float(c.get("open"))
+                high = float(c.get("high"))
+                low = float(c.get("low"))
+                close = float(c.get("close"))
+                volume = float(c.get("volume", 0.0))
+            except Exception:
+                continue
+            writer.writerow([ts_str, open_, high, low, close, volume])
+
+
 def validate_market_data(data: Dict[str, Any]) -> bool:
     """
     Validates market data payload against Tick or Candle models.
@@ -572,8 +608,67 @@ async def get_indicators(payload: Dict[str, Any] = Body(...)):
 
     df = pd.DataFrame.from_records(records)
 
-    pipeline = TechnicalIndicatorsPipeline()
+    if "timestamp" in df.columns:
+        df = df.sort_values("timestamp")
+
+    raw_params = payload.get("params") or {}
+    indicator_params: Dict[str, Any] = {}
+
+    if isinstance(raw_params, dict):
+        for key, params in raw_params.items():
+            if not isinstance(params, dict):
+                continue
+
+            if key == "rsi_14":
+                period = params.get("period")
+                try:
+                    if period is not None:
+                        indicator_params["rsi_period"] = int(period)
+                except (ValueError, TypeError):
+                    pass
+
+            if key == "macd_histogram":
+                fast = params.get("fast")
+                slow = params.get("slow")
+                signal = params.get("signal")
+                try:
+                    if fast is not None:
+                        indicator_params["macd_fast"] = int(fast)
+                except (ValueError, TypeError):
+                    pass
+                try:
+                    if slow is not None:
+                        indicator_params["macd_slow"] = int(slow)
+                except (ValueError, TypeError):
+                    pass
+                try:
+                    if signal is not None:
+                        indicator_params["macd_signal"] = int(signal)
+                except (ValueError, TypeError):
+                    pass
+
+            if key == "cci":
+                period = params.get("period")
+                try:
+                    if period is not None:
+                        indicator_params["cci_period"] = int(period)
+                except (ValueError, TypeError):
+                    pass
+
+            if key == "demarker":
+                period = params.get("period")
+                try:
+                    if period is not None:
+                        indicator_params["demarker_period"] = int(period)
+                except (ValueError, TypeError):
+                    pass
+
+    config = {"indicator_params": indicator_params} if indicator_params else None
+    pipeline = TechnicalIndicatorsPipeline(config=config)
     df_ind = pipeline.calculate_indicators(df)
+
+    if "timestamp" in df_ind.columns:
+        df_ind = df_ind.sort_values("timestamp")
 
     if indicator_keys:
         available_cols = set(df_ind.columns)
@@ -737,7 +832,20 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=500, detail=str(out.get("error")))
 
         data = out.get("data", {})
-        return {"ok": True, "asset": asset, "timeframe": timeframe_min, "count": data.get("count", 0), "candles": data.get("candles", [])}
+        candles = data.get("candles") or []
+
+        try:
+            _persist_history_csv(asset, timeframe_min, candles)
+        except Exception as e:
+            logger.error(f"Failed to persist bootstrap history CSV: {e}")
+
+        return {
+            "ok": True,
+            "asset": asset,
+            "timeframe": timeframe_min,
+            "count": data.get("count", 0),
+            "candles": candles,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -902,78 +1010,152 @@ async def get_assets(payload: Dict[str, Any] = Body(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/v1/select-timeframe")
 async def select_timeframe(payload: Dict[str, str] = Body(...)):
-    """
-    Selects a timeframe in the Pocket Option UI using Selenium.
-    """
     timeframe = payload.get("timeframe")
     if not timeframe:
         raise HTTPException(status_code=400, detail="Timeframe required")
-    
-    # Validate timeframe format
-    valid_timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
-    if timeframe not in valid_timeframes:
+
+    normalized = timeframe.strip().lower()
+
+    supported = [
+        "ticks",
+        "15s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+    ]
+
+    if normalized not in supported:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid timeframe: {timeframe}. Must be one of: {', '.join(valid_timeframes)}"
+            status_code=400,
+            detail=f"Invalid timeframe: {timeframe}. Must be one of: {', '.join(supported)}",
         )
-        
+
+    interval_seconds_map = {
+        "ticks": 0,
+        "15s": 15,
+        "1m": 60,
+        "5m": 300,
+        "15m": 900,
+        "30m": 1800,
+        "1h": 3600,
+    }
+
+    interval_seconds = interval_seconds_map.get(normalized, 0)
+
+    logger.info(f"Timeframe updated: {normalized} (interval_seconds={interval_seconds})")
+
+    return {
+        "status": "success",
+        "timeframe": normalized,
+        "interval_seconds": interval_seconds,
+    }
+
+
+@app.post("/api/v1/sync-timeframe-ui")
+async def sync_timeframe_ui(payload: Dict[str, Any] = Body(...)):
+    timeframe = payload.get("timeframe")
+    if not timeframe:
+        raise HTTPException(status_code=400, detail="Timeframe required")
+
+    normalized = str(timeframe).strip().lower()
+
+    supported = [
+        "ticks",
+        "15s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+    ]
+
+    if normalized not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid timeframe: {timeframe}. Must be one of: {', '.join(supported)}",
+        )
+
+    if normalized == "ticks":
+        raise HTTPException(status_code=400, detail="UI sync for 'ticks' timeframe is not supported")
+
+    label_map = {
+        "15s": "15s",
+        "1m": "1m",
+        "5m": "5m",
+        "15m": "15m",
+        "30m": "30m",
+        "1h": "1h",
+    }
+
+    label = label_map.get(normalized)
+    if not label:
+        raise HTTPException(status_code=400, detail=f"UI sync not configured for timeframe: {normalized}")
+
     try:
-        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "asset_control.py"))
-        
-        logger.info(f"Executing timeframe selection: {timeframe}")
+        runner_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py")
+        )
+
+        inputs = {"action": "select_timeframe", "label": label}
+
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
         result = subprocess.run(
-            [sys.executable, script_path, "--action", "select_timeframe", "--timeframe", timeframe],
+            [
+                sys.executable,
+                runner_path,
+                "timeframe_menu",
+                "--inputs",
+                json.dumps(inputs),
+            ],
             capture_output=True,
             text=True,
-            timeout=10  # 10 second timeout
+            env=env,
         )
-        
+
         if result.returncode != 0:
-            error_msg = result.stderr.strip()
-            logger.error(f"Timeframe script failed (exit code {result.returncode}): {error_msg}")
-            raise HTTPException(
-                status_code=422,  # Unprocessable Entity - UI element not found
-                detail=f"UI selector failed. Pocket Option UI may have changed. Error: {error_msg}"
-            )
-        
-        # Try to parse output
+            logger.error(f"Sync timeframe UI failed: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {result.stderr}")
+
         try:
-            output_json = json.loads(result.stdout)
-        except json.JSONDecodeError as je:
-            logger.error(f"Invalid JSON from timeframe script: {result.stdout}")
-            raise HTTPException(
-                status_code=502,  # Bad Gateway - invalid script output
-                detail=f"Script output parsing failed: {str(je)}"
-            )
-        
-        if not output_json.get("ok"):
-            error_msg = output_json.get("error", "Unknown error")
-            logger.warning(f"Timeframe selection returned error: {error_msg}")
-            raise HTTPException(
-                status_code=422,
-                detail=f"Timeframe selection failed: {error_msg}"
-            )
-        
-        logger.info(f"Successfully selected timeframe: {timeframe}")
-        return {"status": "success", "message": f"Selected {timeframe}"}
-        
+            out = _parse_script_json(result.stdout)
+        except Exception as e:
+            logger.error(f"Invalid sync timeframe UI output: {e} | raw={result.stdout}")
+            raise HTTPException(status_code=502, detail="Invalid script output")
+
+        if not out.get("ok"):
+            raw_error = str(out.get("error") or "timeframe sync failed")
+            if raw_error == "open failed":
+                detail = (
+                    "Failed to open timeframe menu in Pocket Option UI. "
+                    "Ensure the trading chart is visible in the attached Chrome session "
+                    "and try again."
+                )
+            else:
+                detail = raw_error
+            raise HTTPException(status_code=500, detail=detail)
+
+        data = out.get("data", {})
+
+        return {
+            "status": "success",
+            "timeframe": normalized,
+            "label": label,
+            "data": data,
+        }
+
     except HTTPException:
-        # Re-raise HTTP exceptions (already formatted)
         raise
-    except subprocess.TimeoutExpired:
-        logger.error(f"Timeframe selection timeout after 10s")
-        raise HTTPException(
-            status_code=504,  # Gateway Timeout
-            detail="UI interaction timed out. Pocket Option may be unresponsive."
-        )
     except Exception as e:
-        logger.error(f"Unexpected error in select_timeframe: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {type(e).__name__}"
-        )
+        logger.error(f"Sync timeframe UI failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

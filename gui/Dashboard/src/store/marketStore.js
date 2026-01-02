@@ -90,6 +90,7 @@ const createMarketSlice = (set, get) => ({
   },
   selectedTimeframe: '1m',
   setSelectedTimeframe: async (timeframe) => {
+    const prev = get().selectedTimeframe;
     set({ selectedTimeframe: timeframe, marketData: {} });
 
     try {
@@ -103,17 +104,43 @@ const createMarketSlice = (set, get) => ({
         console.error(`Failed to select timeframe: HTTP ${response.status}`);
         const errorData = await response.json().catch(() => ({}));
         set({
+          selectedTimeframe: prev === undefined ? '1m' : prev,
           lastError: errorData.detail || `Failed to select timeframe: ${timeframe}`
         });
       }
     } catch (err) {
       console.error('Failed to select timeframe in backend:', err);
-      set({ lastError: `Network error selecting timeframe: ${err.message}` });
+      set({
+        selectedTimeframe: prev === undefined ? '1m' : prev,
+        lastError: `Network error selecting timeframe: ${err.message}`
+      });
+    }
+  },
+  syncTimeframeUi: async () => {
+    const timeframe = get().selectedTimeframe;
+    if (!timeframe) return;
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/sync-timeframe-ui', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timeframe })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const detail = errorData.detail || `Failed to sync timeframe UI for: ${timeframe}`;
+        console.error('Sync timeframe UI failed:', detail);
+        set({ lastError: detail });
+      }
+    } catch (err) {
+      console.error('Sync timeframe UI request failed:', err);
+      set({ lastError: `Network error syncing timeframe UI: ${err.message}` });
     }
   },
   indicatorSeries: {},
   indicatorStatus: {},
-  loadIndicators: async ({ asset, timeframe, indicators }) => {
+  loadIndicators: async ({ asset, timeframe, indicators, params }) => {
     if (!asset || !timeframe || !Array.isArray(indicators) || indicators.length === 0) {
       return;
     }
@@ -144,10 +171,20 @@ const createMarketSlice = (set, get) => ({
     }));
 
     try {
+      const payload = {
+        asset,
+        timeframe,
+        indicators
+      };
+
+      if (params && typeof params === 'object' && !Array.isArray(params)) {
+        payload.params = params;
+      }
+
       const res = await fetch('http://localhost:8000/api/v1/indicators', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset, timeframe, indicators })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) {

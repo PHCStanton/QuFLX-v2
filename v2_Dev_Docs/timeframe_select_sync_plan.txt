@@ -1,0 +1,95 @@
+timeframe_select_sync capability (v2)
+
+Goal:
+- Provide a robust, v2-native capability for selecting one or more timeframes with multiple attempts and basic focus recovery, inspired by V1's data_collect_topdown_select.auto_topdown_worker and trade_clicker patterns.
+
+Key responsibilities:
+- Accept one or more timeframe labels (e.g. H1, M15, M5, M1).
+- For each label, attempt to select the timeframe via the existing TimeframeMenu capability.
+- Retry selection several times per label with short backoff.
+- Between attempts, optionally click the chart area to restore focus (V1 trick).
+- Collect structured diagnostics per attempt for analysis and debugging.
+- Save optional JSON diagnostics and screenshots using the standard v2 artifacts pipeline.
+
+Inputs (run-time):
+- labels: list[str] | optional
+  - Primary input; list of timeframe labels to select.
+  - If omitted and `label` is provided, a single-label list is derived from `label`.
+  - If both are omitted, defaults to ["H1", "M15", "M5", "M1"].
+- label: str | optional
+  - Convenience alias for a single timeframe.
+- attempts: int | default 3
+  - Number of attempts per label before giving up.
+- delay_ms: int | default 300
+  - Delay (milliseconds) after a successful selection for UI to settle.
+- tf_wait_s: float | default 0.0
+  - Additional wait (seconds) after selection; intended for scenarios where streaming or history collection needs time.
+- focus_on_chart: bool | default True
+  - When a selection attempt fails and additional attempts remain, click the chart area (`canvas, .chart, .trading-chart`) to restore focus before retrying.
+- save_diag: bool | default True
+  - When `ctx.debug` is true, controls whether JSON diagnostics are written to artifacts.
+
+Outputs (CapResult.data):
+- inputs: echo of normalized inputs (labels, attempts, delay_ms, tf_wait_s, focus_on_chart).
+- per_label: list of per-label results, each with:
+  - label: the label being processed.
+  - ok: bool, whether at least one attempt succeeded.
+  - attempts: list of attempt meta objects, each including:
+    - attempt: 1-based attempt index.
+    - select_ok: bool.
+    - select_error: str | None.
+    - select_data: any data returned by TimeframeMenu.
+    - focus_clicked: bool | optional, set when the chart focus click is executed.
+    - focus_error: str | optional, if focus click fails.
+    - exception: str | optional, if an unexpected exception escapes the TimeframeMenu call.
+- labels_total: total number of labels processed.
+- labels_ok: number of labels that were ultimately successful.
+
+Behavior and control flow:
+1) Normalize labels
+   - Derive the list of string labels using (labels or label or default list).
+2) Read control parameters
+   - attempts_per_label, delay_ms, tf_wait_s, focus_on_chart, save_diag.
+3) For each label:
+   - Initialize `label_ok = False` and an empty `label_attempts` list.
+   - For attempt in range(attempts_per_label):
+     - Call TimeframeMenu.run(ctx, {"action": "select_timeframe", "label": label}).
+       * This reuses all of TimeframeMenu's existing robustness: menu-opening, iframe traversal, CSS/JS selection.
+     - Record `select_ok`, `select_error`, and `select_data` in the attempt meta.
+     - If `select_ok` is True:
+       * Mark `label_ok = True` and append the attempt meta.
+       * Apply `delay_ms` and `tf_wait_s` waits if configured.
+       * Break out of the attempts loop for this label.
+     - If `select_ok` is False and more attempts remain and focus_on_chart is True:
+       * Use Selenium to find a chart element via CSS selector `canvas, .chart, .trading-chart`.
+       * Click it and sleep ~0.5s to restore focus.
+       * Record `focus_clicked` or `focus_error` in attempt meta.
+     - Append the attempt meta and sleep 0.5s before the next attempt.
+   - After all attempts, push a per-label summary into `per_label` with the `ok` flag and the attempts list.
+4) Aggregate result
+   - Compute `labels_ok` and `labels_total` and determine `all_ok = labels_ok == labels_total and labels_total > 0`.
+   - Build the `data` payload with inputs, per_label, and counts.
+5) Artifacts
+   - If `ctx.debug` is True, take pre/post screenshots under `screenshots/` relative to artifacts_root.
+   - If `ctx.debug` and save_diag are True, write `timeframe_select_sync_<timestamp>.json` under the `timeframe_select_sync` subfolder using `save_json`.
+6) CapResult
+   - ok: `all_ok`.
+   - error: None if all_ok else "one or more timeframe selections failed".
+   - artifacts: tuple of collected artifact paths.
+
+Design notes and rationale:
+- TimeframeMenu already contains the complex selection logic (aliases, iframe scanning, JS fallback). The new capability does not reimplement that logic but wraps it with retries and focus recovery.
+- The focus click behavior is directly inspired by V1's data_collect_topdown_select.auto_topdown_worker, where clicking the chart helped make the timeframe dropdown responsive.
+- The attempt meta structure is intentionally verbose to support diagnosing DOM or timing issues in live sessions.
+- The capability is declared with `kind = "control"` so it can be composed by higher-level orchestrators (e.g., topdown_select_test_2 or future collectors) without implying trading or data-collection semantics.
+
+Integration points:
+- Implemented as capabilities_v2/timeframe_select_sync.py.
+- Registered in capabilities_v2/runner.py CAPABILITY_MAP as "timeframe_select_sync": TimeframeSelectSync.
+- Can be invoked via runner CLI, for example:
+  python -m capabilities_v2.runner timeframe_select_sync --inputs '{"labels":["H1","M15","M5","M1"],"attempts":3,"delay_ms":300,"focus_on_chart":true}'
+
+Future extensions (non-breaking):
+- Add optional verification of the active timeframe by reading the UI label after selection.
+- Expose different focus strategies (e.g., clicking the favorites bar or timeframe button directly) behind a simple input flag.
+- Add optional per-label screenshot capture for deeper diagnostics.
