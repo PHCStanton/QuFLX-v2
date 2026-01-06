@@ -3,8 +3,10 @@ import logging
 import base64
 import re
 import time
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
+from collections import OrderedDict
 from datetime import datetime, timezone
+from backend.utils.asset_utils import normalize_asset
 from selenium import webdriver
 
 from backend.models.market_data import Tick
@@ -17,101 +19,86 @@ class WebSocketInterceptor:
     """
     def __init__(self, driver: webdriver.Chrome):
         self.driver = driver
-        self.processed_messages = set()
+        self.processed_messages = OrderedDict()  # Use OrderedDict for LRU eviction
+        self.max_messages = 10000
+        self._tick_buffer = []
+        self._history_buffer = []
+
+    def _refresh_logs(self):
+        """
+        Consumes performance logs once and populates internal buffers for ticks and history.
+        This prevents one fetch method from 'stealing' logs from the other.
+        """
+        try:
+            logs = self.driver.get_log('performance')
+            if logs:
+                logger.info(f"INTERCEPTOR: Fetched {len(logs)} performance log entries")
+            for entry in logs:
+                try:
+                    message_json = json.loads(entry['message'])
+                    message = message_json.get('message', {})
+                    
+                    if message.get('method') == 'Network.webSocketFrameReceived':
+                        params = message.get('params', {})
+                        response = params.get('response', {})
+                        payload_data = response.get('payloadData')
+                        
+                        if payload_data:
+                            msg_id = f"{params.get('requestId')}_{params.get('timestamp')}"
+                            if msg_id in self.processed_messages:
+                                continue
+                            
+                            self.processed_messages[msg_id] = True
+                            if len(self.processed_messages) > self.max_messages:
+                                self.processed_messages.popitem(last=False)
+
+                            parsed_data = self._parse_payload(payload_data)
+                            
+                            # 1. Check for history/candles
+                            found_history = False
+                            if isinstance(parsed_data, list) and len(parsed_data) >= 2:
+                                event_name = parsed_data[0]
+                                event_data = parsed_data[1]
+                                if isinstance(event_data, dict):
+                                    if 'history' in event_data or 'candles' in event_data:
+                                        logger.info(f"INTERCEPTOR: Caught history event: {event_name}")
+                                        if 'event' not in event_data:
+                                            event_data['event'] = event_name
+                                        self._history_buffer.append(event_data)
+                                        found_history = True
+                            elif isinstance(parsed_data, dict):
+                                if 'history' in parsed_data or 'candles' in parsed_data:
+                                    self._history_buffer.append(parsed_data)
+                                    found_history = True
+                            
+                            # 2. Check for ticks (only if not a history payload)
+                            if not found_history:
+                                ticks = self._extract_ticks(parsed_data)
+                                if ticks:
+                                    self._tick_buffer.extend(ticks)
+                                    
+                except Exception as e:
+                    logger.debug(f"Error parsing log entry: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"Error fetching logs: {e}")
 
     def fetch_history_events(self) -> List[Dict[str, Any]]:
         """
-        Fetches WebSocket frames that contain history data.
-        Returns a list of history payload dictionaries.
+        Returns buffered history events and refreshes logs.
         """
-        history_events = []
-        try:
-            logs = self.driver.get_log('performance')
-            
-            for entry in logs:
-                try:
-                    message_json = json.loads(entry['message'])
-                    message = message_json.get('message', {})
-                    
-                    if message.get('method') == 'Network.webSocketFrameReceived':
-                        params = message.get('params', {})
-                        response = params.get('response', {})
-                        payload_data = response.get('payloadData')
-                        
-                        if payload_data:
-                            # Create a unique ID for deduplication
-                            msg_id = f"{params.get('requestId')}_{params.get('timestamp')}"
-                            if msg_id in self.processed_messages:
-                                continue
-                            self.processed_messages.add(msg_id)
-                            
-                            if len(self.processed_messages) > 10000:
-                                self.processed_messages.clear()
-
-                            parsed_data = self._parse_payload(payload_data)
-                            
-                            # Check for history in the parsed data
-                            # Socket.IO event: ["event", {"history": [...]}]
-                            if isinstance(parsed_data, list) and len(parsed_data) >= 2:
-                                event_data = parsed_data[1]
-                                if isinstance(event_data, dict) and 'history' in event_data:
-                                    history_events.append(event_data)
-                            
-                            # Direct dict: {"history": [...]}
-                            elif isinstance(parsed_data, dict) and 'history' in parsed_data:
-                                history_events.append(parsed_data)
-                                
-                except Exception as e:
-                    logger.warning(f"Error processing history log entry: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.error(f"Error fetching history logs: {e}")
-            
-        return history_events
+        self._refresh_logs()
+        events = list(self._history_buffer)
+        self._history_buffer = []
+        return events
 
     def fetch_ticks(self) -> List[Tick]:
         """
-        Fetches new WebSocket frames, parses them, and returns a list of new Ticks.
+        Returns buffered ticks and refreshes logs.
         """
-        ticks = []
-        try:
-            logs = self.driver.get_log('performance')
-            
-            for entry in logs:
-                try:
-                    message_json = json.loads(entry['message'])
-                    message = message_json.get('message', {})
-                    
-                    # We only care about Network.webSocketFrameReceived
-                    if message.get('method') == 'Network.webSocketFrameReceived':
-                        params = message.get('params', {})
-                        response = params.get('response', {})
-                        payload_data = response.get('payloadData')
-                        
-                        if payload_data:
-                            # Create a unique ID for deduplication
-                            msg_id = f"{params.get('requestId')}_{params.get('timestamp')}"
-                            if msg_id in self.processed_messages:
-                                continue
-                            self.processed_messages.add(msg_id)
-                            
-                            # Limit the size of the processed set
-                            if len(self.processed_messages) > 10000:
-                                self.processed_messages.clear()
-
-                            parsed_data = self._parse_payload(payload_data)
-                            if parsed_data:
-                                new_ticks = self._extract_ticks(parsed_data)
-                                ticks.extend(new_ticks)
-                                
-                except Exception as e:
-                    logger.debug(f"Error processing log entry: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.error(f"Error fetching logs: {e}")
-            
+        self._refresh_logs()
+        ticks = list(self._tick_buffer)
+        self._tick_buffer = []
         return ticks
 
     def _looks_like_base64(self, s: str) -> bool:
@@ -208,15 +195,6 @@ class WebSocketInterceptor:
 
         return ticks
 
-    def _normalize_asset_name(self, asset: str) -> str:
-        """
-        Normalize asset names for consistent comparison.
-        Removes underscores, slashes, spaces and converts to uppercase.
-        """
-        if not asset:
-            return ''
-        return asset.replace('_', '').replace('/', '').replace(' ', '').upper()
-
     def _parse_single_tick(self, item: List) -> Optional[Tick]:
         """
         Parses a list [asset, timestamp, price] into a Tick.
@@ -227,7 +205,7 @@ class WebSocketInterceptor:
                 timestamp = float(item[1])
                 price = float(item[2])
                 
-                asset = self._normalize_asset_name(raw_asset)
+                asset = normalize_asset(raw_asset)
                 
                 logger.debug(f"Raw Tick: {raw_asset} -> {asset} {price}")
                 
@@ -251,7 +229,7 @@ class WebSocketInterceptor:
             timestamp = item.get('timestamp')
             
             if raw_asset and price and timestamp:
-                asset = self._normalize_asset_name(raw_asset)
+                asset = normalize_asset(raw_asset)
                 return Tick(
                     timestamp=float(timestamp),
                     asset=asset,

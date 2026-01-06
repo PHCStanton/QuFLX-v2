@@ -16,6 +16,8 @@ from capabilities_v2.base import Ctx, CapResult, Capability, add_utils_to_syspat
 
 add_utils_to_syspath()
 
+from backend.utils.asset_utils import normalize_asset
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -127,8 +129,8 @@ class AssetControl(Capability):
                     continue
                     
                 asset_text = row.text or ""
-                norm_target = asset_name.replace("/", "").replace(" ", "").replace("_", "").upper()
-                norm_row = asset_text.replace("/", "").replace(" ", "").replace("_", "").upper()
+                norm_target = normalize_asset(asset_name)
+                norm_row = normalize_asset(asset_text)
                 
                 if norm_target in norm_row:
                     target_row = row
@@ -201,8 +203,8 @@ class AssetControl(Capability):
                 # Check if this row contains our target asset
                 asset_text = row.text or ""
                 # Normalize for comparison
-                norm_target = asset_name.replace("/", "").replace(" ", "").upper()
-                norm_row = asset_text.replace("/", "").replace(" ", "").upper()
+                norm_target = normalize_asset(asset_name)
+                norm_row = normalize_asset(asset_text)
                 
                 if norm_target in norm_row:
                     target_row = row
@@ -313,7 +315,7 @@ class AssetControl(Capability):
             
             if not menu_btn:
                 error_msg = f"Could not find timeframe menu button. Tried selectors: {' | '.join(tried_selectors)}"
-                print(error_msg)
+                logger.error(error_msg)
                 return CapResult(ok=False, error=error_msg)
             
             # Click menu button
@@ -367,7 +369,8 @@ class AssetControl(Capability):
                     continue
             
             # If we get here, we found menu but not the option
-            print(f"Available options searched with selectors: {' | '.join(option_tried)}")
+            msg = f"Available options searched with selectors: {' | '.join(option_tried)}"
+            logger.warning(msg)
             return CapResult(
                 ok=False, 
                 error=f"Timeframe option '{short_tf}' or '{target_text}' not found in menu. Pocket Option UI may have changed."
@@ -375,7 +378,7 @@ class AssetControl(Capability):
 
         except Exception as e:
             error_detail = f"Exception in _select_timeframe: {type(e).__name__}: {str(e)}"
-            print(error_detail)
+            logger.error(error_detail)
             return CapResult(ok=False, error=error_detail)
 
     # Reuse helpers from favorite_star_select.py or similar
@@ -489,4 +492,5 @@ if __name__ == "__main__":
 
     cap = AssetControl()
     res = cap.run(ctx, vars(args))
+    # Keep this print for CLI/Gateway consumption
     print(json.dumps({"ok": res.ok, "data": res.data, "error": res.error}))

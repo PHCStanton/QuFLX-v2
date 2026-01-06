@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from pathlib import Path
 import sys
+import time
 
 from .base import Ctx, CapResult, Capability, take_screenshot_if, save_json, timestamp
 
@@ -138,6 +139,22 @@ class FavoritesBar(Capability):
                 hpc = HighPriorityControls(drv)
             except Exception:
                 hpc = None
+
+        # Load workflow settings from 92_Percent_config.json
+        click_wait_s = 2.0
+        use_double_click = True
+        try:
+            config_path = Path(__file__).resolve().parents[1] / "config_files" / "92_Percent_config.json"
+            if config_path.exists():
+                import json
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    wf = cfg.get("selection_workflow", {})
+                    click_wait_s = float(wf.get("click_wait_s", 2.0))
+                    use_double_click = bool(wf.get("use_double_click", True))
+        except Exception:
+            pass
+
         try:
             nodes = drv.find_elements(By.CSS_SELECTOR, ".assets-favorites-item__line")
             target = None
@@ -163,17 +180,39 @@ class FavoritesBar(Capability):
             if not target:
                 return CapResult(ok=False, data={}, error="favorite not visible")
 
-            # Resilient click pipeline
+            # Resilient click pipeline - Click -> Wait -> DoubleClick workflow
+            # 1. First Click
             if hpc:
-                ok_click = hpc._click_element_safely(target)
-                if not ok_click:
-                    return CapResult(ok=False, data={}, error=f"failed to click {label}")
+                hpc._click_element_safely(target)
             else:
                 try:
                     target.click()
                 except Exception:
                     drv.execute_script("arguments[0].click();", target)
+            
+            # 2. Sequential Wait
+            if click_wait_s > 0:
+                time.sleep(click_wait_s)
+            
+            # 3. Double Click
+            if use_double_click:
+                if hpc:
+                    ok_click = hpc._double_click_element_safely(target)
+                    if not ok_click:
+                        return CapResult(ok=False, data={}, error=f"failed to double-click {label}")
+                else:
+                    try:
+                        # Fallback if HPC not available
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        actions = ActionChains(drv)
+                        actions.double_click(target).perform()
+                    except Exception:
+                        drv.execute_script(
+                            "var evt = new MouseEvent('dblclick', {bubbles: true, cancelable: true, view: window});"
+                            "arguments[0].dispatchEvent(evt);",
+                            target
+                        )
 
-            return CapResult(ok=True, data={"clicked": label})
+            return CapResult(ok=True, data={"clicked": label, "method": "click_wait_dbclick", "wait_s": click_wait_s})
         except Exception as e:
             return CapResult(ok=False, data={}, error=str(e))

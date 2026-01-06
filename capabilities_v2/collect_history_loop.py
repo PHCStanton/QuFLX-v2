@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Dict
 
@@ -9,6 +10,8 @@ from .timeframe_menu import TimeframeMenu
 from .history_collector import HistoryCollector
 from .timeframe_select_sync import TimeframeSelectSync
 
+logger = logging.getLogger(__name__)
+
 class CollectHistoryLoop(Capability):
     id = "collect_history"
     kind = "orchestrator"
@@ -16,7 +19,7 @@ class CollectHistoryLoop(Capability):
     def run(self, ctx: Ctx, inputs: Dict[str, Any]) -> CapResult:
         duration = int(inputs.get("duration", 10))
         timeframe = inputs.get("timeframe", "1m")
-        use_tf_sync = bool(inputs.get("use_tf_sync", False))
+        use_tf_sync = bool(inputs.get("use_tf_sync", True))
         tf_attempts = int(inputs.get("tf_attempts", 3))
         tf_delay_ms = int(inputs.get("tf_delay_ms", 300))
         tf_wait_s = float(inputs.get("tf_wait_s", 0.0))
@@ -29,9 +32,8 @@ class CollectHistoryLoop(Capability):
         tf_sync = TimeframeSelectSync() if use_tf_sync else None
         
         results = []
-
-        if ctx.verbose:
-            print("Resetting favorites bar...")
+        
+        logger.info("Resetting favorites bar...")
         res = fav_bar.run(ctx, {"action": "reset_to_left"})
         if not res.ok:
             return CapResult(ok=False, error=f"Failed to reset favorites: {res.error}")
@@ -41,15 +43,13 @@ class CollectHistoryLoop(Capability):
         while True:
             vis_res = fav_bar.run(ctx, {"action": "get_visible_favorites"})
             if not vis_res.ok:
-                if ctx.verbose:
-                    print("Failed to get visible favorites")
+                logger.error(f"Failed to get visible favorites: {vis_res.error}")
                 break
                 
             visible_assets = vis_res.data.get("assets", [])
             
             if not visible_assets:
-                if ctx.verbose:
-                    print("No visible assets found")
+                logger.warning("No visible assets found")
                 break
                 
             new_assets = [a for a in visible_assets if a not in processed_assets]
@@ -57,19 +57,16 @@ class CollectHistoryLoop(Capability):
             if not new_assets:
                 scroll_res = fav_bar.run(ctx, {"action": "scroll_right"})
                 if not scroll_res.ok or not scroll_res.data.get("scrolled", False):
-                    if ctx.verbose:
-                        print("End of favorites list")
+                    logger.info("End of favorites list")
                     break
                 time.sleep(1.0)
                 continue
                 
             for asset in new_assets:
-                if ctx.verbose:
-                    print(f"Processing asset: {asset}")
+                logger.info(f"Processing asset: {asset}")
                 click_res = fav_bar.run(ctx, {"action": "click_favorite", "label": asset})
                 if not click_res.ok:
-                    if ctx.verbose:
-                        print(f"Failed to click {asset}")
+                    logger.error(f"Failed to click {asset}: {click_res.error}")
                     continue
                 time.sleep(2.0)
 
@@ -83,8 +80,7 @@ class CollectHistoryLoop(Capability):
                         "save_diag": save_tf_diag,
                     })
                     if not sync_res.ok:
-                        if ctx.verbose:
-                            print(f"Failed to sync timeframe {timeframe} for {asset}: {sync_res.error}")
+                        logger.error(f"Failed to sync timeframe {timeframe} for {asset}: {sync_res.error}")
                         results.append({
                             "asset": asset,
                             "status": "timeframe_error",
@@ -95,10 +91,9 @@ class CollectHistoryLoop(Capability):
                 else:
                     tf_res = tf_menu.run(ctx, {"action": "select_timeframe", "label": timeframe})
                     if not tf_res.ok:
-                        if ctx.verbose:
-                            print(f"Failed to select timeframe {timeframe}: {tf_res.error}")
-                            if tf_res.data:
-                                print(tf_res.data)
+                        logger.error(f"Failed to select timeframe {timeframe} for {asset}: {tf_res.error}")
+                        if tf_res.data:
+                            logger.debug(f"Timeframe selection debug data: {tf_res.data}")
                         results.append({
                             "asset": asset,
                             "status": "timeframe_error",
@@ -124,8 +119,7 @@ class CollectHistoryLoop(Capability):
                 
             scroll_res = fav_bar.run(ctx, {"action": "scroll_right"})
             if not scroll_res.ok or not scroll_res.data.get("scrolled", False):
-                if ctx.verbose:
-                    print("End of favorites list")
+                logger.info("End of favorites list")
                 break
             time.sleep(1.0)
 

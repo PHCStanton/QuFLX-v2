@@ -1,8 +1,14 @@
-[
-  "EUR/USD OTC",
-  "GBP/USD OTC",
-  "USD/JPY OTC",
-  "AUD/CAD OTC",
-  "USD/CHF OTC",
-  "NZD/USD OTC"
-]
+{
+  "assets": [
+    "EUR/USD OTC",
+    "GBP/USD OTC",
+    "USD/JPY OTC",
+    "AUD/CAD OTC",
+    "USD/CHF OTC",
+    "NZD/USD OTC"
+  ],
+  "selection_workflow": {
+    "click_wait_s": 0.5,
+    "use_double_click": true
+  }
+}

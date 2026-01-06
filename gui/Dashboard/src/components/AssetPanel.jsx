@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Card from './Card';
 import { Upload, Activity, Search, RefreshCw, List, MonitorPlay, History, HelpCircle, X } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
@@ -21,12 +21,14 @@ const AssetPanel = () => {
     backendStatus,
     collectHistory,
     setAssetFilterState,
-    syncAssetUi,
+    runAssetBatch,
   } = useMarketStore();
 
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
-  const [maxAssetsToStar, setMaxAssetsToStar] = useState(10); // NEW: Configurable limit
+  const [maxAssetsToStar, setMaxAssetsToStar] = useState(5); // Default changed to 5 as requested
+  const [minPayout, setMinPayout] = useState(92); // Default payout threshold
   const [specificAssets, setSpecificAssets] = useState(''); // NEW: Specific assets to target
+  const [specificAssetMode, setSpecificAssetMode] = useState('ignore'); // 'include' or 'ignore'
   const [otcOnly, setOtcOnly] = useState(false);
   const [topHeight, setTopHeight] = useState(220);
   const dragStartYRef = useRef(0);
@@ -100,15 +102,18 @@ const AssetPanel = () => {
             icon={<RefreshCw size={14} className={autoRefresh ? "animate-spin" : ""} />} 
             label="Get Assets" 
             onClick={() => {
-              const options = {};
+              const options = {
+                min_pct: minPayout
+              };
               if (maxAssetsToStar) {
                 options.max_assets = maxAssetsToStar;
               }
               if (specificAssets.trim()) {
                 options.target_assets = specificAssets
-                  .split(',')
+                  .split(/[,\s;]+/)
                   .map((a) => a.trim())
                   .filter(Boolean);
+                options.target_assets_mode = specificAssetMode;
               }
               if (otcOnly) {
                 options.filter_mode = 'otc';
@@ -116,7 +121,9 @@ const AssetPanel = () => {
 
               setAssetFilterState({
                 maxAssets: maxAssetsToStar,
+                minPayout: minPayout,
                 targetAssets: specificAssets,
+                targetAssetsMode: specificAssetMode,
                 filterMode: otcOnly ? 'otc' : null
               });
 
@@ -131,6 +138,16 @@ const AssetPanel = () => {
             onClick={() => collectHistory()}
             disabled={!backendStatus.readyForAssets}
             title={backendStatus.readyForAssets ? "Collect history data from favorites" : "Backend not ready - check status"}
+          />
+        </div>
+
+        <div className="mt-2">
+          <ActionButton
+            icon={<Activity size={14} />}
+            label="Asset Run"
+            onClick={runAssetBatch}
+            disabled={!backendStatus.readyForAssets || !(payoutAssets && payoutAssets.length)}
+            title={backendStatus.readyForAssets ? "Run automation over current 92% payout assets" : "Backend not ready - check status"}
           />
         </div>
         
@@ -159,30 +176,62 @@ const AssetPanel = () => {
           </button>
         </div>
         
-        {/* NEW: Asset Limit Control */}
-        <div className="mt-2 p-2 bg-gray-800 rounded border border-gray-700">
-          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Max Assets to Star</label>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            value={maxAssetsToStar}
-            onChange={(e) => setMaxAssetsToStar(Math.max(1, Math.min(50, parseInt(e.target.value) || 10)))}
-            className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-gray-300 focus:border-accent-green focus:outline-none"
-            title="Maximum number of assets to star (prevents demo account overload)"
-          />
+        {/* NEW: Asset Limit & Payout Controls */}
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="p-2 bg-gray-800 rounded border border-gray-700">
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Max Assets</label>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              value={maxAssetsToStar}
+              onChange={(e) => setMaxAssetsToStar(Math.max(1, Math.min(50, parseInt(e.target.value) || 15)))}
+              className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-gray-300 focus:border-accent-green focus:outline-none"
+              title="Maximum number of assets to star"
+            />
+          </div>
+          <div className="p-2 bg-gray-800 rounded border border-gray-700">
+            <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Min Payout %</label>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={minPayout}
+              onChange={(e) => setMinPayout(Math.max(1, Math.min(100, parseInt(e.target.value) || 92)))}
+              className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-gray-300 focus:border-accent-green focus:outline-none"
+              title="Minimum payout percentage to consider"
+            />
+          </div>
         </div>
         
         {/* NEW: Specific Assets Control */}
         <div className="mt-2 p-2 bg-gray-800 rounded border border-gray-700">
-          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Specific Assets (Optional)</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[10px] uppercase font-bold text-gray-400">Specific Assets (Optional)</label>
+            <div className="flex bg-gray-900 rounded p-0.5 border border-gray-700">
+              <button 
+                onClick={() => setSpecificAssetMode('include')}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors ${specificAssetMode === 'include' ? 'bg-accent-green text-black' : 'text-gray-500 hover:text-gray-300'}`}
+                title="Prioritize these assets and fill remaining slots"
+              >
+                INCLUDE
+              </button>
+              <button 
+                onClick={() => setSpecificAssetMode('ignore')}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors ${specificAssetMode === 'ignore' ? 'bg-accent-green text-black' : 'text-gray-500 hover:text-gray-300'}`}
+                title="Ignore these assets"
+              >
+                IGNORE
+              </button>
+            </div>
+          </div>
           <input
             type="text"
             value={specificAssets}
             onChange={(e) => setSpecificAssets(e.target.value)}
-            placeholder="e.g., EURUSD, GBPUSD, AUDNZDOTC"
+            placeholder={specificAssetMode === 'include' ? "e.g., EURUSD, GBPUSD" : "Exclude e.g., AUDCADOTC"}
             className="w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-gray-300 focus:border-accent-green focus:outline-none"
-            title="Comma-separated list of specific assets to target (leave empty for all eligible)"
+            title={specificAssetMode === 'include' ? "Prioritize these assets" : "Skip these assets entirely"}
           />
         </div>
         </Card>
@@ -217,15 +266,6 @@ const AssetPanel = () => {
                   </div>
                 </div>
             </h3>
-            <button
-              type="button"
-              onClick={() => syncAssetUi()}
-              className="ml-2 inline-flex items-center px-2 py-1 text-[10px] rounded-md bg-gray-800 border border-gray-700 hover:bg-gray-700"
-              title="Sync selected asset to Pocket Option UI"
-            >
-              <RefreshCw size={12} className="mr-1" />
-              Sync UI
-            </button>
 
             {/* View Toggle */}
             <div className="flex bg-gray-800 rounded p-0.5 border border-gray-700">

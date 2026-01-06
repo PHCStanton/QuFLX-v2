@@ -1,10 +1,21 @@
 from __future__ import annotations
 
-import argparse
-import json
 import os
 import sys
 from pathlib import Path
+
+# Ensure project root (v2) is in sys.path before any other imports
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+import argparse
+import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("CapabilityRunner")
 
 project_root = Path(__file__).resolve().parents[1]
 if str(project_root) not in sys.path:
@@ -43,9 +54,11 @@ def main():
     
     cap_class = CAPABILITY_MAP.get(args.capability)
     if not cap_class:
+        error_msg = f"Unknown capability: {args.capability}. Available: {list(CAPABILITY_MAP.keys())}"
+        logger.error(error_msg)
         print(json.dumps({
             "ok": False, 
-            "error": f"Unknown capability: {args.capability}. Available: {list(CAPABILITY_MAP.keys())}"
+            "error": error_msg
         }))
         sys.exit(1)
         
@@ -90,7 +103,9 @@ def main():
         print(json.dumps(output))
         
     except Exception as e:
-        print(json.dumps({"ok": False, "error": f"Execution failed: {str(e)}"}))
+        error_msg = f"Execution failed: {str(e)}"
+        logger.error(error_msg)
+        print(json.dumps({"ok": False, "error": error_msg}))
         sys.exit(1)
 
 if __name__ == "__main__":

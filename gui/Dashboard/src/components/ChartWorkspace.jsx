@@ -27,7 +27,6 @@ const ChartWorkspace = () => {
     loadIndicators,
     lastError, clearError,
     syncTimeframeUi,
-    syncAssetUi,
   } = useMarketStore();
 
   const health = useStreamHealth();
@@ -41,7 +40,6 @@ const ChartWorkspace = () => {
   const [oscillatorHeight, setOscillatorHeight] = useState(120);
   const oscDragStateRef = useRef(null);
   const [isSyncingTimeframe, setIsSyncingTimeframe] = useState(false);
-  const [isSyncingAsset, setIsSyncingAsset] = useState(false);
 
   const handleChartReady = useCallback(({ chart, series }) => {
     setCandleSeries(series);
@@ -282,18 +280,6 @@ const ChartWorkspace = () => {
     }
   };
 
-  const handleSyncAsset = async () => {
-    if (isSyncingAsset) return;
-    try {
-      setIsSyncingAsset(true);
-      await syncAssetUi();
-    } catch (err) {
-      console.error('Asset UI sync failed:', err);
-    } finally {
-      setIsSyncingAsset(false);
-    }
-  };
-
   const captureChart = () => {
     const container = document.getElementById('quflx-chart-screenshot-root');
     if (!container) return null;
@@ -385,8 +371,6 @@ const ChartWorkspace = () => {
         onIndicatorClick={handleIndicatorClick}
         onSyncTimeframe={handleSyncTimeframe}
         isSyncingTimeframe={isSyncingTimeframe}
-        onSyncAsset={handleSyncAsset}
-        isSyncingAsset={isSyncingAsset}
       />
 
       <ScreenshotModal

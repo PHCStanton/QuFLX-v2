@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple, Protocol, runtime_checkable, List
+import logging
 import os
 import json
 import datetime
 import sys
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Ctx:
@@ -23,6 +25,16 @@ class CapResult:
     data: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     artifacts: Tuple[str, ...] = tuple()
+
+    @staticmethod
+    def fail(error: str, data: Optional[Dict[str, Any]] = None, artifacts: Tuple[str, ...] = tuple()) -> CapResult:
+        """Create a failed result."""
+        return CapResult(ok=False, error=error, data=data or {}, artifacts=artifacts)
+
+    @staticmethod
+    def success(data: Optional[Dict[str, Any]] = None, artifacts: Tuple[str, ...] = tuple()) -> CapResult:
+        """Create a successful result."""
+        return CapResult(ok=True, data=data or {}, artifacts=artifacts)
 
 
 @runtime_checkable
@@ -86,6 +98,7 @@ def add_utils_to_syspath():
 def take_screenshot_if(ctx: Ctx, rel_path: str) -> Optional[str]:
     """
     Save a screenshot relative to artifacts_root if ctx.debug is True.
+    Also captures URL and window size in a sidecar .json file.
     Returns the absolute path or None if not saved.
     """
     if not ctx.debug:
@@ -94,8 +107,25 @@ def take_screenshot_if(ctx: Ctx, rel_path: str) -> Optional[str]:
         abs_path = join_artifact(ctx, rel_path)
         ensure_dir(os.path.dirname(abs_path))
         ctx.driver.save_screenshot(abs_path)
+        
+        # Capture additional context in a sidecar JSON
+        try:
+            context = {
+                "url": getattr(ctx.driver, "current_url", "unknown"),
+                "window_size": getattr(ctx.driver, "get_window_size", lambda: {})(),
+                "timestamp": timestamp(),
+                "screenshot": os.path.basename(abs_path)
+            }
+            json_path = abs_path + ".json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(context, f, ensure_ascii=False, indent=2)
+            logger.debug(f"Saved screenshot context to {json_path}")
+        except Exception as ce:
+            logger.warning(f"Failed to save screenshot context: {ce}")
+            
         return abs_path
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to take screenshot {rel_path}: {e}")
         return None
 
 

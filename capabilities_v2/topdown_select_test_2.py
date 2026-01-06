@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import json
 import re
 import sys
@@ -24,6 +25,7 @@ except ImportError:
     from capabilities_v2.session_foundations import SessionFoundations  # type: ignore
     from capabilities_v2.timeframe_select_sync import TimeframeSelectSync  # type: ignore
 
+logger = logging.getLogger(__name__)
 
 class TopdownSelectTest2(Capability):
     id = "topdown_select_test_2"
@@ -162,8 +164,10 @@ class TopdownSelectTest2(Capability):
                     "error": tf_res.error,
                     "data": tf_res.data,
                 })
-                if not tf_res.ok and ctx.verbose:
-                    print(json.dumps({"warning": "timeframe selection failed", "label": label, "data": tf_res.data, "error": tf_res.error}))
+                if not tf_res.ok:
+                    logger.warning(f"Timeframe selection failed for {label}: {tf_res.error}")
+                    if tf_res.data:
+                        logger.debug(f"Timeframe selection debug data: {tf_res.data}")
                 try:
                     if tf_res.ok and delay_ms > 0:
                         time.sleep(max(0, int(delay_ms)) / 1000.0)

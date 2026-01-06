@@ -189,6 +189,27 @@ class HighPriorityControls:
             except Exception:
                 return False
 
+    def _double_click_element_safely(self, element: Any) -> bool:
+        """Safely double-click an element with fallback to JavaScript."""
+        try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            self._scroll_into_view(element)
+            actions = ActionChains(self.driver)
+            actions.double_click(element).perform()
+            return True
+        except Exception:
+            try:
+                # JS fallback for double click
+                self.driver.execute_script(
+                    "var evt = new MouseEvent('dblclick', {bubbles: true, cancelable: true, view: window});"
+                    "arguments[0].dispatchEvent(evt);",
+                    element
+                )
+                return True
+            except Exception:
+                # Fallback to two rapid single clicks if dblclick event fails
+                return self._click_element_safely(element) and self._click_element_safely(element)
+
     def ensure_clickable_anchor(self, element: Any) -> Any:
         """
         If the element is a <span> (common label in PO buttons), find its closest <a> parent.
@@ -844,10 +865,7 @@ class HighPriorityControls:
                 meta["clicked"] = True
                 meta["click_method"] = "javascript"
 
-            # Brief wait for dropdown to open
-            time.sleep(0.4)
-
-            # Verify dropdown opened by looking for common dropdown indicators
+            # Dynamic wait for dropdown to open (max 2s)
             dropdown_indicators = [
                 ("css", ".dropdown.open, .dropdown.show, .menu.open, .menu.show"),
                 ("css", "[role='menu'], [role='listbox']"),
@@ -856,7 +874,14 @@ class HighPriorityControls:
                 ("css", ".items__list"), # PO specific
             ]
 
-            dropdown_el, _, _, _ = self._find_first_visible(dropdown_indicators)
+            dropdown_el = None
+            try:
+                dropdown_el = WebDriverWait(self.driver, 2.0).until(
+                    lambda d: self._find_first_visible(dropdown_indicators)[0]
+                )
+            except TimeoutException:
+                pass
+
             if dropdown_el:
                 meta["dropdown_opened"] = True
                 meta["ok"] = True
@@ -1197,10 +1222,31 @@ class HighPriorityControls:
             except Exception:
                 self.driver.execute_script("arguments[0].click();", left_btn)
 
-            # Brief wait for scroll to take effect
-            time.sleep(0.15)
+            # Dynamic wait for scroll or content change (max 1s)
+            def check_scroll_left_changed(d):
+                curr_scroll = d.execute_script("return arguments[0].scrollLeft || 0;", container)
+                if curr_scroll < before_scroll:
+                    return True
+                
+                # Fallback: check if first visible label changed
+                try:
+                    items = container.find_elements(By.CSS_SELECTOR, ".assets-favorites-item__line")
+                    visible = [item for item in items if item.is_displayed()]
+                    if visible:
+                        label_el = visible[0].find_element(By.CSS_SELECTOR, ".assets-favorites-item__label")
+                        curr_label = (label_el.text or "").strip()
+                        # We don't have first_label_before here, but we can compare with scroll
+                        return False # Continue waiting
+                except Exception:
+                    pass
+                return False
 
-            # Check if scroll position changed
+            try:
+                WebDriverWait(self.driver, 1.0).until(check_scroll_left_changed)
+            except TimeoutException:
+                pass
+
+            # Final check
             after_scroll = self.driver.execute_script("return arguments[0].scrollLeft || 0;", container)
 
             # Also check if visible items changed (fallback verification)
@@ -1214,8 +1260,6 @@ class HighPriorityControls:
                         first_label_before = (label_el.text or "").strip()
                     except Exception:
                         pass
-
-                time.sleep(0.1)  # Additional wait for DOM update
 
                 items_after = container.find_elements(By.CSS_SELECTOR, ".assets-favorites-item__line")
                 visible_after = [item for item in items_after if item.is_displayed()]
@@ -1277,10 +1321,19 @@ class HighPriorityControls:
             except Exception:
                 self.driver.execute_script("arguments[0].click();", right_btn)
 
-            # Brief wait for scroll to take effect
-            time.sleep(0.15)
+            # Dynamic wait for scroll or content change (max 1s)
+            def check_scroll_right_changed(d):
+                curr_scroll = d.execute_script("return arguments[0].scrollLeft || 0;", container)
+                if curr_scroll > before_scroll:
+                    return True
+                return False
 
-            # Check if scroll position changed
+            try:
+                WebDriverWait(self.driver, 1.0).until(check_scroll_right_changed)
+            except TimeoutException:
+                pass
+
+            # Final check
             after_scroll = self.driver.execute_script("return arguments[0].scrollLeft || 0;", container)
 
             # Also check if visible items changed (fallback verification)
@@ -1294,8 +1347,6 @@ class HighPriorityControls:
                         first_label_before = (label_el.text or "").strip()
                     except Exception:
                         pass
-
-                time.sleep(0.1)  # Additional wait for DOM update
 
                 items_after = container.find_elements(By.CSS_SELECTOR, ".assets-favorites-item__line")
                 visible_after = [item for item in items_after if item.is_displayed()]

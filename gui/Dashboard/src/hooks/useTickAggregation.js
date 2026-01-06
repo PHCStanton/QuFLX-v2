@@ -65,8 +65,17 @@ const useTickAggregation = ({
       return;
     }
 
+    // Defensive: If currentRef already exists and is NEWER than history, 
+    // it means ticks arrived first. We should ideally merge.
+    // For simplicity with Lightweight Charts, we'll use setData for the bulk load.
     candleSeries.setData(mapped);
-    currentCandleRef.current = mapped[mapped.length - 1];
+    
+    // Update local ref to the latest candle from history IF it's newer than what we have
+    const latestHist = mapped[mapped.length - 1];
+    if (!currentCandleRef.current || latestHist.time > currentCandleRef.current.time) {
+        currentCandleRef.current = latestHist;
+    }
+    
     setIsLoading(false);
   }, [historyCandles, historyStatus, selectedAsset, candleSeries]);
 
@@ -76,11 +85,6 @@ const useTickAggregation = ({
     if (!Array.isArray(seriesTicks) || seriesTicks.length === 0 || !candleSeries) return;
 
     const latestData = seriesTicks[seriesTicks.length - 1];
-
-    // Hide loading state once we receive first data for this asset
-    if (isLoading) {
-      setIsLoading(false);
-    }
 
     try {
       // If it's a tick-shaped payload (our live market_data path)
@@ -154,7 +158,11 @@ const useTickAggregation = ({
     } catch (err) {
       console.error("Error updating chart data:", err);
     }
-  }, [marketData, selectedAssetKey, selectedTimeframe, isLoading, candleSeries]);
+
+    // Hide loading state once we receive first data for this asset
+    // We do this AFTER processing to ensure data is actually updating
+    setIsLoading(false);
+  }, [marketData, selectedAssetKey, selectedTimeframe, candleSeries]);
 
   return { isLoading, setIsLoading };
 };

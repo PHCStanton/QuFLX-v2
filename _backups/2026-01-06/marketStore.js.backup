@@ -291,20 +291,19 @@ const createMarketSlice = (set, get) => ({
     }));
 
     const timeframe = get().selectedTimeframe || '1m';
-    const timeframeMin = timeframe.replace('m', '');
     const limit = 200;
 
     try {
-      // Step 1: Quick check for existing CSV file
-      console.log(`[LoadHistory] Checking for existing history: ${asset} @ ${timeframe}`);
-      const checkRes = await fetch(
-        `http://localhost:8000/api/v1/history/${encodeURIComponent(asset)}?timeframe=${timeframeMin}&limit=${limit}`
+      // 1. Check if history already exists (Quick check)
+      const initialCheck = await fetch(
+        `http://localhost:8000/api/v1/history/${encodeURIComponent(
+          asset
+        )}?timeframe=${timeframe.replace('m', '')}&limit=${limit}`
       );
-
-      if (checkRes.ok) {
-        const hist = await checkRes.json();
+      
+      if (initialCheck.ok) {
+        const hist = await initialCheck.json();
         if (Array.isArray(hist.data) && hist.data.length > 0) {
-          console.log(`[LoadHistory] ✓ Found existing history: ${hist.data.length} candles`);
           set((state) => ({
             historyCandles: { ...state.historyCandles, [asset]: hist.data },
             historyStatus: { ...state.historyStatus, [asset]: 'loaded' }
@@ -313,60 +312,75 @@ const createMarketSlice = (set, get) => ({
         }
       }
 
-      // Step 2: No existing data - Bootstrap collection (AWAITS completion, no polling!)
-      console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
-      console.log(`[LoadHistory] ⏳ MANUAL MODE: Click ${asset} in Pocket Option within 15 seconds`);
-
-      const bootstrapRes = await fetch('http://localhost:8000/api/v1/history/bootstrap-history', {
+      // 2. Trigger Bootstrap (This will wait for the user to click in Pocket Option)
+      // We don't await this immediately because we want to start polling for the file
+      console.log(`Manual Mode: Waiting for user to click ${asset} in Pocket Option...`);
+      
+      const bootstrapPromise = fetch('http://localhost:8000/api/v1/history/bootstrap-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          asset, 
-          timeframe: timeframeMin, 
-          duration: 15 
-        })
+        body: JSON.stringify({ asset, timeframe, duration: 15 }) // 15s window for manual click
       });
 
-      const result = await bootstrapRes.json();
-
-      // Step 3: Handle response (success or structured error)
-      if (!result.ok) {
-        // Structured error response from backend
-        const errorCode = result.error_code || 'unknown_error';
-        const userMessage = result.user_message || result.error_message || 'History collection failed';
+      // 3. Resilient Polling (Wait up to 20 seconds for the file to appear)
+      const pollStart = Date.now();
+      const pollTimeout = 20000;
+      while (Date.now() - pollStart < pollTimeout) {
+        const pollRes = await fetch(
+          `http://localhost:8000/api/v1/history/${encodeURIComponent(
+            asset
+          )}?timeframe=${timeframe.replace('m', '')}&limit=${limit}`
+        );
         
-        console.error(`[LoadHistory] ✗ Bootstrap failed: ${errorCode}`, result);
-        
-        set((state) => ({
-          historyCandles: { ...state.historyCandles, [asset]: [] },
-          historyStatus: { ...state.historyStatus, [asset]: 'error' },
-          lastError: userMessage
-        }));
-        
-        // Re-throw with user-friendly message for upstream handling
-        throw new Error(userMessage);
+        if (pollRes.ok) {
+          const hist = await pollRes.json();
+          if (Array.isArray(hist.data) && hist.data.length > 0) {
+            set((state) => ({
+              historyCandles: { ...state.historyCandles, [asset]: hist.data },
+              historyStatus: { ...state.historyStatus, [asset]: 'loaded' }
+            }));
+            console.log(`Manual Mode: History caught for ${asset}!`);
+            return;
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Poll every 1s
       }
 
-      // Success! Extract candles directly from in-memory response
-      const candles = result.candles || [];
-      console.log(`[LoadHistory] ✓ Bootstrap SUCCESS: Received ${candles.length} candles for ${asset}`);
+      // If we reach here, bootstrap or polling failed
+      const finalRes = await bootstrapPromise;
+      if (!finalRes.ok) {
+        const errorData = await finalRes.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Manual click not detected or bootstrap failed');
+      }
 
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [asset]: candles },
-        historyStatus: { ...state.historyStatus, [asset]: 'loaded' }
+        historyCandles: {
+          ...state.historyCandles,
+          [asset]: []
+        },
+        historyStatus: {
+          ...state.historyStatus,
+          [asset]: histRes.status === 404 ? 'not_found' : 'error'
+        }
       }));
 
+      if (!histRes.ok) {
+        const histError = await histRes.json().catch(() => ({}));
+        set({ lastError: histError.detail || `History not available for ${asset}` });
+      }
     } catch (err) {
-      console.error('[LoadHistory] Failed to load history:', err);
-      
+      console.error('Failed to load history:', err);
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [asset]: [] },
-        historyStatus: { ...state.historyStatus, [asset]: 'error' },
-        lastError: err.message || 'Failed to load history data'
+        historyCandles: {
+          ...state.historyCandles,
+          [asset]: []
+        },
+        historyStatus: {
+          ...state.historyStatus,
+          [asset]: 'error'
+        },
+        lastError: `History Load Error: ${err.message}`
       }));
-      
-      // Re-throw for upstream error handling
-      throw err;
     }
   },
   payoutAssets: [],

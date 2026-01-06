@@ -2,7 +2,7 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 
 const normalizeAsset = (asset) => {
   if (!asset) return '';
-  return String(asset).replace(/[_/\s]/g, '').toUpperCase();
+  return String(asset).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 };
 
 const formatPrice = (price) => {

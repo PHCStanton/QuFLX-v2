@@ -4,12 +4,13 @@ import signal
 import sys
 import os
 
-# Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
 from backend.services.collector.connection import ChromeConnectionManager
 from backend.services.collector.interceptor import WebSocketInterceptor
 from backend.infrastructure.redis_client import RedisPublisher
+from backend.utils.history_utils import persist_history_csv
+from backend.utils.asset_utils import normalize_asset
 
 # Configure logging
 logging.basicConfig(
@@ -60,8 +61,21 @@ class CollectorService:
         """
         Main data collection loop.
         """
+        last_heartbeat = 0
+        heartbeat_interval = 5 # seconds
+        
         while self.running:
             try:
+                # Periodic Heartbeat
+                now = time.time()
+                if now - last_heartbeat > heartbeat_interval:
+                    self.publisher.publish(self.status_channel, {
+                        "service": "collector",
+                        "status": "connected",
+                        "timestamp": now
+                    })
+                    last_heartbeat = now
+                
                 # Fetch new ticks
                 ticks = self.interceptor.fetch_ticks()
                 
@@ -78,7 +92,7 @@ class CollectorService:
 
                     for tick in ticks:
                         self.publisher.publish(self.channel, tick)
-                        # logger.debug(f"Published tick: {tick}")
+                self._process_history_events()
                 
                 # Sleep briefly to avoid hammering CPU
                 time.sleep(0.1)
@@ -109,6 +123,82 @@ class CollectorService:
         self.running = False
         self.connection_manager.disconnect()
         logger.info("Collector Service stopped.")
+
+    def _process_history_events(self):
+        if not self.interceptor:
+            return
+        try:
+            events = self.interceptor.fetch_history_events()
+        except Exception as e:
+            logger.error(f"Error fetching history events: {e}")
+            return
+        for ev in events:
+            asset = ev.get("asset")
+            if not asset and "candles" in ev and ev["candles"]:
+                first = ev["candles"][0]
+                if isinstance(first, dict):
+                    asset = first.get("asset")
+            if not asset:
+                continue
+            timeframe_min = 1
+            candles_out = []
+            raw_candles = ev.get("candles")
+            if isinstance(raw_candles, list) and raw_candles:
+                for c in raw_candles:
+                    if not isinstance(c, dict):
+                        continue
+                    try:
+                        ts = float(c.get("timestamp"))
+                        o = float(c.get("open"))
+                        h = float(c.get("high"))
+                        l = float(c.get("low"))
+                        cl = float(c.get("close"))
+                        v = float(c.get("volume", 0.0))
+                    except Exception:
+                        continue
+                    candles_out.append({
+                        "timestamp": ts,
+                        "open": o,
+                        "high": h,
+                        "low": l,
+                        "close": cl,
+                        "volume": v,
+                    })
+            elif "history" in ev and isinstance(ev["history"], list) and ev["history"]:
+                points = ev["history"]
+                bucket_s = timeframe_min * 60
+                buckets = {}
+                for item in points:
+                    if not isinstance(item, (list, tuple)) or len(item) < 2:
+                        continue
+                    try:
+                        ts = float(item[0])
+                        price = float(item[1])
+                    except Exception:
+                        continue
+                    bucket_start = int(ts // bucket_s) * bucket_s
+                    c = buckets.get(bucket_start)
+                    if c is None:
+                        buckets[bucket_start] = {
+                            "timestamp": float(bucket_start),
+                            "open": price,
+                            "high": price,
+                            "low": price,
+                            "close": price,
+                            "volume": 1.0,
+                        }
+                        continue
+                    c["high"] = max(c["high"], price)
+                    c["low"] = min(c["low"], price)
+                    c["close"] = price
+                    c["volume"] += 1.0
+                candles_out = list(buckets.values())
+            if not candles_out:
+                continue
+            try:
+                persist_history_csv(asset, timeframe_min, candles_out)
+            except Exception as e:
+                logger.error(f"Failed to persist history for {asset}: {e}")
 
 def signal_handler(sig, frame):
     logger.info("Received shutdown signal.")

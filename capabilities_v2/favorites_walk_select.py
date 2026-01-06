@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import time
+import logging
 import re
 from typing import Any, Dict, List, Optional
 from .base import Ctx, CapResult, Capability, take_screenshot_if, timestamp
 from .favorites_bar import FavoritesBar
+
+logger = logging.getLogger(__name__)
 
 class FavoritesWalkSelect(Capability):
     """
@@ -23,7 +26,7 @@ class FavoritesWalkSelect(Capability):
         min_pct = inputs.get("min_pct", 92)
         assets_filter = inputs.get("assets", [])  # List of strings (contains match)
         select_all = inputs.get("all", False)
-        click_delay_ms = inputs.get("click_delay_ms", 1500)
+        click_delay_ms = inputs.get("click_delay_ms", 500)
         step_delay_ms = inputs.get("step_delay_ms", 150)
         save_screenshots = inputs.get("save_screenshots", False)
         shots_subdir = inputs.get("shots_subdir", "favorites_walk_select")
@@ -51,34 +54,29 @@ class FavoritesWalkSelect(Capability):
         fb = FavoritesBar()
 
         # 2. Reset favorites bar to far left
-        try:
-            print("RESET: Resetting favorites bar to far left...")
-        except Exception:
-            pass
+        logger.info("RESET: Resetting favorites bar to far left...")
         reset_res = fb.run(ctx, {"action": "reset_to_left"})
         if not reset_res.ok:
             summary["errors"].append(f"Reset failed: {reset_res.error}")
         artifacts.extend(reset_res.artifacts)
 
-        # 3. Iterate over pages
         selected_set = set()
         page_index = 0
         total_steps = 0
         INTERNAL_MAX_PAGES = 50
+        logger.info(f"WALK: Starting walk (min_pct={min_pct}, filter={assets_filter})...")
 
-        try:
-            print(f"WALK: Starting walk (min_pct={min_pct}, filter={assets_filter})...")
-        except Exception:
-            pass
-        
         while page_index < INTERNAL_MAX_PAGES:
-            # A) Scan visible favorites
-            scan_res = fb.run(ctx, {"action": "get_visible_favorites"})
-            if not scan_res.ok:
-                summary["errors"].append(f"Scan failed on page {page_index}: {scan_res.error}")
-                break
-            
-            visible_items = scan_res.data.get("visible", [])
+            js_visible = self._get_visible_favorites_js(ctx)
+            if js_visible:
+                visible_items = js_visible
+            else:
+                scan_res = fb.run(ctx, {"action": "get_visible_favorites"})
+                if not scan_res.ok:
+                    summary["errors"].append(f"Scan failed on page {page_index}: {scan_res.error}")
+                    break
+                artifacts.extend(scan_res.artifacts)
+                visible_items = scan_res.data.get("visible", [])
             summary["filter_stats"]["total_visible"] += len(visible_items)
 
             targets = []
@@ -88,7 +86,8 @@ class FavoritesWalkSelect(Capability):
 
             for item in visible_items:
                 asset_name = item.get("asset", "")
-                payout_str = item.get("payout", "0")
+                payout_raw = item.get("payout", "0")
+                payout_str = str(payout_raw)
                 
                 payout_val = 0
                 try:
@@ -120,10 +119,7 @@ class FavoritesWalkSelect(Capability):
                 if label in selected_set:
                     continue
                 
-                try:
-                    print(f"TARGET: {label} (page {page_index})")
-                except Exception:
-                    pass
+                logger.info(f"TARGET: {label} (page {page_index})")
                 click_res = fb.run(ctx, {"action": "click_favorite", "label": label})
                 
                 if click_res.ok:
@@ -134,13 +130,11 @@ class FavoritesWalkSelect(Capability):
                     summary["skipped"].append(label)
                     summary["errors"].append(f"Failed to click {label}: {click_res.error}")
 
-            # D) Optional screenshot
             if save_screenshots:
                 shot = take_screenshot_if(ctx, f"screenshots/{shots_subdir}/page_{page_index:03d}_{timestamp()}.png")
                 if shot:
                     artifacts.append(shot)
 
-            # E) Page right
             scroll_res = fb.run(ctx, {"action": "scroll_right"})
             scrolled = scroll_res.data.get("scrolled", False)
             
@@ -179,3 +173,65 @@ class FavoritesWalkSelect(Capability):
             error=error_msg,
             artifacts=tuple(artifacts)
         )
+
+    def _get_visible_favorites_js(self, ctx: Ctx) -> List[Dict[str, Any]]:
+        drv = getattr(ctx, "driver", None)
+        if drv is None:
+            return []
+
+        script = """
+        const rows = Array.from(document.querySelectorAll(
+          ".assets-favorites-item__line"
+        ));
+        return rows.map((row, idx) => {
+            const labelEl = row.querySelector(".assets-favorites-item__label");
+            const payoutEl = row.querySelector(".payout__number");
+
+            let payout = null;
+            if (payoutEl) {
+                const txt = payoutEl.innerText.replace(/[+%]/g, "").trim();
+                const m = txt.match(/(\\d+)/);
+                if (m) payout = parseInt(m[1]);
+            }
+
+            let label = "";
+            if (labelEl) {
+                label = labelEl.innerText.trim();
+            } else {
+                const rowText = row.innerText.split("\\n")[0].trim();
+                label = rowText.replace(/\\s*\\d+\\s*%\\s*$/, "").trim();
+            }
+
+            const rect = row.getBoundingClientRect();
+            const visible = rect.width > 0 && rect.height > 0 &&
+                            rect.right > 0 && rect.left < (window.innerWidth || document.documentElement.clientWidth) &&
+                            rect.bottom > 0 && rect.top < (window.innerHeight || document.documentElement.clientHeight);
+
+            return {
+                id: idx,
+                label: label,
+                payout: payout,
+                visible: visible
+            };
+        }).filter(it => it.visible);
+        """
+
+        try:
+            items = drv.execute_script(script)
+        except Exception as e:
+            logger.error(f"JS favorites snapshot failed: {e}")
+            return []
+
+        result: List[Dict[str, Any]] = []
+        if not isinstance(items, list):
+            return result
+
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            asset = str(it.get("label", "") or "").strip()
+            payout = it.get("payout")
+            payout_str = "" if payout is None else str(payout)
+            result.append({"asset": asset, "payout": payout_str})
+
+        return result

@@ -206,20 +206,12 @@ class HistoryCollector(Capability):
         output_root: Optional[str],
     ) -> CapResult:
         if ctx.driver is None:
-            return CapResult(
-                ok=False, 
-                error="Chrome browser not connected",
-                error_code="chrome_not_connected"
-            )
+            return CapResult(ok=False, error="ctx.driver required")
 
         try:
             from backend.services.collector.interceptor import WebSocketInterceptor
         except Exception as e:
-            return CapResult(
-                ok=False, 
-                error=f"Failed to import WebSocketInterceptor: {type(e).__name__}",
-                error_code="collector_not_running"
-            )
+            return CapResult(ok=False, error=f"failed to import WebSocketInterceptor: {type(e).__name__}")
 
         interceptor = WebSocketInterceptor(ctx.driver)
         target = self._normalize_asset(asset)
@@ -301,39 +293,10 @@ class HistoryCollector(Capability):
         final_candles.sort(key=lambda c: c.timestamp)
         
         if not final_candles:
-            # Determine specific error code based on what failed
-            if not history_candles and not ticks:
-                error_code = "manual_click_timeout"
-                error_msg = f"No history data received for {asset} within {wait_time}s. Manual click may not have been detected."
-            elif not history_candles:
-                error_code = "no_history_data_received"
-                error_msg = f"No history payload captured for {asset}, though {len(ticks)} ticks were collected."
-            else:
-                error_code = "history_payload_empty"
-                error_msg = f"History data captured but no valid candles could be parsed for {asset}."
-            
-            return CapResult(
-                ok=False, 
-                error=error_msg,
-                error_code=error_code
-            )
+            return CapResult(ok=False, error=f"no data collected for {asset}")
 
-        # Save to CSV
         filepath = self._save_csv(asset, tf, final_candles, output_root)
-        
-        # Convert candles to OHLC format for frontend consumption
-        candles_ohlc = [c.to_ohlc(asset=asset, timeframe=tf) for c in final_candles]
-        
-        return CapResult(
-            ok=True, 
-            data={
-                "filepath": filepath, 
-                "count": len(final_candles), 
-                "timeframe": tf,
-                "candles": candles_ohlc,  # Return candles directly for in-memory response
-                "asset": asset
-            }
-        )
+        return CapResult(ok=True, data={"filepath": filepath, "count": len(final_candles), "timeframe": tf})
 
     def _parse_history_payload(self, ctx: Ctx, data: Dict[str, Any], timeframe_min: int) -> List[Candle]:
         candles = []
