@@ -38,9 +38,9 @@ const StatusBadge = ({ label, status }) => {
   };
   
   return (
-    <div className="flex items-center gap-2 px-3 py-1 bg-section-bg/50 rounded border border-border-primary">
-      <span className="text-xs font-bold text-text-secondary uppercase">{label}</span>
-      <div className={`w-2 h-2 rounded-full ${getStatusColor(status)}`}></div>
+    <div className="flex items-center gap-2 px-3 py-1 bg-section-bg/30 backdrop-blur-sm rounded border border-border-primary shadow-inner">
+      <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">{label}</span>
+      <div className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${getStatusColor(status)}`}></div>
     </div>
   );
 };

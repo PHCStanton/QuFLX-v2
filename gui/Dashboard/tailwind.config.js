@@ -12,7 +12,7 @@ export default {
         'dashboard-bg': 'rgb(var(--dashboard-bg) / <alpha-value>)',
         'card-bg': 'rgb(var(--card-bg) / <alpha-value>)',
         'section-bg': 'rgb(var(--section-bg) / <alpha-value>)',
-        'accent-green': '#10b981', // emerald-500
+        'accent-green': 'rgb(var(--accent-primary, 16 185 129) / <alpha-value>)',
         'accent-red': '#ef4444', // red-500
         'text-primary': 'rgb(var(--text-primary) / <alpha-value>)',
         'text-secondary': 'rgb(var(--text-secondary) / <alpha-value>)',

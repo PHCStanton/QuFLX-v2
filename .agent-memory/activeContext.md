@@ -1,14 +1,14 @@
 # Active Context
 
 ## Current Focus
-**Phase 5: UI + Streaming Stable; Designing Indicators, AI Integration, and Settings Architecture**
+- **Dashboard UI Refinement:** Enhancing the Chart and Indicators workspace with synchronized resizing and improved loading states.
+- **History Data Reliability:** Ensuring "Manual Mode" history collection is stable and well-documented.
 
-We are now beyond basic Dashboard wiring. The current focus is to:
-- Finalize chart/stream semantics for indicators (overlays + oscillators) using Lightweight Charts.
-- Design a clean backend–frontend contract for indicators that reuses the existing Python indicator pipeline.
-- Architect the xAI-powered trading assistant (text + vision) and voice agent so they integrate cleanly with the existing Gateway/Strategy stack.
-- Establish and refine a unified settings architecture (Global/User/AI + per-tab sections) backed by a versioned settings store and clearly defined endpoints.
-- **Immediate Next Task**: Implement the modular settings layout and UI scaffolding based on the newly provisioned design.
+## Recent Changes
+- Added `ResizeObserver` to `ChartContainer` and `OscillatorChart` for real-time synchronized resizing.
+- Fixed indicator loading logic in `marketStore.js` to prevent premature error banners.
+- Implemented `lastError` clearing on asset selection to ensure a clean UI state.
+- Compiled comprehensive history rewrite report for future development.
 
 ## Recent Accomplishments
 - **Streaming & UI Foundation** (Phase 5 baseline):

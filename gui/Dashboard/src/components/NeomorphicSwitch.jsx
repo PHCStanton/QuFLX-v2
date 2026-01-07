@@ -11,12 +11,19 @@ const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel }) => {
           onChange={onChange}
         />
         {/* Track */}
-        <div className={`absolute inset-0 rounded-[15px] transition-all duration-400 shadow-[inset_2px_2px_4px_rgba(0,0,0,0.2),inset_-2px_-2px_4px_rgba(255,255,255,0.5)] dark:shadow-[inset_2px_2px_4px_rgba(0,0,0,0.8),inset_-2px_-2px_4px_rgba(255,255,255,0.05)] group-hover:shadow-[0_0_8px_rgba(var(--accent-glow),0.3)] ${checked ? 'shadow-[0_0_6px_rgba(var(--accent-glow),0.4)]' : ''} quflx-section-light`}>
+        <div className={`absolute inset-0 rounded-[15px] transition-all duration-400 shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9)] group-hover:shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9),0_0_12px_rgba(22,8,241,0.4)] ${checked ? 'shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9),0_0_20px_rgba(22,8,241,0.6)]' : ''}`}
+             style={{ 
+               background: checked 
+                 ? `linear-gradient(135deg, rgb(22, 8, 241) 0%, rgba(22, 8, 241, 0.7) 100%)` 
+                 : 'rgba(22, 8, 241, 0.1)',
+               border: `1px solid rgba(22, 8, 241, ${checked ? '0.6' : '0.2'})`
+             }}>
         </div>
         
         {/* Knob */}
-        <div className={`absolute top-[3px] left-[3px] w-[24px] h-[24px] rounded-full transition-all duration-400 cubic-bezier(0.68,-0.55,0.27,1.55) z-10 shadow-[2px_2px_4px_rgba(0,0,0,0.4),-2px_-2px_4px_rgba(255,255,255,0.1)] dark:shadow-[2px_2px_4px_rgba(0,0,0,0.8),-2px_-2px_4px_rgba(255,255,255,0.1)] ${checked ? 'translate-x-[30px] shadow-[2px_2px_4px_rgba(0,0,0,0.4),0_0_6px_rgba(var(--accent-glow),0.6)]' : ''} bg-white dark:bg-gray-800`}>
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-gray-400/20 dark:from-gray-600/20 to-transparent"></div>
+        <div className={`absolute top-[3px] left-[3px] w-[24px] h-[24px] rounded-full transition-all duration-400 cubic-bezier(0.68,-0.55,0.27,1.55) z-10 shadow-[3px_3px_6px_rgba(0,0,0,0.8),-1px_-1px_3px_rgba(255,255,255,0.1)] ${checked ? 'translate-x-[30px]' : ''}`}
+             style={{ backgroundColor: '#121212' }}>
+          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/5 to-transparent opacity-30"></div>
         </div>
 
         {/* Glow */}

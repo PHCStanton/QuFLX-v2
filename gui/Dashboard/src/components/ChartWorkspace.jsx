@@ -37,7 +37,8 @@ const ChartWorkspace = () => {
   const [isScreenshotOpen, setIsScreenshotOpen] = useState(false);
   const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
   const [settingsIndicator, setSettingsIndicator] = useState(null);
-  const [oscillatorHeight, setOscillatorHeight] = useState(120);
+  const [oscillatorHeight, setOscillatorHeight] = useState(200);
+  const [isDraggingOsc, setIsDraggingOsc] = useState(false);
   const oscDragStateRef = useRef(null);
   const [isSyncingTimeframe, setIsSyncingTimeframe] = useState(false);
 
@@ -77,7 +78,9 @@ const ChartWorkspace = () => {
     const startY = event.clientY;
     const startHeight = oscillatorHeight;
     const minHeight = 80;
-    const maxHeight = 320;
+    const maxHeight = 600;
+
+    setIsDraggingOsc(true);
 
     const handleMouseMove = (e) => {
       const delta = e.clientY - startY;
@@ -92,6 +95,7 @@ const ChartWorkspace = () => {
     };
 
     const handleMouseUp = () => {
+      setIsDraggingOsc(false);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       oscDragStateRef.current = null;
@@ -167,7 +171,7 @@ const ChartWorkspace = () => {
       kind: 'oscillator',
       displayValue: '14',
       source: 'backend',
-      params: { period: 14 },
+      params: { period: 14, overbought: 75, oversold: 25 },
       paramConfig: [
         {
           name: 'period',
@@ -176,6 +180,57 @@ const ChartWorkspace = () => {
           min: 2,
           max: 50,
           default: 14
+        },
+        {
+          name: 'overbought',
+          label: 'Overbought',
+          type: 'number',
+          min: 50,
+          max: 100,
+          default: 75
+        },
+        {
+          name: 'oversold',
+          label: 'Oversold',
+          type: 'number',
+          min: 0,
+          max: 50,
+          default: 25
+        }
+      ]
+    },
+    {
+      label: 'CCI',
+      value: 'cci',
+      key: 'cci_14',
+      kind: 'oscillator',
+      displayValue: '14',
+      source: 'backend',
+      params: { period: 14, overbought: 100, oversold: -100 },
+      paramConfig: [
+        {
+          name: 'period',
+          label: 'Period',
+          type: 'number',
+          min: 2,
+          max: 50,
+          default: 14
+        },
+        {
+          name: 'overbought',
+          label: 'Overbought',
+          type: 'number',
+          min: 0,
+          max: 300,
+          default: 100
+        },
+        {
+          name: 'oversold',
+          label: 'Oversold',
+          type: 'number',
+          min: -300,
+          max: 0,
+          default: -100
         }
       ]
     },
@@ -215,32 +270,13 @@ const ChartWorkspace = () => {
       ]
     },
     {
-      label: 'CCI',
-      value: 'cci',
-      key: 'cci',
-      kind: 'oscillator',
-      displayValue: '20',
-      source: 'backend',
-      params: { period: 20 },
-      paramConfig: [
-        {
-          name: 'period',
-          label: 'Period',
-          type: 'number',
-          min: 5,
-          max: 50,
-          default: 20
-        }
-      ]
-    },
-    {
       label: 'DeMarker',
       value: 'demarker',
       key: 'demarker',
       kind: 'oscillator',
       displayValue: '10',
       source: 'backend',
-      params: { period: 10 },
+      params: { period: 10, overbought: 0.7, oversold: 0.3 },
       paramConfig: [
         {
           name: 'period',
@@ -249,6 +285,24 @@ const ChartWorkspace = () => {
           min: 2,
           max: 50,
           default: 10
+        },
+        {
+          name: 'overbought',
+          label: 'Overbought',
+          type: 'number',
+          min: 0.5,
+          max: 1.0,
+          step: 0.1,
+          default: 0.7
+        },
+        {
+          name: 'oversold',
+          label: 'Oversold',
+          type: 'number',
+          min: 0.0,
+          max: 0.5,
+          step: 0.1,
+          default: 0.3
         }
       ]
     }
@@ -435,12 +489,21 @@ const ChartWorkspace = () => {
 
         {oscillatorIndicators.length > 0 && (
           <>
+            {/* Enhanced Resize Handle */}
             <div
-              className="h-1 cursor-row-resize bg-gray-800/80 hover:bg-gray-700"
+              className={`h-2 cursor-row-resize flex items-center justify-center transition-colors duration-200 ${
+                isDraggingOsc ? 'bg-accent-primary/40' : 'bg-gray-800/80 hover:bg-gray-700'
+              } border-y border-gray-700/50`}
               onMouseDown={handleOscillatorDragStart}
-            />
-            <div className="mt-2 flex flex-col" style={{ height: oscillatorHeight }}>
-              <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
+            >
+              <div className="flex gap-1">
+                <div className="w-1 h-1 rounded-full bg-gray-500"></div>
+                <div className="w-1 h-1 rounded-full bg-gray-500"></div>
+                <div className="w-1 h-1 rounded-full bg-gray-500"></div>
+              </div>
+            </div>
+            <div className="mt-1 flex flex-col" style={{ height: oscillatorHeight }}>
+              <div className="flex-1 flex flex-col gap-2 overflow-y-auto p-1">
                 {oscillatorIndicators.map((ind) => {
                   const key = `${selectedAsset}|${selectedTimeframe}`;
                   const seriesForKey = indicatorSeries && indicatorSeries[key];
@@ -454,13 +517,15 @@ const ChartWorkspace = () => {
                   return (
                     <div
                       key={ind.id}
-                      className="h-24 bg-gray-900/60 border border-gray-800 rounded relative"
+                      className="h-48 bg-gray-900/60 border border-gray-800 rounded relative"
                     >
                       <OscillatorChart
                         mainChart={mainChart}
                         data={data}
                         type={type}
                         title={ind.name}
+                        params={ind.params}
+                        indicatorValue={ind.value}
                       />
                       {statusKey === 'loading' && (
                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-[10px] text-gray-300">

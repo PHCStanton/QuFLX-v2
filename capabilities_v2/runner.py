@@ -30,9 +30,12 @@ from capabilities_v2.collect_history_loop import CollectHistoryLoop
 from capabilities_v2.topdown_select_test_2 import TopdownSelectTest2
 from capabilities_v2.timeframe_select_sync import TimeframeSelectSync
 from capabilities_v2.favorites_walk_select import FavoritesWalkSelect
+from capabilities_v2.indicator_calculator import IndicatorCalculator
+from backend.services.gateway.asset_control import AssetControl
 
 CAPABILITY_MAP = {
     "history_collector": HistoryCollector,
+    "asset_control": AssetControl,
     "favorites_bar": FavoritesBar,
     "timeframe_menu": TimeframeMenu,
     "favorite_star_select": FavoriteStarSelect,
@@ -41,6 +44,7 @@ CAPABILITY_MAP = {
     "topdown_select_test_2": TopdownSelectTest2,
     "timeframe_select_sync": TimeframeSelectSync,
     "favorites_walk_select": FavoritesWalkSelect,
+    "indicator_calculator": IndicatorCalculator,
 }
 
 def main():
@@ -71,25 +75,33 @@ def main():
         except json.JSONDecodeError:
             inputs = {}
         
-    try:
-        import qf  # type: ignore
-        ok, _ = qf.attach_chrome_session(port=9222)
-        ctx = qf.ctx
-        ctx.debug = args.debug or ctx.debug
-        ctx.verbose = args.verbose or ctx.verbose
-    except Exception:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        
-        opts = Options()
-        opts.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+    requires_browser = getattr(cap_class, "requires_browser", True)
+    ctx = None
+
+    if requires_browser:
         try:
-            driver = webdriver.Chrome(options=opts)
-            artifacts_root = os.path.join(str(project_root), "data", "artifacts")
-            ctx = Ctx(driver=driver, artifacts_root=artifacts_root, debug=args.debug, dry_run=False, verbose=args.verbose)
-        except Exception as e:
-            print(json.dumps({"ok": False, "error": f"Failed to connect to Chrome: {str(e)}"}))
-            sys.exit(1)
+            import qf  # type: ignore
+            ok, _ = qf.attach_chrome_session(port=9222)
+            ctx = qf.ctx
+            ctx.debug = args.debug or ctx.debug
+            ctx.verbose = args.verbose or ctx.verbose
+        except Exception:
+            from selenium import webdriver
+            from selenium.webdriver.chrome.options import Options
+            
+            opts = Options()
+            opts.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+            try:
+                driver = webdriver.Chrome(options=opts)
+                artifacts_root = os.path.join(str(project_root), "data", "artifacts")
+                ctx = Ctx(driver=driver, artifacts_root=artifacts_root, debug=args.debug, dry_run=False, verbose=args.verbose)
+            except Exception as e:
+                print(json.dumps({"ok": False, "error": f"Failed to connect to Chrome: {str(e)}"}))
+                sys.exit(1)
+    else:
+        # For non-browser capabilities, create a minimal context
+        artifacts_root = os.path.join(str(project_root), "data", "artifacts")
+        ctx = Ctx(driver=None, artifacts_root=artifacts_root, debug=args.debug, dry_run=False, verbose=args.verbose)
             
     try:
         cap = cap_class()

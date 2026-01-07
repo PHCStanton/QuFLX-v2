@@ -3,14 +3,15 @@
 @tailwind utilities;
 
 :root {
-  /* Default Dark Theme */
-  --dashboard-bg: 10 12 16;
-  --card-bg: 18 20 26;
-  --section-bg: 31 41 55; /* gray-800 */
-  --text-primary: 249 250 251;
-  --text-secondary: 156 163 175; /* gray-400 */
-  --accent-glow: 16, 185, 129; /* emerald-500 */
-  --border-color: 31 41 55;
+  /* Default Dark Theme - Blue & Dark with White Gap Layout */
+  --dashboard-bg: 255 255 255;
+  --card-bg: 5 7 12;
+  --section-bg: 10 15 30;
+  --text-primary: 240 248 255;
+  --text-secondary: 148 163 184;
+  --accent-primary: 34 197 94; /* Green for primary actions */
+  --accent-glow: 22, 8, 241; /* Blue for glow effects */
+  --border-color: 30 41 59;
 }
 
 .theme-light {
@@ -19,83 +20,118 @@
   --section-bg: 229 231 235; /* gray-200 */
   --text-primary: 17 24 39; /* gray-900 */
   --text-secondary: 75 85 99; /* gray-600 */
+  --accent-primary: 16 185 129;
   --accent-glow: 16, 185, 129;
   --border-color: 209 213 219; /* gray-300 */
 }
 
 .theme-orange-dark {
-  --dashboard-bg: 15 20 25;
-  --card-bg: 6 87 226;
-  --text-primary: 248 250 252;
-  --text-secondary: 148 163 184;
+  --dashboard-bg: 10 12 16;
+  --card-bg: 20 22 28;
+  --section-bg: 35 38 45;
+  --text-primary: 255 255 255;
+  --text-secondary: 251 146 60; /* Orange */
+  --accent-primary: 251 146 60;
   --accent-glow: 251, 146, 60;
+  --border-color: 45 48 55;
 }
 
 .quflx-card {
-  background-color: rgb(var(--card-bg));
-  background-image:
-    radial-gradient(circle at top left, rgb(7, 56, 169)),
-    radial-gradient(circle at bottom right, rgb(0, 0, 0), transparent 55%);
-  box-shadow: 0 10px 25px rgb(0, 0, 0);
+  background-color: #020408;
+  background-image: 
+    linear-gradient(165deg, #0000ff 0%, #000080 25%, #020408 70%);
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 0, 255, 0.2);
 }
 
 .theme-orange-dark .quflx-card {
   background-image:
-    radial-gradient(circle at top left, rgba(251, 146, 60, 0.32), transparent 60%),
+    radial-gradient(circle at top left, rgba(var(--accent-glow), 0.32), transparent 60%),
     radial-gradient(circle at bottom right, rgba(248, 113, 113, 0.24), transparent 55%);
 }
 
 .quflx-topbar {
   background-color: rgb(var(--card-bg));
   background-image:
-    linear-gradient(90deg, rgba(5, 5, 5, 0.744), rgba(7, 56, 169, 0.72)),
-    radial-gradient(circle at top left, rgba(37, 41, 43, 0.764));
+    linear-gradient(90deg, rgba(var(--dashboard-bg), 0.95), rgba(var(--accent-glow), 0.4)),
+    radial-gradient(circle at 0% 0%, rgba(var(--accent-glow), 0.3), transparent 70%);
+  border-bottom: 1px solid rgba(var(--accent-glow), 0.2);
 }
 
 .theme-orange-dark .quflx-topbar {
   background-image:
-    linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(4, 31, 96, 0.72)),
+    linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(var(--accent-glow), 0.72)),
     radial-gradient(circle at top left, rgba(248, 245, 245, 0.4), transparent 55%);
 }
 
 .quflx-sidebar {
   position: relative;
   background-color: rgb(var(--card-bg));
-  /* background-image:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.96), rgba(0, 0, 0, 0.76)),
-    radial-gradient(circle at bottom, rgba(238, 243, 241, 0.745), transparent 55%); */
   overflow: hidden;
+  border-right: 1px solid rgba(var(--accent-glow), 0.2);
 }
 
 .quflx-sidebar::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url('.\assets\textures\Blue_Dark_BG2.jpg');
+  background-image: url('./assets/textures/Blue_Dark_BG2.jpg');
   background-size: cover;
   background-position: center;
-  opacity: 0.25;
+  opacity: 0.1;
   pointer-events: none;
+}
+
+.theme-light .quflx-sidebar::before {
+  background-image: url('./assets/textures/3D_Perspective_BG.jpg');
+  opacity: 0.9;
+  filter: brightness(1.2) contrast(1.2) saturate(1.4);
+}
+
+.quflx-right-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.quflx-right-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .theme-orange-dark .quflx-sidebar {
   background-image:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.76)),
-    radial-gradient(circle at bottom, rgba(16, 185, 129, 0.28), transparent 55%);
+    linear-gradient(180deg, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.65)),
+    radial-gradient(circle at bottom, rgba(251, 146, 60, 0.15), transparent 55%);
+}
+
+.theme-orange-dark .quflx-sidebar::before {
+  background-image: url('./assets/textures/Orange_Theme_BG2.jpg');
+  opacity: 0.8;
 }
 
 .quflx-sidebar-item-active {
-  background-color: rgba(21, 89, 178, 0.245);
-  color: #49bbd8;
-  border-right-color: #49bbd8;
-  box-shadow: 0 0 8px rgba(79, 119, 171, 0.75);
+  background-color: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+  border-right: 4px solid #22c55e;
+  box-shadow: 
+    inset 0 0 15px rgba(34, 197, 94, 0.1),
+    0 0 25px rgba(34, 197, 94, 0.4);
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+}
+
+.quflx-sidebar-item:hover {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  box-shadow: inset 0 0 10px rgba(34, 197, 94, 0.05);
 }
 
 .theme-orange-dark .quflx-sidebar-item-active {
-  background-color: rgba(251, 146, 60, 0.18);
-  color: #fed7aa;
-  border-right-color: #fb923c;
-  box-shadow: 0 0 8px rgba(251, 146, 60, 0.65);
+  background-color: rgba(var(--accent-glow), 0.18);
+  color: #fce2c4;
+  border-right-color: rgb(var(--accent-glow));
+  box-shadow: 0 0 8px rgba(var(--accent-glow), 0.65);
 }
 
 .quflx-logo {
@@ -122,18 +158,20 @@
 }
 
 .quflx-logo-text {
-  background-image: linear-gradient(120deg, #feffff, #0b7dda, #243cf6);
+  background-image: linear-gradient(120deg, #fff, rgb(var(--accent-glow)), #000);
   color: transparent;
   -webkit-background-clip: text;
   background-clip: text;
 }
 
 .quflx-section-light {
-  background-color: rgb(var(--card-bg));
-  background-image:
-    radial-gradient(circle at top left, rgba(21, 89, 178, 0.15), transparent 60%),
-    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.1), transparent 55%);
-  border: 1px solid rgb(var(--border-color));
+  background-color: #020408;
+  background-image: 
+    linear-gradient(165deg, #0000ff 0%, #000080 20%, #020408 60%);
+  border: 1px solid rgba(0, 0, 255, 0.3);
+  box-shadow: 
+    0 30px 60px -12px rgba(0, 0, 0, 0.95),
+    0 18px 36px -18px rgba(0, 0, 0, 0.75);
 }
 
 .theme-light .quflx-section-light {

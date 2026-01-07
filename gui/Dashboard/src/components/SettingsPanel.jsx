@@ -36,13 +36,13 @@ const SettingsPanel = () => {
           <div className="flex gap-3">
             <button 
               onClick={resetAll}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-text-primary rounded-lg transition-colors text-sm font-medium border border-gray-300 dark:border-gray-700 shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-section-bg hover:bg-section-bg/80 text-text-primary rounded-lg transition-colors text-sm font-medium border border-border-primary shadow-sm"
             >
               <RotateCcw size={16} /> Reset All
             </button>
             <button 
               onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-2 bg-accent-green hover:bg-accent-green/90 text-white dark:text-black rounded-lg transition-colors text-sm font-bold shadow-lg shadow-accent-green/20"
+              className="flex items-center gap-2 px-6 py-2 bg-accent-green hover:opacity-90 text-text-primary rounded-lg transition-colors text-sm font-bold shadow-lg shadow-accent-green/20"
             >
               <Save size={16} /> Save & Close
             </button>
@@ -183,12 +183,12 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
-        <div className="pt-8 border-t border-gray-300 dark:border-gray-800 flex justify-between items-center">
+        <div className="pt-8 border-t border-border-primary flex justify-between items-center">
           <div className="text-xs text-text-secondary">
             QuFLX v2.0.0-beta | Settings Version: {settings.version}
           </div>
           <button 
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-text-primary rounded-lg transition-colors text-sm font-medium border border-gray-300 dark:border-gray-700 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-section-bg hover:bg-section-bg/80 text-text-primary rounded-lg transition-colors text-sm font-medium border border-border-primary shadow-sm"
           >
             <Download size={16} /> Export Config (JSON)
           </button>

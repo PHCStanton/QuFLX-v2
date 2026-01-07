@@ -75,6 +75,17 @@
 - [ ] Comprehensive Documentation & Onboarding Guides, including AI usage and limitations.
 - [ ] Automated tests for indicator visualization and AI workflows.
 
+### Completed Tasks
+- [x] Implemented Manual Mode history collection with 15s timeout.
+- [x] Fixed subprocess runner path resolution in Gateway.
+- [x] Compiled `report_history_rewrite_implementation_26-01-06.md`.
+- [x] Updated `History_data_Payload_Aggregation.md` with latest workflow.
+
+### In Progress
+- [ ] Debugging indicator loading error (red toast banner).
+- [ ] Fixing initial positioning of indicators on asset selection.
+- [ ] Implementing dynamic synchronized resizing for Chart and Indicators.
+
 
 ## Phase 4.2: Pocket Option Topdown v2 (Timeframe + Data Collection Foundation)
 - [x] Implemented `capabilities_v2/timeframe_select_sync.py` for robust timeframe selection with retries and chart-focus recovery.

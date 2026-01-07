@@ -229,6 +229,9 @@ const createMarketSlice = (set, get) => ({
     const hasHistoryCandles = Array.isArray(candles) && candles.length > 0;
 
     if (historyState === 'not_found' || historyState === 'error' || historyState === 'empty') {
+      // Don't show error yet if it's still loading or if we just selected the asset
+      if (historyState === 'loading') return;
+      
       set({
         lastError: `No historical data available for ${asset} @ ${timeframe}. Run history collection first.`
       });

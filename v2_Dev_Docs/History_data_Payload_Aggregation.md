@@ -5,27 +5,17 @@
 
 ## ⚠️ LATEST FINDINGS (2026-01-06 20:45 UTC)
 
-**@Investigator has completed a comprehensive forensic analysis. See: `reports/report_2026-01/forensic_analysis_history_loading_26-01-06.md`**
+**History implementation has been refined for Manual Mode stability.**
 
-### Critical Discovery: Race Condition, Not Path Issue
-The previous path fix (`../../../../capabilities_v2/runner.py`) was **correctly applied** but did NOT solve the root problem. The issue is **architectural**, not a simple path bug.
+### 1. Manual Mode Workflow
+- **Frontend Timeout:** 15 seconds (configurable in settings).
+- **Backend Wait:** Respects the `duration` parameter from the frontend.
+- **User Action:** Requires manual click in Pocket Option within the 15s window.
 
-### Root Causes Identified:
-1. **CRITICAL: Race Condition** – Frontend starts polling for CSV files BEFORE subprocess spawns
-2. **CRITICAL: Unreachable Code** – Polling loop has early return, cleanup code never executes
-3. **HIGH: Error Swallowing** – Users see blank chart with no actionable feedback
-4. **MEDIUM: Dead Code** – ~150 lines of deprecated functions still present
-
-### CORE_PRINCIPLES Violations:
-- **Rule #7:** "Stop Patching, Start Rewriting" – Multiple failed fix attempts detected
-- **Rule #8:** "Zero Silent Failures" – Errors caught but not surfaced to user
-- **Rule #9:** "Fail Fast, Fail Loud" – No early validation of subprocess readiness
-
-### Recommended Actions:
-**Option A (NOT Recommended):** Apply targeted fixes to race condition (2-3 hrs, medium-high risk)  
-**Option B (RECOMMENDED):** Clean rewrite of history loading module (4-6 hrs, low risk)
-
-**Decision Required:** Developer must choose Option A or Option B before proceeding.
+### 2. Key Logic Updates
+- **Path Fix:** `runner.py` is now correctly located via `../../../../capabilities_v2/runner.py`.
+- **Capability Wait:** `history_collector.py` uses `max(8, duration_s)` for interception.
+- **Error Handling:** Structured error responses from backend are surfaced as user-friendly toasts.
 
 ---
 

@@ -44,6 +44,11 @@
 - **Redis Availability**: The system cannot function without Redis.
 - **External AI Calls**: xAI requests are network-bound and must not block the core trading loop. AI integration should be best-effort and tolerant of latency/failures.
 
+## Layout & Resizing Strategy
+- **Flexbox Architecture:** The Dashboard uses a nested flexbox layout for dynamic panel sizing.
+- **Synchronized Resizing:** Implemented using `ResizeObserver` in `ChartContainer` and `OscillatorChart` to ensure charts re-render and adjust their dimensions immediately when their parent containers change size (e.g., during workspace dragging).
+- **Time-Scale Synchronization:** Oscillator charts sync their visible range with the main chart via the `lightweight-charts` API, with an initial sync delay to ensure cross-component readiness.
+
 ## Chart & Indicator Conventions
 - **Intraday Candles**: Use UNIX timestamps in seconds for `time` values when rendering intraday series.
 - **Time Axis**: Enable intraday display using `timeScale.timeVisible` (and keep `secondsVisible` disabled for `1m`).

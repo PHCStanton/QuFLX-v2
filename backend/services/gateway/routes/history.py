@@ -85,8 +85,8 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
             timeframe_min = max(1, int(tf))
 
     # In Manual Mode, we increase the duration to give the user time to click
-    # We'll wait up to 8 seconds for the payload to appear (reduced from 15s)
-    duration_s = int(payload.get("duration", 8))
+    # We'll wait up to 3 seconds for the payload to appear
+    duration_s = int(payload.get("duration", 3))
 
     try:
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))

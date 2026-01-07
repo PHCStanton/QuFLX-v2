@@ -64,16 +64,16 @@ const ChartContainer = ({ onChartReady }) => {
         onChartReady({ chart, series });
       }
 
-      const handleResize = () => {
-        if (chartContainerRef.current) {
-          chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-        }
-      };
+      const resizeObserver = new ResizeObserver((entries) => {
+        if (entries.length === 0 || !entries[0].contentRect) return;
+        const { width, height } = entries[0].contentRect;
+        chart.applyOptions({ width, height });
+      });
 
-      window.addEventListener('resize', handleResize);
+      resizeObserver.observe(chartContainerRef.current);
 
       return () => {
-        window.removeEventListener('resize', handleResize);
+        resizeObserver.disconnect();
         chart.remove();
       };
     } catch (err) {

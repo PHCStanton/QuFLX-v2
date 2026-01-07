@@ -64,11 +64,13 @@ const Dashboard = () => {
             </ErrorBoundary>
           ) : (
             <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
-              <ContextPanelRouter />
               <div className="col-span-9 flex flex-col h-full min-h-0">
                 <ErrorBoundary>
                   <ChartWorkspace />
                 </ErrorBoundary>
+              </div>
+              <div className="col-span-3 h-full min-h-0 quflx-right-panel">
+                <ContextPanelRouter />
               </div>
             </div>
           )}

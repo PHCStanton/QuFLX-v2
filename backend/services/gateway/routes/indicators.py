@@ -40,7 +40,12 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
         timeframe_min = 1
 
     try:
-        runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py"))
+        # Correct path to runner.py at project root
+        runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))
+        
+        if not os.path.exists(runner_path):
+            logger.error(f"Runner script not found at: {runner_path}")
+            raise HTTPException(status_code=500, detail=f"Runner script not found at: {runner_path}")
         
         csv_path = get_recent_history_file(asset, timeframe_min)
 
@@ -59,16 +64,31 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUTF8"] = "1"
 
-        process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            stdout, stderr = await process.communicate()
+            return_code = process.returncode
+        except NotImplementedError:
+            # Fallback for Windows if ProactorEventLoop is not available
+            logger.info("asyncio.create_subprocess_exec not implemented, falling back to subprocess.run in thread")
+            import subprocess
+            def run_sync():
+                p = subprocess.run(
+                    args,
+                    capture_output=True,
+                    env=env,
+                    text=False # We handle decoding manually
+                )
+                return p.stdout, p.stderr, p.returncode
+            
+            stdout, stderr, return_code = await asyncio.to_thread(run_sync)
 
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
+        if return_code != 0:
             err_msg = stderr.decode().strip()
             logger.error(f"Indicator calculation failed: {err_msg}")
             raise HTTPException(status_code=500, detail=f"Script execution failed: {err_msg}")
@@ -84,17 +104,14 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=500, detail=str(out.get("error")))
 
         data = out.get("data", {})
-        processed = data.get("processed", {})
-        eligible = processed.get("selected_now", []) + processed.get("already_favorited", [])
         
         return {
             "ok": True, 
-            "data": data, 
-            "assets": list({a for a in eligible if isinstance(a, str)})
+            **data
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Indicators failed: {e}")
+        logger.error(f"Indicators failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

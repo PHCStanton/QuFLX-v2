@@ -48,7 +48,13 @@ const IndicatorSettingsModal = ({ isOpen, indicator, onClose, onSave }) => {
     if (!config.length) {
       return indicator.value || '';
     }
-    const parts = config.map((cfg) => {
+    // For RSI, CCI, DeMarker, we usually only want to show the period in the badge
+    // unless it's MACD where we show fast,slow,signal
+    const primaryParams = config.filter(cfg => 
+      cfg.name === 'period' || cfg.name === 'fast' || cfg.name === 'slow' || cfg.name === 'signal' || cfg.name === 'k' || cfg.name === 'd'
+    );
+    
+    const parts = primaryParams.map((cfg) => {
       const raw = localParams[cfg.name];
       if (raw === undefined || raw === null || raw === '') {
         return null;

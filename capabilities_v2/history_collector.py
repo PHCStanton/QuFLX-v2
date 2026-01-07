@@ -121,7 +121,7 @@ class HistoryCollector(Capability):
         target = self._normalize_asset(asset)
 
         history_candles: List[Candle] = []
-        history_deadline = time.time() + 8
+        history_deadline = time.time() + 3
         while time.time() < history_deadline:
             events = interceptor.fetch_history_events()
             if events:

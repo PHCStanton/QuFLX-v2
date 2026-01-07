@@ -25,7 +25,7 @@ const ChartHeader = ({
   isSyncingTimeframe
 }) => {
   return (
-    <div className="p-1.5 border-b border-gray-700 bg-gray-800/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
+    <div className="p-1.5 border-b border-border-primary bg-card-bg/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
       <div className="flex items-center gap-2">
         <div className="w-36">
           <Combobox 
@@ -130,7 +130,7 @@ const ChartHeader = ({
 
 const IndicatorBadge = ({ name, value, onClick, onRemove }) => (
   <div
-    className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-800/80 rounded border border-gray-600 text-[10px] whitespace-nowrap shadow-sm cursor-pointer hover:border-accent-green/70"
+    className="flex items-center gap-1.5 px-2 py-0.5 bg-section-bg/80 rounded border border-border-primary text-[10px] whitespace-nowrap shadow-sm cursor-pointer hover:border-accent-green/70"
     onClick={onClick}
   >
     <span className="text-accent-green font-bold">{name}</span>
