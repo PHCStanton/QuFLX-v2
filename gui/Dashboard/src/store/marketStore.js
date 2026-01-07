@@ -315,7 +315,7 @@ const createMarketSlice = (set, get) => ({
 
       // Step 2: No existing data - Bootstrap collection (AWAITS completion, no polling!)
       console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
-      console.log(`[LoadHistory] ⏳ MANUAL MODE: Click ${asset} in Pocket Option within 15 seconds`);
+      console.log(`[LoadHistory] ⏳ MANUAL MODE: Click ${asset} in Pocket Option within 8 seconds`);
 
       const bootstrapRes = await fetch('http://localhost:8000/api/v1/history/bootstrap-history', {
         method: 'POST',
@@ -323,7 +323,7 @@ const createMarketSlice = (set, get) => ({
         body: JSON.stringify({ 
           asset, 
           timeframe: timeframeMin, 
-          duration: 15 
+          duration: 8 
         })
       });
 

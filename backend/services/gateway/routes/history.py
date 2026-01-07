@@ -5,6 +5,8 @@ import asyncio
 import logging
 import re
 import pandas as pd
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,8 +85,8 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
             timeframe_min = max(1, int(tf))
 
     # In Manual Mode, we increase the duration to give the user time to click
-    # We'll wait up to 15 seconds for the payload to appear
-    duration_s = int(payload.get("duration", 15))
+    # We'll wait up to 8 seconds for the payload to appear (reduced from 15s)
+    duration_s = int(payload.get("duration", 8))
 
     try:
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))
@@ -101,21 +103,31 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
         logger.info(f"BOOTSTRAP: runner_path={runner_path}")
         logger.info(f"BOOTSTRAP: PYTHONPATH={env['PYTHONPATH']}")
 
-        # Async subprocess
-        # We use --verbose to get more info in logs
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            runner_path,
-            "history_collector",
-            "--verbose",
-            "--inputs",
-            json.dumps({"action": "collect_and_save", "asset": asset, "timeframe": timeframe_min, "duration": duration_s}),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env
-        )
+        # WINDOWS FIX: Use sync subprocess in thread pool instead of asyncio.create_subprocess_exec
+        # asyncio.create_subprocess_exec raises NotImplementedError on Windows with SelectorEventLoop
+        def run_subprocess():
+            return subprocess.run(
+                [
+                    sys.executable,
+                    runner_path,
+                    "history_collector",
+                    "--verbose",
+                    "--inputs",
+                    json.dumps({"action": "collect_and_save", "asset": asset, "timeframe": timeframe_min, "duration": duration_s}),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                timeout=duration_s + 10  # Add 10s buffer for subprocess overhead
+            )
+        
+        # Run subprocess in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            process = await loop.run_in_executor(executor, run_subprocess)
 
-        stdout, stderr = await process.communicate()
+        stdout = process.stdout
+        stderr = process.stderr
 
         if process.returncode != 0:
             err_msg = stderr.decode().strip()
@@ -194,8 +206,23 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Bootstrap history failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # CORE PRINCIPLE #8: Zero Silent Failures - log full details
+        import traceback
+        error_details = {
+            "exception_type": type(e).__name__,
+            "exception_message": str(e),
+            "traceback": traceback.format_exc()
+        }
+        logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        
+        # Return structured error instead of generic HTTPException
+        error_response = create_error_response(
+            error_code=HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
+            error_message=f"Failed to spawn history collection subprocess: {type(e).__name__}: {str(e)}",
+            details={"asset": asset, "error_type": type(e).__name__}
+        )
+        raise HTTPException(status_code=500, detail=error_response.dict())
 
 @router.post("/collect-history")
 async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):
