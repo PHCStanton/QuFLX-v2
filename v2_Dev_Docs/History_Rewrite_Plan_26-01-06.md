@@ -1,7 +1,8 @@
 # History Loading System Clean Rewrite Plan
 **Date:** 2026-01-06  
-**Status:** Ready for Implementation  
-**Estimated Effort:** 4-6 hours  
+**Status:** ✅ Phases 0-3.6 Completed (Core Fixes Implemented)  
+**Completion Date:** 2026-01-07  
+**Actual Effort:** 4 hours  
 **Reference:** `reports/report_2026-01/forensic_analysis_history_loading_26-01-06.md`
 
 ---
@@ -19,21 +20,21 @@ This plan implements **Option B (Clean Rewrite)** to resolve the critical race c
 
 ---
 
-## Phase 0: Pre-Implementation Setup
+## Phase 0: Pre-Implementation Setup ✅
 **Goal:** Establish baseline and backup current state
 
-- [ ] **0.1: Create Git Branch**
+- [x] **0.1: Create Git Branch**
   - `git checkout -b feature/history-rewrite-clean`
   - **Test:** Verify branch created with `git branch`
 
-- [ ] **0.2: Backup Critical Files**
+- [x] **0.2: Backup Critical Files**
   - Copy current versions to `_backups/2026-01-06/`:
     - `gui/Dashboard/src/store/marketStore.js`
     - `backend/services/gateway/routes/history.py`
     - `capabilities_v2/history_collector.py`
   - **Test:** Verify backups exist and are readable
 
-- [ ] **0.3: Document Current Behavior**
+- [x] **0.3: Document Current Behavior**
   - Record baseline test:
     - Start all services
     - Click asset in Dashboard
@@ -42,11 +43,12 @@ This plan implements **Option B (Clean Rewrite)** to resolve the critical race c
 
 ---
 
-## Phase 1: Backend - Structured Error Codes
+## Phase 1: Backend - Structured Error Codes ✅
 **Goal:** Add error taxonomy before changing flow logic  
-**Estimated Time:** 30 minutes
+**Actual Time:** 25 minutes  
+**Commit:** 788e35e
 
-- [ ] **1.1: Create Error Code Enum**
+- [x] **1.1: Create Error Code Enum**
   - **File:** `backend/models/errors.py` (new)
   - **Action:** Create `HistoryErrorCode` enum:
     ```python
@@ -82,11 +84,12 @@ This plan implements **Option B (Clean Rewrite)** to resolve the critical race c
 
 ---
 
-## Phase 2: Backend - In-Memory Response (Core Fix)
+## Phase 2: Backend - In-Memory Response (Core Fix) ✅
 **Goal:** Make bootstrap endpoint synchronous and return data directly  
-**Estimated Time:** 1.5 hours
+**Actual Time:** 1.5 hours  
+**Commit:** 788e35e
 
-- [ ] **2.1: Refactor Bootstrap Endpoint to Await Subprocess**
+- [x] **2.1: Refactor Bootstrap Endpoint to Await Subprocess**
   - **File:** `backend/services/gateway/routes/history.py`
   - **Action:** Change bootstrap from fire-and-forget to awaited execution
   - **Specific Changes:**
@@ -148,13 +151,14 @@ This plan implements **Option B (Clean Rewrite)** to resolve the critical race c
 
 ---
 
-## Phase 3: Frontend - Remove Polling Loop
+## Phase 3: Frontend - Remove Polling Loop ✅
 **Goal:** Rewrite loadHistory to await bootstrap directly  
-**Estimated Time:** 1 hour
+**Actual Time:** 45 minutes  
+**Commit:** 788e35e
 
-- [ ] **3.1: Create New loadHistory Function**
+- [x] **3.1: Create New loadHistory Function**
   - **File:** `gui/Dashboard/src/store/marketStore.js`
-  - **Action:** Replace lines 286-372 with new implementation
+  - **Action:** Replaced polling loop with direct await pattern
   - **New Logic:**
     ```javascript
     loadHistory: async (asset) => {
@@ -228,10 +232,149 @@ This plan implements **Option B (Clean Rewrite)** to resolve the critical race c
     - Verify: No console errors about polling
     - Verify: Bootstrap request completes before any UI updates
 
-- [ ] **3.2: Remove Unreachable Dead Code**
+- [x] **3.2: Remove Unreachable Dead Code**
   - **File:** `gui/Dashboard/src/store/marketStore.js`
-  - **Action:** Ensure all code after new loadHistory is reachable
-  - **Test:** ESLint should show no "unreachable code" warnings
+  - **Action:** Ensured all code after new loadHistory is reachable
+  - **Test:** ESLint shows no "unreachable code" warnings
+
+---
+
+## Phase 3.5: Windows Subprocess Compatibility Fix (CRITICAL BUG) ✅
+**Goal:** Fix immediate 500 error caused by asyncio.create_subprocess_exec() NotImplementedError on Windows  
+**Actual Time:** 1 hour  
+**Commit:** (intermediate - not separately committed)
+
+### Problem Discovered
+After implementing Phases 0-3, user testing revealed an immediate 500 error when clicking any asset:
+- Error appeared in <1 second (not after 15s timeout)
+- Frontend showed: `{detail: ''}` (empty error message)
+- Root cause: `asyncio.create_subprocess_exec()` raises `NotImplementedError` on Windows with `SelectorEventLoop`
+
+### Root Cause Analysis
+**Windows asyncio Limitation:**
+- Python's `asyncio.create_subprocess_exec()` is NOT supported on Windows when using `SelectorEventLoop`
+- FastAPI uses `SelectorEventLoop` by default
+- This is a well-known Python/Windows limitation, not a terminal or shell issue
+- Works on Linux/Mac (different event loops)
+
+### Solution Implemented
+
+- [x] **3.5.1: Replace Async Subprocess with ThreadPoolExecutor Pattern**
+  - **File:** `backend/services/gateway/routes/history.py`
+  - **Action:** Replaced async subprocess with sync `subprocess.run()` in thread pool
+  - **Code Changes:**
+    ```python
+    # BEFORE (Lines 107-120):  
+    process = await asyncio.create_subprocess_exec(...)  # ❌ Fails on Windows
+    
+    # AFTER (Lines 106-127):
+    def run_subprocess():
+        return subprocess.run(
+            [sys.executable, runner_path, "history_collector", "--verbose",
+             "--inputs", json.dumps({...})],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            timeout=duration_s + 10  # Add 10s buffer
+        )
+    
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        process = await loop.run_in_executor(executor, run_subprocess)
+    ```
+  - **Added Imports:** `import subprocess`, `from concurrent.futures import ThreadPoolExecutor`
+  - **Test:** First asset (AED/CNY OTC) successfully returned 98 candles! ✅
+
+- [x] **3.5.2: Add Comprehensive Error Logging (CORE PRINCIPLE #8: Zero Silent Failures)**
+  - **File:** `backend/services/gateway/routes/history.py`  
+  - **Action:** Added full exception details with traceback
+  - **Code Changes (Lines 203-218):**
+    ```python
+    except Exception as e:
+        import traceback
+        error_details = {
+            "exception_type": type(e).__name__,
+            "exception_message": str(e),
+            "traceback": traceback.format_exc()
+        }
+        logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        
+        error_response = create_error_response(
+            error_code=HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
+            error_message=f"Failed to spawn history collection subprocess: {type(e).__name__}: {str(e)}",
+            details={"asset": asset, "error_type": type(e).__name__}
+        )
+        raise HTTPException(status_code=500, detail=error_response.dict())
+    ```
+  - **Test:** Error messages now show clear exception type instead of empty strings
+
+- [x] **3.5.3: Reduce Manual Click Timeout (User Feedback)**
+  - **Files:** `backend/services/gateway/routes/history.py`, `gui/Dashboard/src/store/marketStore.js`
+  - **Action:** Reduced timeout from 15s to 8s
+  - **Backend Changes (Line 86-88):**
+    ```python
+    duration_s = int(payload.get("duration", 8))  # Reduced from 15s
+    ```
+  - **Frontend Changes (Line 316-325):**
+    ```javascript
+    console.log(`[LoadHistory] ⏳ MANUAL MODE: Click ${asset} in Pocket Option within 8 seconds`);
+    body: JSON.stringify({ asset, timeframe: timeframeMin, duration: 8 })
+    ```
+  - **User Quote:** "15 seconds too long we can reduce to 5 or 7" → Settled on 8s for reliability
+  - **Test:** User-friendly 8-second timeout confirmed
+
+### Results
+- ✅ **SUCCESS:** First asset loads perfectly with 98 candles
+- ✅ **Windows Compatibility:** No more `NotImplementedError`
+- ✅ **Clear Error Messages:** Full traceback logging enabled
+- ⚠️ **Remaining Issue:** Subsequent assets timeout after 18s (addressed in Phase 3.6)
+
+---
+
+## Phase 3.6: Early-Exit Optimization (PERFORMANCE) ✅
+**Goal:** Enable rapid subsequent asset requests by exiting early when history captured  
+**Actual Time:** 30 minutes  
+**Commit:** bde91f9
+
+### Problem Discovered
+After Phase 3.5 fix, first asset worked perfectly, but subsequent assets timed out:
+- **Symptom:** Second/third asset clicks timeout after 18 seconds total
+- **Root Cause:** Subprocess waited full 8s duration even after capturing history data in 1-2s
+- **User Expectation:** "Should sense or capture the data as soon as it is loaded" (not wait full duration)
+
+### Solution Implemented
+
+- [x] **3.6.1: Implement Intelligent Tick Collection Duration**
+  - **File:** `capabilities_v2/history_collector.py`
+  - **Action:** Reduce tick collection from 8s to 2s when history already captured
+  - **Code Changes (Lines 265-278):**
+    ```python
+    # BEFORE:
+    deadline = time.time() + max(1, duration_s)  # Always wait full duration
+    
+    # AFTER:
+    if history_candles:
+        # History captured - collect ticks for max 2 seconds to get latest updates
+        tick_duration = min(2, duration_s) if duration_s > 0 else 0
+        logger.info(f"History captured ({len(history_candles)} candles), collecting ticks for {tick_duration}s only")
+    else:
+        # No history yet - collect ticks for full duration
+        tick_duration = max(1, duration_s)
+        logger.info(f"No history captured, collecting ticks for full {tick_duration}s")
+    
+    deadline = time.time() + tick_duration
+    ```
+  - **Benefits:**
+    - **First asset:** 1-2s history capture + 2s tick collection = **~3-4s total** ✅
+    - **Subsequent assets:** Same fast ~3-4s response (no more 18s timeout!) ✅
+    - **Fallback:** Still collects full duration if no history (timeout scenarios)
+
+### Results
+- ✅ **Dramatic Performance Improvement:** 18s → 3-4s for subsequent assets
+- ✅ **User Experience:** Near-instant asset switching
+- ✅ **Backward Compatible:** Falls back to full duration when needed
+- ✅ **Logging:** Clear messages show which code path taken
 
 ---
 
