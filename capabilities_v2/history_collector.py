@@ -269,8 +269,19 @@ class HistoryCollector(Capability):
                 break
             time.sleep(0.5)
 
-        # 2. Collect real-time ticks
-        deadline = time.time() + max(1, duration_s)
+        # 2. Collect real-time ticks (optional - skip if history already captured)
+        # OPTIMIZATION: If we already have history candles (typically ~100), 
+        # we don't need to wait for additional ticks. This enables rapid subsequent requests.
+        if history_candles:
+            # History captured - collect ticks for max 2 seconds to get latest updates
+            tick_duration = min(2, duration_s) if duration_s > 0 else 0
+            logger.info(f"History captured ({len(history_candles)} candles), collecting ticks for {tick_duration}s only")
+        else:
+            # No history yet - collect ticks for full duration
+            tick_duration = max(1, duration_s)
+            logger.info(f"No history captured, collecting ticks for full {tick_duration}s")
+        
+        deadline = time.time() + tick_duration
         ticks: List[Any] = []
         while time.time() < deadline:
             for t in interceptor.fetch_ticks():
