@@ -12,7 +12,7 @@ const TopBar = () => {
   const health = useStreamHealth();
 
   return (
-    <header className="h-16 quflx-topbar bg-card-bg border-b border-gray-700 flex items-center justify-between px-6">
+    <header className="h-16 quflx-topbar bg-card-bg border-b border-border-primary flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
         <StatusIndicator />
         <StatusBadge label="WS" status={wsStatus} />
@@ -38,8 +38,8 @@ const StatusBadge = ({ label, status }) => {
   };
   
   return (
-    <div className="flex items-center gap-2 px-3 py-1 bg-gray-800 rounded border border-gray-700">
-      <span className="text-xs font-bold text-gray-400 uppercase">{label}</span>
+    <div className="flex items-center gap-2 px-3 py-1 bg-section-bg/50 rounded border border-border-primary">
+      <span className="text-xs font-bold text-text-secondary uppercase">{label}</span>
       <div className={`w-2 h-2 rounded-full ${getStatusColor(status)}`}></div>
     </div>
   );

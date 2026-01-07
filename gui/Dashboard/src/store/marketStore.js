@@ -64,6 +64,7 @@ const createMarketSlice = (set, get) => ({
   setAssetFilterState: (state) => set({ assetFilterState: state }),
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
+  selectedAssetLoading: false,
   setSelectedAsset: async (asset) => {
     if (!asset) return;
     const nextAssetKey = normalizeAsset(asset);
@@ -71,16 +72,38 @@ const createMarketSlice = (set, get) => ({
     set({
       selectedAsset: asset,
       selectedAssetKey: nextAssetKey,
+      selectedAssetLoading: true,
       marketData: {} // Clear old data immediately
     });
 
-    // Manual Mode Workflow:
-    // 1. Load History (This will now wait for the user to click in Pocket Option)
+    // Check if Auto-Select is enabled in Settings
+    const { settings } = (await import('./settingsStore')).default.getState();
+    const autoSelect = settings.automation.autoSelectAssets;
+
+    if (autoSelect) {
+      console.log(`[AutoSelect] Triggering automation for ${asset}...`);
+      try {
+        const res = await fetch('/api/v1/asset-control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'select_asset', asset })
+        });
+        if (!res.ok) {
+          console.warn('[AutoSelect] Automation failed, falling back to manual mode');
+        }
+      } catch (err) {
+        console.error('[AutoSelect] Network error during automation:', err);
+      }
+    }
+
+    // 1. Load History (This will now wait for the user to click in Pocket Option if auto-select failed/disabled)
     try {
       await get().loadHistory(asset);
     } catch (err) {
       console.error('Failed to load history:', err);
     }
+
+    set({ selectedAssetLoading: false });
 
     // 2. Start live stream only after history is ready (or failed)
     get().syncSubscriptions(nextAssetKey);
@@ -294,6 +317,10 @@ const createMarketSlice = (set, get) => ({
     const timeframeMin = timeframe.replace('m', '');
     const limit = 200;
 
+    // Get dynamic wait time from settings
+    const { settings } = (await import('./settingsStore')).default.getState();
+    const waitTime = settings.automation.historyWaitTime || 8;
+
     try {
       // Step 1: Quick check for existing CSV file
       console.log(`[LoadHistory] Checking for existing history: ${asset} @ ${timeframe}`);
@@ -315,7 +342,7 @@ const createMarketSlice = (set, get) => ({
 
       // Step 2: No existing data - Bootstrap collection (AWAITS completion, no polling!)
       console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
-      console.log(`[LoadHistory] ⏳ MANUAL MODE: Click ${asset} in Pocket Option within 8 seconds`);
+      console.log(`[LoadHistory] ⏳ Waiting for ${asset} data (Timeout: ${waitTime}s)`);
 
       const bootstrapRes = await fetch('http://localhost:8000/api/v1/history/bootstrap-history', {
         method: 'POST',
@@ -323,7 +350,7 @@ const createMarketSlice = (set, get) => ({
         body: JSON.stringify({ 
           asset, 
           timeframe: timeframeMin, 
-          duration: 8 
+          duration: waitTime 
         })
       });
 

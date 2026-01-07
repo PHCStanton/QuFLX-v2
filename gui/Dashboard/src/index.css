@@ -3,10 +3,24 @@
 @tailwind utilities;
 
 :root {
-  --dashboard-bg: 255 255 255;
-  --card-bg: 0 0 0;
+  /* Default Dark Theme */
+  --dashboard-bg: 10 12 16;
+  --card-bg: 18 20 26;
+  --section-bg: 31 41 55; /* gray-800 */
   --text-primary: 249 250 251;
-  --text-secondary: 161 172 187;
+  --text-secondary: 156 163 175; /* gray-400 */
+  --accent-glow: 16, 185, 129; /* emerald-500 */
+  --border-color: 31 41 55;
+}
+
+.theme-light {
+  --dashboard-bg: 243 244 246; /* gray-100 */
+  --card-bg: 255 255 255;
+  --section-bg: 229 231 235; /* gray-200 */
+  --text-primary: 17 24 39; /* gray-900 */
+  --text-secondary: 75 85 99; /* gray-600 */
+  --accent-glow: 16, 185, 129;
+  --border-color: 209 213 219; /* gray-300 */
 }
 
 .theme-orange-dark {
@@ -14,6 +28,7 @@
   --card-bg: 6 87 226;
   --text-primary: 248 250 252;
   --text-secondary: 148 163 184;
+  --accent-glow: 251, 146, 60;
 }
 
 .quflx-card {
@@ -114,9 +129,17 @@
 }
 
 .quflx-section-light {
+  background-color: rgb(var(--card-bg));
   background-image:
-    radial-gradient(circle at top left, rgba(21, 89, 178, 0.5), transparent 60%),
-    radial-gradient(circle at bottom right, rgba(15, 23, 42, 0.9), transparent 55%);
+    radial-gradient(circle at top left, rgba(21, 89, 178, 0.15), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.1), transparent 55%);
+  border: 1px solid rgb(var(--border-color));
+}
+
+.theme-light .quflx-section-light {
+  background-image:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.05), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.02), transparent 55%);
 }
 
 .theme-orange-dark .quflx-section-light {
@@ -221,7 +244,7 @@
   box-shadow:
     6px 6px 12px rgba(0, 0, 0, 0.65),
     -6px -6px 12px rgba(255, 255, 255, 0.06),
-    0 0 10px rgba(248, 250, 252, 0.35);
+    0 0 6px rgba(255, 0, 0, 0.25);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -237,7 +260,7 @@
   position: absolute;
   width: 65%;
   height: 65%;
-  background: radial-gradient(circle, rgba(249, 250, 251, 0.9) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 70%);
   border-radius: 9999px;
   filter: blur(6px);
   opacity: 0.7;
@@ -257,15 +280,15 @@
 .quflx-ai-btn > svg {
   position: relative;
   z-index: 1;
-  color: #f9fafb;
-  filter: drop-shadow(0 0 5px rgba(249, 250, 251, 0.75));
+  color: #fecaca;
+  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.7));
 }
 
 .quflx-ai-btn:hover {
   box-shadow:
     5px 5px 10px rgba(0, 0, 0, 0.7),
     -5px -5px 10px rgba(255, 255, 255, 0.08),
-    0 0 12px rgba(249, 250, 251, 0.55);
+    0 0 12px rgba(255, 0, 0, 0.45);
   transform: translateY(-2px);
 }
 
@@ -273,7 +296,7 @@
   box-shadow:
     inset 5px 5px 10px rgba(0, 0, 0, 0.6),
     inset -5px -5px 10px rgba(255, 255, 255, 0.04),
-    0 0 18px rgba(249, 250, 251, 0.35);
+    0 0 18px rgba(255, 0, 0, 0.35);
   transform: translateY(1px);
 }
 

@@ -16,18 +16,18 @@ const Sidebar = () => {
   const { isSidebarOpen, toggleSidebar, activeTab, setActiveTab } = useMarketStore();
 
   return (
-	<div className={`${isSidebarOpen ? 'w-64' : 'w-16'} quflx-sidebar bg-card-bg border-r border-gray-700 transition-all duration-300 flex flex-col`}>
-      <div className="p-4 flex items-center justify-between border-b border-gray-700">
-		{isSidebarOpen && (
-		  <div className="quflx-logo">
-			<div className="quflx-logo-glow" />
-			<div className="quflx-logo-text">
-			  <span className="quflx-logo-text-main">QuFLX</span>
-			  <span className="quflx-logo-text-version">_v.2</span>
-			</div>
-		  </div>
-		)}
-        <button onClick={toggleSidebar} className="p-1 hover:bg-gray-700 rounded">
+    <div className={`${isSidebarOpen ? 'w-64' : 'w-16'} quflx-sidebar bg-card-bg border-r border-border-primary transition-all duration-300 flex flex-col`}>
+      <div className="p-4 flex items-center justify-between border-b border-border-primary">
+        {isSidebarOpen && (
+          <div className="quflx-logo">
+            <div className="quflx-logo-glow" />
+            <div className="quflx-logo-text">
+              <span className="quflx-logo-text-main">QuFLX</span>
+              <span className="quflx-logo-text-version">_v.2</span>
+            </div>
+          </div>
+        )}
+        <button onClick={toggleSidebar} className="p-1 hover:bg-section-bg/50 rounded text-text-primary">
           <Menu size={20} />
         </button>
       </div>
@@ -45,7 +45,7 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-gray-700">
+      <div className="p-4 border-t border-border-primary">
         <div className="flex items-center gap-2 text-sm text-text-secondary">
           <div className="w-2 h-2 rounded-full bg-accent-green"></div>
           {isSidebarOpen && <span>System Online</span>}
@@ -58,13 +58,13 @@ const Sidebar = () => {
 const SidebarItem = ({ icon, label, isOpen, active, onClick }) => (
   <div 
     onClick={onClick}
-	className={`quflx-sidebar-item flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
-	  active
-		? 'quflx-sidebar-item-active bg-accent-green/10 text-accent-green border-r-2 border-accent-green'
-		: 'hover:bg-gray-700 text-gray-400'
-	  }`}
+    className={`quflx-sidebar-item flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
+      active
+        ? 'quflx-sidebar-item-active bg-accent-green/10 text-accent-green border-r-2 border-accent-green'
+        : 'hover:bg-section-bg/50 text-text-secondary'
+      }`}
   >
-	    {icon && <span className="flex items-center justify-center w-5 h-5"><IconWrapper icon={icon} /></span>}
+    {icon && <span className="flex items-center justify-center w-5 h-5"><IconWrapper icon={icon} /></span>}
     {isOpen && <span className="font-medium">{label}</span>}
   </div>
 );

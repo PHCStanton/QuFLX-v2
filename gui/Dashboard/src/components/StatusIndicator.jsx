@@ -53,13 +53,13 @@ const StatusIndicator = () => {
   };
 
   return (
-    <div className="flex items-center space-x-2 bg-gray-800 rounded-lg px-3 py-2">
+    <div className="flex items-center space-x-2 bg-section-bg/50 rounded-lg px-3 py-2 border border-border-primary">
       <div className={`flex items-center space-x-1 ${getStatusColor()}`}>
         {getStatusIcon()}
         <span className="text-sm font-medium">{getStatusText()}</span>
       </div>
       
-      <div className="hidden md:flex items-center space-x-2 text-xs text-gray-400">
+      <div className="hidden md:flex items-center space-x-2 text-xs text-text-secondary">
         <div className="flex items-center space-x-1">
           {backendStatus.redisConnected ? 
             <Wifi className="w-3 h-3 text-green-400" /> : 
@@ -87,7 +87,7 @@ const StatusIndicator = () => {
           setLastCheck(new Date());
           setTimeout(() => setIsChecking(false), 1000);
         }}
-        className="ml-2 p-1 rounded hover:bg-gray-700 transition-colors"
+        className="ml-2 p-1 rounded hover:bg-section-bg/50 transition-colors"
         title="Check status now"
       >
         <svg className="w-3 h-3 text-gray-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
