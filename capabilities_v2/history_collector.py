@@ -226,9 +226,9 @@ class HistoryCollector(Capability):
 
         # 1. Attempt to capture initial history (approx 100 candles)
         history_candles: List[Candle] = []
-        # Use duration_s if provided and larger than 8s, otherwise default to 8s
+        # Use duration_s if provided and larger than 3s, otherwise default to 3s
         # This allows the frontend to control the timeout (e.g. 15s for manual mode)
-        wait_time = max(8, duration_s) if duration_s > 0 else 8
+        wait_time = max(3, duration_s) if duration_s > 0 else 3
         history_deadline = time.time() + wait_time
         
         logger.info(f"Waiting for history data for {asset} (timeout: {wait_time}s)...")

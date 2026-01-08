@@ -24,12 +24,13 @@ class CapResult:
     ok: bool
     data: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
+    error_code: Optional[str] = None
     artifacts: Tuple[str, ...] = tuple()
 
     @staticmethod
-    def fail(error: str, data: Optional[Dict[str, Any]] = None, artifacts: Tuple[str, ...] = tuple()) -> CapResult:
+    def fail(error: str, error_code: Optional[str] = None, data: Optional[Dict[str, Any]] = None, artifacts: Tuple[str, ...] = tuple()) -> CapResult:
         """Create a failed result."""
-        return CapResult(ok=False, error=error, data=data or {}, artifacts=artifacts)
+        return CapResult(ok=False, error=error, error_code=error_code, data=data or {}, artifacts=artifacts)
 
     @staticmethod
     def success(data: Optional[Dict[str, Any]] = None, artifacts: Tuple[str, ...] = tuple()) -> CapResult:

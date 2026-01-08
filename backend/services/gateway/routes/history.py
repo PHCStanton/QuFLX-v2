@@ -118,7 +118,7 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
-                timeout=duration_s + 10  # Add 10s buffer for subprocess overhead
+                timeout=duration_s + 15  # Add 15s buffer for subprocess overhead
             )
         
         # Run subprocess in thread pool to avoid blocking event loop

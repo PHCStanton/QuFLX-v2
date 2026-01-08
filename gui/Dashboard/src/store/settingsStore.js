@@ -13,7 +13,7 @@ const defaultSettings = {
     debugLevel: 'info',
   },
   automation: {
-    historyWaitTime: 8,
+    historyWaitTime: 15,
     autoSelectAssets: true,
     retryAttempts: 2,
     retryDelay: 500,

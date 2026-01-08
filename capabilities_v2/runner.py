@@ -110,6 +110,7 @@ def main():
             "ok": result.ok,
             "data": result.data,
             "error": result.error,
+            "error_code": result.error_code,
             "artifacts": result.artifacts
         }
         print(json.dumps(output))
