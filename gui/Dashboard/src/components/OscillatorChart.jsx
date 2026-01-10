@@ -13,7 +13,9 @@ const OscillatorChart = ({
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const syncSubscriptionRef = useRef(null);
+  const crosshairSubscriptionRef = useRef(null);
   const priceLinesRef = useRef([]);
+  const dataRef = useRef([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -90,6 +92,7 @@ const OscillatorChart = ({
       chartRef.current = null;
       seriesRef.current = null;
       syncSubscriptionRef.current = null;
+      crosshairSubscriptionRef.current = null;
       priceLinesRef.current = [];
     };
   }, [type, params, indicatorValue]);
@@ -138,12 +141,14 @@ const OscillatorChart = ({
     if (!seriesRef.current) return;
     if (!Array.isArray(data) || data.length === 0) {
       seriesRef.current.setData([]);
+      dataRef.current = [];
       return;
     }
     const cleaned = data.filter((point) => point && point.time != null && point.value != null);
 
     if (cleaned.length === 0) {
       seriesRef.current.setData([]);
+      dataRef.current = [];
       return;
     }
 
@@ -155,7 +160,73 @@ const OscillatorChart = ({
     });
 
     seriesRef.current.setData(sorted);
+    dataRef.current = sorted;
   }, [data]);
+
+  useEffect(() => {
+    if (!mainChart || !chartRef.current || !seriesRef.current) {
+      return;
+    }
+    if (!mainChart.subscribeCrosshairMove || !mainChart.unsubscribeCrosshairMove) {
+      return;
+    }
+
+    const handleCrosshairMove = (param) => {
+      if (!chartRef.current || !seriesRef.current) {
+        return;
+      }
+
+      if (!param || !param.time) {
+        chartRef.current.clearCrosshairPosition();
+        return;
+      }
+
+      let value = 0;
+      const points = dataRef.current;
+
+      if (Array.isArray(points) && points.length > 0) {
+        const time = param.time;
+        const match = points.find((point) => {
+          if (!point || point.time == null) {
+            return false;
+          }
+          if (point.time === time) {
+            return true;
+          }
+          const pt = Number(point.time);
+          const tt = Number(time);
+          if (Number.isNaN(pt) || Number.isNaN(tt)) {
+            return false;
+          }
+          return pt === tt;
+        });
+
+        if (match && match.value != null) {
+          value = match.value;
+        } else {
+          const last = points[points.length - 1];
+          if (last && last.value != null) {
+            value = last.value;
+          }
+        }
+      }
+
+      chartRef.current.setCrosshairPosition(value, param.time, seriesRef.current);
+    };
+
+    mainChart.subscribeCrosshairMove(handleCrosshairMove);
+    crosshairSubscriptionRef.current = { mainChart, handleCrosshairMove };
+
+    return () => {
+      if (crosshairSubscriptionRef.current) {
+        const { mainChart: chart, handleCrosshairMove: handler } = crosshairSubscriptionRef.current;
+        if (chart && handler && chart.unsubscribeCrosshairMove) {
+          chart.unsubscribeCrosshairMove(handler);
+        }
+      }
+      crosshairSubscriptionRef.current = null;
+    };
+  }, [mainChart]);
 
   return (
     <div className="w-full h-full flex flex-col">

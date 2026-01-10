@@ -15,14 +15,15 @@
 }
 
 .theme-light {
-  --dashboard-bg: 243 244 246; /* gray-100 */
+  /* Anime Theme - Yellow & Beige Gradient */
+  --dashboard-bg: 252 237 207; /* LIGHT_BEIGE #fcedcf */
   --card-bg: 255 255 255;
-  --section-bg: 229 231 235; /* gray-200 */
-  --text-primary: 17 24 39; /* gray-900 */
-  --text-secondary: 75 85 99; /* gray-600 */
-  --accent-primary: 16 185 129;
-  --accent-glow: 16, 185, 129;
-  --border-color: 209 213 219; /* gray-300 */
+  --section-bg: 248 230 190;
+  --text-primary: 66 56 0; /* Dark Olive/Brown for contrast */
+  --text-secondary: 100 90 40;
+  --accent-primary: 233 211 5; /* YELLOW #e9d305 */
+  --accent-glow: 233, 211, 5;
+  --border-color: 212 190 140;
 }
 
 .theme-orange-dark {
@@ -36,6 +37,7 @@
   --border-color: 45 48 55;
 }
 
+/* --- Base Card Styles --- */
 .quflx-card {
   background-color: #020408;
   background-image: 
@@ -46,12 +48,26 @@
   border: 1px solid rgba(0, 0, 255, 0.2);
 }
 
-.theme-orange-dark .quflx-card {
-  background-image:
-    radial-gradient(circle at top left, rgba(var(--accent-glow), 0.32), transparent 60%),
-    radial-gradient(circle at bottom right, rgba(248, 113, 113, 0.24), transparent 55%);
+.theme-light .quflx-card {
+  background-color: #fcedcf;
+  background-image: 
+    linear-gradient(135deg, #fcedcf 0%, #e9d305 100%); /* LIGHT_BEIGE to YELLOW */
+  box-shadow: 
+    0 15px 30px -10px rgba(233, 211, 5, 0.3),
+    0 0 0 1px rgba(233, 211, 5, 0.1);
+  border: 1px solid rgba(233, 211, 5, 0.2);
 }
 
+.theme-orange-dark .quflx-card {
+  background-image: 
+    linear-gradient(165deg, #ff8c00 0%, #8b4513 25%, #020408 70%);
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(255, 140, 0, 0.2);
+  border: 1px solid rgba(255, 140, 0, 0.2);
+}
+
+/* --- Topbar Styles --- */
 .quflx-topbar {
   background-color: rgb(var(--card-bg));
   background-image:
@@ -60,12 +76,21 @@
   border-bottom: 1px solid rgba(var(--accent-glow), 0.2);
 }
 
+.theme-light .quflx-topbar {
+  background-color: rgba(252, 237, 207, 0.9);
+  background-image:
+    linear-gradient(90deg, rgba(252, 237, 207, 0.95), rgba(233, 211, 5, 0.2)),
+    radial-gradient(circle at 0% 0%, rgba(233, 211, 5, 0.1), transparent 70%);
+  border-bottom: 1px solid rgba(233, 211, 5, 0.2);
+}
+
 .theme-orange-dark .quflx-topbar {
   background-image:
     linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(var(--accent-glow), 0.72)),
     radial-gradient(circle at top left, rgba(248, 245, 245, 0.4), transparent 55%);
 }
 
+/* --- Sidebar Styles --- */
 .quflx-sidebar {
   position: relative;
   background-color: rgb(var(--card-bg));
@@ -77,40 +102,28 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url('./assets/textures/Blue_Dark_BG2.jpg');
+  background-image: url('./assets/textures/Blue_Dark_BG7.jpg');
   background-size: cover;
   background-position: center;
-  opacity: 0.1;
+  opacity: 0.3;
   pointer-events: none;
 }
 
 .theme-light .quflx-sidebar::before {
-  background-image: url('./assets/textures/3D_Perspective_BG.jpg');
-  opacity: 0.9;
-  filter: brightness(1.2) contrast(1.2) saturate(1.4);
+  background-image: url('./assets/textures/Anime_Girl_BG1.jpg');
+  opacity: 0.3;
+  filter: brightness(1.1) contrast(1.1);
 }
 
-.quflx-right-panel {
-  position: relative;
-  overflow: hidden;
+.theme-light .quflx-sidebar {
+  background-color: rgba(252, 237, 207, 0.8) !important;
 }
 
-.quflx-right-panel > * {
-  position: relative;
-  z-index: 1;
+.theme-light .quflx-sidebar * {
+  color: rgb(66, 56, 0);
 }
 
-.theme-orange-dark .quflx-sidebar {
-  background-image:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.65)),
-    radial-gradient(circle at bottom, rgba(251, 146, 60, 0.15), transparent 55%);
-}
-
-.theme-orange-dark .quflx-sidebar::before {
-  background-image: url('./assets/textures/Orange_Theme_BG2.jpg');
-  opacity: 0.8;
-}
-
+/* --- Sidebar Item Styles --- */
 .quflx-sidebar-item-active {
   background-color: rgba(34, 197, 94, 0.25);
   color: #4ade80;
@@ -127,43 +140,114 @@
   box-shadow: inset 0 0 10px rgba(34, 197, 94, 0.05);
 }
 
-.theme-orange-dark .quflx-sidebar-item-active {
-  background-color: rgba(var(--accent-glow), 0.18);
-  color: #fce2c4;
-  border-right-color: rgb(var(--accent-glow));
-  box-shadow: 0 0 8px rgba(var(--accent-glow), 0.65);
+.theme-light .quflx-sidebar-item-active {
+  background-color: rgba(233, 211, 5, 0.3);
+  color: rgb(66, 56, 0);
+  border-right: 4px solid rgb(233, 211, 5);
+  box-shadow: inset 0 0 10px rgba(233, 211, 5, 0.1);
+  font-weight: 700;
 }
 
-.quflx-logo {
+.theme-light .quflx-sidebar-item:hover {
+  background-color: rgba(233, 211, 5, 0.15);
+  color: rgb(66, 56, 0);
+}
+
+/* --- Right Panel Styles --- */
+.quflx-right-panel {
   position: relative;
+  overflow: hidden;
 }
 
-.quflx-logo-glow {
-  position: absolute;
-  inset: -6px -10px;
-  border-radius: 9999px;
-  opacity: 1;
-  transition: opacity 200ms ease-out, transform 200ms ease-out;
-  background-image:
-    radial-gradient(circle at 0% 0%, rgba(103, 162, 252, 0.6), transparent 60%),
-    radial-gradient(circle at 100% 100%, rgba(2, 36, 108, 0.4), transparent 60%);
-  box-shadow:
-    0 0 24px rgba(214, 208, 203, 0.65),
-    0 0 40px rgba(245, 246, 247, 0.55);
-  z-index: -1;
+.theme-light .quflx-right-panel {
+  background-color: #fcedcf;
+  background-image: radial-gradient(circle at top right, rgba(233, 211, 5, 0.1), transparent 70%);
 }
 
-.quflx-logo:hover .quflx-logo-glow {
-  transform: scale(1.02);
+.quflx-right-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
-.quflx-logo-text {
-  background-image: linear-gradient(120deg, #fff, rgb(var(--accent-glow)), #000);
-  color: transparent;
-  -webkit-background-clip: text;
-  background-clip: text;
+/* --- Neomorphic Buttons (AI & Screenshot) --- */
+.quflx-screenshot-btn,
+.quflx-ai-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid rgba(255, 255, 255, 0.8); /* White border */
+  background: linear-gradient(145deg, #2d3748, #1e293b);
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.4),
+    -2px -2px 6px rgba(255, 255, 255, 0.05),
+    inset 0 0 10px rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  z-index: 1;
 }
 
+.theme-light .quflx-screenshot-btn,
+.theme-light .quflx-ai-btn {
+  background: linear-gradient(145deg, #ffffff, #fcedcf);
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.1),
+    -2px -2px 6px rgba(255, 255, 255, 0.8),
+    inset 0 0 10px rgba(255, 255, 255, 0.1);
+  color: #1e293b;
+}
+
+.quflx-screenshot-btn:hover,
+.quflx-ai-btn:hover {
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 
+    6px 6px 12px rgba(0, 0, 0, 0.5),
+    -3px -3px 8px rgba(255, 255, 255, 0.08),
+    0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.theme-light .quflx-screenshot-btn:hover,
+.theme-light .quflx-ai-btn:hover {
+  box-shadow: 
+    6px 6px 12px rgba(0, 0, 0, 0.15),
+    -3px -3px 8px rgba(255, 255, 255, 1),
+    0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.quflx-screenshot-btn:active,
+.quflx-ai-btn:active {
+  transform: scale(0.95) translateY(1px);
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.5),
+    inset -2px -2px 6px rgba(255, 255, 255, 0.05);
+}
+
+.theme-light .quflx-screenshot-btn:active,
+.theme-light .quflx-ai-btn:active {
+  box-shadow: 
+    inset 4px 4px 8px rgba(0, 0, 0, 0.1),
+    inset -2px -2px 6px rgba(255, 255, 255, 0.8);
+}
+
+/* Icon Glow & Effects */
+.quflx-screenshot-btn svg,
+.quflx-ai-btn svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.3));
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.quflx-screenshot-btn:hover svg,
+.quflx-ai-btn:hover svg {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
+}
+
+/* --- Section Styles --- */
 .quflx-section-light {
   background-color: #020408;
   background-image: 
@@ -175,169 +259,153 @@
 }
 
 .theme-light .quflx-section-light {
-  background-image:
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.05), transparent 60%),
-    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.02), transparent 55%);
+  background-color: #ffffff;
+  background-image: linear-gradient(135deg, #ffffff 0%, #fcedcf 100%);
+  border: 1px solid rgba(233, 211, 5, 0.3);
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.05);
 }
 
-.theme-orange-dark .quflx-section-light {
-  background: linear-gradient(135deg, #4a1f0a, #fb923c);
+/* --- UI Elements (Buttons, Inputs, etc.) --- */
+.theme-light button,
+.theme-light input,
+.theme-light select,
+.theme-light textarea {
+  background-color: #ffffff !important;
+  color: rgb(66, 56, 0) !important;
+  border: 1px solid rgba(233, 211, 5, 0.5) !important;
 }
 
-.quflx-ask-ai {
-  background-image: linear-gradient(45deg, #020204, #7b7e81);
-  background-size: 100% 100%;
-  background-position: 50% 50%;
-  transition:
-    transform 160ms ease,
-    background-image 200ms ease,
-    color 200ms ease;
-  color: #f9fafb;
+.theme-light button:hover {
+  background-color: #fcedcf !important;
 }
 
-.quflx-ask-ai:hover {
-  transform: translateY(-1px) scale(1.03);
+.theme-light h1,
+.theme-light h2,
+.theme-light h3,
+.theme-light h4,
+.theme-light h5,
+.theme-light h6,
+.theme-light label,
+.theme-light span,
+.theme-light p {
+  color: rgb(66, 56, 0) !important;
 }
 
-.theme-orange-dark .quflx-ask-ai {
-  background-image: linear-gradient(120deg, #f1f1f6, #4707b5);
-  background-size: 100% 100%;
-  background-position: 50% 50%;
-}
-
-.theme-orange-dark .quflx-ask-ai:hover {
-  background-image: linear-gradient(120deg, #ffffff, #6366f1);
-  color: #111827;
-}
-
-.quflx-screenshot-btn {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 9999px;
-  background: linear-gradient(145deg, #2d3748, #1e293b);
-  box-shadow:
-    6px 6px 12px rgba(0, 0, 0, 0.55),
-    -6px -6px 12px rgba(255, 255, 255, 0.06),
-    0 0 6px rgba(255, 0, 0, 0.25);
+/* --- Logo Styles --- */
+.quflx-logo {
+  position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 0.75rem;
+}
+
+/* --- Animated Cube Logo Styles --- */
+.logo-scene {
+  width: 32px;
+  height: 32px;
+  perspective: 800px;
+  display: flex;
   justify-content: center;
+  align-items: center;
+}
+
+.logo-cube {
+  width: 16px;
+  height: 16px;
   position: relative;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #f9fafb;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  transform-style: preserve-3d;
+  transform: rotateX(0deg) rotateY(0deg);
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.quflx-screenshot-btn::before {
-  content: '';
-  position: absolute;
-  width: 65%;
-  height: 65%;
-  background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 70%);
-  border-radius: 9999px;
-  filter: blur(6px);
-  opacity: 0.7;
-  z-index: 0;
+.quflx-logo:hover .logo-cube {
+  transform: rotateX(45deg) rotateY(45deg);
 }
 
-.quflx-screenshot-btn::after {
-  content: '';
+.logo-face {
   position: absolute;
-  inset: 4px 4px 10px 4px;
-  border-radius: 9999px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 55%);
+  width: 16px;
+  height: 16px;
+  background: rgba(0, 10, 40, 0.9); /* Dark core for black hole */
+  border: 1px solid rgba(0, 224, 255, 0.8);
+  box-shadow: 0 0 12px rgba(0, 224, 255, 0.8), inset 0 0 8px rgba(0, 224, 255, 0.4);
+  backdrop-filter: blur(2px);
+  border-radius: 50%; /* Start as circle (Black Hole) */
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              opacity 0.6s ease, 
+              background 0.6s ease,
+              border-color 0.6s ease,
+              border-radius 0.8s ease,
+              box-shadow 0.8s ease;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.quflx-logo:hover .logo-face {
   opacity: 0.9;
+  background: rgba(0, 110, 255, 0.3);
+  border-color: rgba(0, 224, 255, 1);
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.6);
+  border-radius: 0%; /* Transform to square (Cube) */
+}
+
+/* Default "Flat" state: all faces collapsed at center */
+.logo-face.front  { transform: rotateY(0deg) translateZ(0px); }
+.logo-face.back   { transform: rotateY(180deg) translateZ(0px); }
+.logo-face.right  { transform: rotateY(90deg) translateZ(0px); }
+.logo-face.left   { transform: rotateY(-90deg) translateZ(0px); }
+.logo-face.top    { transform: rotateX(90deg) translateZ(0px); }
+.logo-face.bottom { transform: rotateX(-90deg) translateZ(0px); }
+
+/* Hover "Expanded" state: faces move to form a cube */
+.quflx-logo:hover .logo-face.front  { transform: rotateY(0deg) translateZ(8px); }
+.quflx-logo:hover .logo-face.back   { transform: rotateY(180deg) translateZ(8px); }
+.quflx-logo:hover .logo-face.right  { transform: rotateY(90deg) translateZ(8px); }
+.quflx-logo:hover .logo-face.left   { transform: rotateY(-90deg) translateZ(8px); }
+.quflx-logo:hover .logo-face.top    { transform: rotateX(90deg) translateZ(8px); }
+.quflx-logo:hover .logo-face.bottom { transform: rotateX(-90deg) translateZ(8px); }
+
+.logo-scene::after {
+  content: '';
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle, rgba(0, 224, 255, 0.3) 0%, transparent 70%);
+  opacity: 0.4; /* Constant subtle glow for the black hole */
+  transition: opacity 0.8s ease, transform 0.8s ease;
   pointer-events: none;
 }
 
-.quflx-screenshot-btn > svg {
-  position: relative;
-  z-index: 1;
-  color: #fecaca;
-  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.7));
+.quflx-logo:hover .logo-scene::after {
+  opacity: 1;
+  transform: scale(1.2);
 }
 
-.quflx-screenshot-btn:hover {
-  box-shadow:
-    5px 5px 10px rgba(0, 0, 0, 0.6),
-    -5px -5px 10px rgba(255, 255, 255, 0.08),
-    0 0 10px rgba(255, 0, 0, 0.4);
-  transform: translateY(-2px);
+.quflx-logo-text-main,
+.quflx-logo-text-version {
+  font-weight: 900;
+  line-height: 1;
+  background: linear-gradient(90deg, #d4eaff, #af8dff, #0151ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow:
+    0 0 8px rgba(64, 191, 255, 0.6),
+    0 0 16px rgba(0, 220, 255, 0.4);
 }
 
-.quflx-screenshot-btn:active {
-  box-shadow:
-    inset 5px 5px 10px rgba(0, 0, 0, 0.5),
-    inset -5px -5px 10px rgba(255, 255, 255, 0.04),
-    0 0 18px rgba(255, 0, 0, 0.35);
-  transform: translateY(1px);
+.quflx-logo-text-main {
+  font-size: 1.0rem;
+  margin-left: -15px;
 }
 
-.quflx-ai-btn {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 9999px;
-  background: linear-gradient(145deg, #374151, #1f2933);
-  box-shadow:
-    6px 6px 12px rgba(0, 0, 0, 0.65),
-    -6px -6px 12px rgba(255, 255, 255, 0.06),
-    0 0 6px rgba(255, 0, 0, 0.25);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #e5e7eb;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.quflx-logo-text-version {
+  font-size: 0.65rem;
+  margin-left: 2px;
+  opacity: 0.8;
 }
 
-.quflx-ai-btn::before {
-  content: '';
-  position: absolute;
-  width: 65%;
-  height: 65%;
-  background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 70%);
-  border-radius: 9999px;
-  filter: blur(6px);
-  opacity: 0.7;
-  z-index: 0;
-}
-
-.quflx-ai-btn::after {
-  content: '';
-  position: absolute;
-  inset: 4px 4px 10px 4px;
-  border-radius: 9999px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 55%);
-  opacity: 0.95;
-  pointer-events: none;
-}
-
-.quflx-ai-btn > svg {
-  position: relative;
-  z-index: 1;
-  color: #fecaca;
-  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.7));
-}
-
-.quflx-ai-btn:hover {
-  box-shadow:
-    5px 5px 10px rgba(0, 0, 0, 0.7),
-    -5px -5px 10px rgba(255, 255, 255, 0.08),
-    0 0 12px rgba(255, 0, 0, 0.45);
-  transform: translateY(-2px);
-}
-
-.quflx-ai-btn:active {
-  box-shadow:
-    inset 5px 5px 10px rgba(0, 0, 0, 0.6),
-    inset -5px -5px 10px rgba(255, 255, 255, 0.04),
-    0 0 18px rgba(255, 0, 0, 0.35);
-  transform: translateY(1px);
-}
-
+/* --- Scrollbar Styles --- */
 * {
   scrollbar-width: thin;
   scrollbar-color: #374151 #1a1f2e;
@@ -357,17 +425,10 @@
   border-radius: 4px;
 }
 
-*::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
-}
-
+/* --- Animations --- */
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .animate-pulse {
@@ -375,92 +436,10 @@
 }
 
 @keyframes ticker {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 .animate-ticker {
   animation: ticker 35s linear infinite;
-}
-
-.quflx-logo {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-
-.quflx-logo-text-main {
-  font-size: 1.0rem;
-  font-weight: 900;
-  line-height: 1;
-  background: linear-gradient(90deg, #aed7ff, #95c7fa, #00ffff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow:
-    0 0 8px rgba(0, 200, 255, 0.6),
-    0 0 16px rgba(0, 220, 255, 0.4);
-}
-
-.quflx-logo-text {
-  display: inline-flex;
-  align-items: baseline;
-  margin-left: -2.0rem;
-  margin-bottom: -1.0rem;
-  font-family: 'Arial Black', 'Helvetica', sans-serif;
-  letter-spacing: 0.0em;
-  position: relative;
-  z-index: 10;
-}
-
-.quflx-logo-glow {
-  position: relative;
-  margin-left: 1.0rem;
-  margin-top: 1.0rem;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 9999px;
-  background: #000;
-  box-shadow:
-    0 0 10px rgba(0, 200, 255, 0.8),
-    inset 0 0 10px rgba(0, 200, 255, 0.4);
-  flex-shrink: 0;
-  z-index: 0;
-}
-
-.quflx-logo-glow::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 9999px;
-  box-shadow:
-    0 0 20px 8px rgba(0, 200, 255, 0.9),
-    0 0 30px 14px rgba(0, 150, 255, 0.5);
-  opacity: 0.9;
-}
-
-.quflx-logo-glow::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: 9999px;
-  background: radial-gradient(circle, rgba(0, 200, 255, 0.3) 0%, transparent 60%);
-  filter: blur(10px);
-  opacity: 0.7;
-}
-
-.quflx-logo:hover .quflx-logo-glow {
-  transform: scale(1.05);
-}
-
-.quflx-logo-text-version {
-  margin-left: 0.15rem;
-  font-size: 0.6em;
-  color: #00ccff;
-  opacity: 0.8;
-  text-shadow: 0 0 6px rgba(0, 200, 255, 0.5);
 }

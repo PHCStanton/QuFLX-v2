@@ -1,0 +1,461 @@
+# Blue_Dark Theme - Archive
+**Source Commit:** `ea97ec048932975269d426e07a1d3e6a425da54e`  
+**Description:** Modern Dark Blue theme with transparent panels and enhanced visual effects
+
+---
+
+## CSS Stylesheet
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default Dark Theme */
+  --dashboard-bg: 10 12 16;
+  --card-bg: 18 20 26;
+  --section-bg: 31 41 55; /* gray-800 */
+  --text-primary: 249 250 251;
+  --text-secondary: 156 163 175; /* gray-400 */
+  --accent-glow: 16, 185, 129; /* emerald-500 */
+  --border-color: 31 41 55;
+}
+
+.theme-light {
+  --dashboard-bg: 243 244 246; /* gray-100 */
+  --card-bg: 255 255 255;
+  --section-bg: 229 231 235; /* gray-200 */
+  --text-primary: 17 24 39; /* gray-900 */
+  --text-secondary: 75 85 99; /* gray-600 */
+  --accent-glow: 16, 185, 129;
+  --border-color: 209 213 219; /* gray-300 */
+}
+
+.theme-orange-dark {
+  --dashboard-bg: 15 20 25;
+  --card-bg: 6 87 226;
+  --text-primary: 248 250 252;
+  --text-secondary: 148 163 184;
+  --accent-glow: 251, 146, 60;
+}
+
+.quflx-card {
+  background-color: rgb(var(--card-bg));
+  background-image:
+    radial-gradient(circle at top left, rgb(7, 56, 169)),
+    radial-gradient(circle at bottom right, rgb(0, 0, 0), transparent 55%);
+  box-shadow: 0 10px 25px rgb(0, 0, 0);
+}
+
+.theme-orange-dark .quflx-card {
+  background-image:
+    radial-gradient(circle at top left, rgba(251, 146, 60, 0.32), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(248, 113, 113, 0.24), transparent 55%);
+}
+
+.quflx-topbar {
+  background-color: rgb(var(--card-bg));
+  background-image:
+    linear-gradient(90deg, rgba(5, 5, 5, 0.744), rgba(7, 56, 169, 0.72)), 
+    radial-gradient(circle at top left, rgba(37, 41, 43, 0.764));
+}
+
+.theme-orange-dark .quflx-topbar {
+  background-image:
+    linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(4, 31, 96, 0.72)),
+    radial-gradient(circle at top left, rgba(248, 245, 245, 0.4), transparent 55%);
+}
+
+.quflx-sidebar {
+  position: relative;
+  background-color: rgb(var(--card-bg));
+  /* background-image:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.96), rgba(0, 0, 0, 0.76)),    
+    radial-gradient(circle at bottom, rgba(238, 243, 241, 0.745), transparent 55%); */
+  overflow: hidden;
+}
+
+.quflx-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url('.\assets\textures\Blue_Dark_BG2.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.theme-orange-dark .quflx-sidebar {
+  background-image:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.76)),
+    radial-gradient(circle at bottom, rgba(16, 185, 129, 0.28), transparent 55%);
+}
+
+.quflx-sidebar-item-active {
+  background-color: rgba(21, 89, 178, 0.245);
+  color: #49bbd8;
+  border-right-color: #49bbd8;
+  box-shadow: 0 0 8px rgba(79, 119, 171, 0.75);
+}
+
+.theme-orange-dark .quflx-sidebar-item-active {
+  background-color: rgba(251, 146, 60, 0.18);
+  color: #fed7aa;
+  border-right-color: #fb923c;
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.65);
+}
+
+.quflx-logo {
+  position: relative;
+}
+
+.quflx-logo-glow {
+  position: absolute;
+  inset: -6px -10px;
+  border-radius: 9999px;
+  opacity: 1;
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(103, 162, 252, 0.6), transparent 60%),
+    radial-gradient(circle at 100% 100%, rgba(2, 36, 108, 0.4), transparent 60%);
+  box-shadow:
+    0 0 24px rgba(214, 208, 203, 0.65),
+    0 0 40px rgba(245, 246, 247, 0.55);
+  z-index: -1;
+}
+
+.quflx-logo:hover .quflx-logo-glow {
+  transform: scale(1.02);
+}
+
+.quflx-logo-text {
+  background-image: linear-gradient(120deg, #feffff, #0b7dda, #243cf6);   
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.quflx-section-light {
+  background-color: rgb(var(--card-bg));
+  background-image:
+    radial-gradient(circle at top left, rgba(21, 89, 178, 0.15), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.1), transparent 55%);
+  border: 1px solid rgb(var(--border-color));
+}
+
+.theme-light .quflx-section-light {
+  background-image:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.05), transparent 60%),
+    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.02), transparent 55%);
+}
+
+.theme-orange-dark .quflx-section-light {
+  background: linear-gradient(135deg, #4a1f0a, #fb923c);
+}
+
+.quflx-ask-ai {
+  background-image: linear-gradient(45deg, #020204, #7b7e81);
+  background-size: 100% 100%;
+  background-position: 50% 50%;
+  transition:
+    transform 160ms ease,
+    background-image 200ms ease,
+    color 200ms ease;
+  color: #f9fafb;
+}
+
+.quflx-ask-ai:hover {
+  transform: translateY(-1px) scale(1.03);
+}
+
+.theme-orange-dark .quflx-ask-ai {
+  background-image: linear-gradient(120deg, #f1f1f6, #4707b5);
+  background-size: 100% 100%;
+  background-position: 50% 50%;
+}
+
+.theme-orange-dark .quflx-ask-ai:hover {
+  background-image: linear-gradient(120deg, #ffffff, #6366f1);
+  color: #111827;
+}
+
+.quflx-screenshot-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, #2d3748, #1e293b);
+  box-shadow:
+    6px 6px 12px rgba(0, 0, 0, 0.55),
+    -6px -6px 12px rgba(255, 255, 255, 0.06),
+    0 0 6px rgba(255, 0, 0, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quflx-screenshot-btn::before {
+  content: '';
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 70%);
+  border-radius: 9999px;
+  filter: blur(6px);
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.quflx-screenshot-btn::after {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 10px 4px;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent 55%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.quflx-screenshot-btn > svg {
+  position: relative;
+  z-index: 1;
+  color: #fecaca;
+  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.7));
+}
+
+.quflx-screenshot-btn:hover {
+  box-shadow:
+    5px 5px 10px rgba(0, 0, 0, 0.6),
+    -5px -5px 10px rgba(255, 255, 255, 0.08),
+    0 0 10px rgba(255, 0, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+.quflx-screenshot-btn:active {
+  box-shadow:
+    inset 5px 5px 10px rgba(0, 0, 0, 0.5),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.04),
+    0 0 18px rgba(255, 0, 0, 0.35);
+  transform: translateY(1px);
+}
+
+.quflx-ai-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, #374151, #1f2933);
+  box-shadow:
+    6px 6px 12px rgba(0, 0, 0, 0.65),
+    -6px -6px 12px rgba(255, 255, 255, 0.06),
+    0 0 6px rgba(255, 0, 0, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quflx-ai-btn::before {
+  content: '';
+  position: absolute;
+  width: 65%;
+  height: 65%;
+  background: radial-gradient(circle, rgba(255, 0, 0, 0.6) 0%, transparent 70%);
+  border-radius: 9999px;
+  filter: blur(6px);
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.quflx-ai-btn::after {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 10px 4px;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 55%);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.quflx-ai-btn > svg {
+  position: relative;
+  z-index: 1;
+  color: #fecaca;
+  filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.7));
+}
+
+.quflx-ai-btn:hover {
+  box-shadow:
+    5px 5px 10px rgba(0, 0, 0, 0.7),
+    -5px -5px 10px rgba(255, 255, 255, 0.08),
+    0 0 12px rgba(255, 0, 0, 0.45);
+  transform: translateY(-2px);
+}
+
+.quflx-ai-btn:active {
+  box-shadow:
+    inset 5px 5px 10px rgba(0, 0, 0, 0.6),
+    inset -5px -5px 10px rgba(255, 255, 255, 0.04),
+    0 0 18px rgba(255, 0, 0, 0.35);
+  transform: translateY(1px);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #374151 #1a1f2e;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #1a1f2e;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker 35s linear infinite;
+}
+
+.quflx-logo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.quflx-logo-text-main {
+  font-size: 1.0rem;
+  font-weight: 900;
+  line-height: 1;
+  background: linear-gradient(90deg, #aed7ff, #95c7fa, #00ffff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow:
+    0 0 8px rgba(0, 200, 255, 0.6),
+    0 0 16px rgba(0, 220, 255, 0.4);
+}
+
+.quflx-logo-text {
+  display: inline-flex;
+  align-items: baseline;
+  margin-left: -2.0rem;
+  margin-bottom: -1.0rem;
+  font-family: 'Arial Black', 'Helvetica', sans-serif;
+  letter-spacing: 0.0em;
+  position: relative;
+  z-index: 10;
+}
+
+.quflx-logo-glow {
+  position: relative;
+  margin-left: 1.0rem;
+  margin-top: 1.0rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: #000;
+  box-shadow:
+    0 0 10px rgba(0, 200, 255, 0.8),
+    inset 0 0 10px rgba(0, 200, 255, 0.4);
+  flex-shrink: 0;
+  z-index: 0;
+}
+
+.quflx-logo-glow::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  box-shadow:
+    0 0 20px 8px rgba(0, 200, 255, 0.9),
+    0 0 30px 14px rgba(0, 150, 255, 0.5);
+  opacity: 0.9;
+}
+
+.quflx-logo-glow::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(0, 200, 255, 0.3) 0%, transparent 60%);
+  filter: blur(10px);
+  opacity: 0.7;
+}
+
+.quflx-logo:hover .quflx-logo-glow {
+  transform: scale(1.05);
+}
+
+.quflx-logo-text-version {
+  margin-left: 0.15rem;
+  font-size: 0.6em;
+  color: #00ccff;
+  opacity: 0.8;
+  text-shadow: 0 0 6px rgba(0, 200, 255, 0.5);
+}
+```
+
+---
+
+## Key Features
+
+- **Color Scheme**: Deep blue tones with cyan/turquoise accents
+- **Transparency**: Uses rgba() values for transparent panel overlays
+- **Background Texture**: References `Blue_Dark_BG2.jpg` for visual depth
+- **Modern Styling**: Enhanced gradients, glows, and shadow effects
+- **Logo Design**: Cyan gradient with enhanced glow effects
+- **Responsive**: Includes hover states and transitions
+- **Alternative Themes**: Includes orange-dark theme variant and light theme
+
+## Usage
+
+To use this theme in your dashboard, apply the class `theme-blue-dark` to your root element or set it as a data attribute.
+
+## Notes
+
+- This design features modern transparent panels in the right sidebar
+- Heavy use of radial gradients for depth
+- Enhanced glow effects on interactive elements
+- Uses Tailwind CSS as base framework

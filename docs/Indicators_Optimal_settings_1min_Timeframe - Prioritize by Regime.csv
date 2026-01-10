@@ -1,0 +1,6 @@
+Regime,Core Indicators (Must Have),Strong Confluence (A+ Requirements),Avoid / Caution
+Strong Momentum Trending,"EMA-16, Supertrend, ADX >35, MACD histogram",Price above EMA-16 + Supertrend green + ADX rising + expanding MACD hist,RSI >75 (overbought risk)
+Trending with Pullbacks,"EMA-16 / EMA-165, RSI 14, Bollinger Bands",Pullback to EMA-16 + RSI 40–55 + BB touch/rejection + ATR stable/rising,Entering near BB extremes without pullback confirmation
+Ranging / Sideways,"Bollinger Bands, RSI 14, CCI / Stochastic",Price at BB upper/lower + RSI >70/<30 + CCI extreme + small bodies,"Trend indicators (ADX <20, avoid EMA crossovers)"
+Breakout Conditions,"Bollinger Bands squeeze → expansion, ADX >25 rising, ATR spike",BB squeeze → big candle close outside band + ADX rising + ATR expansion,Fakeouts (no follow-through candle)
+Trend Reversal,"MACD/RSI divergence, CCI extreme, large reversal candle",Divergence on MACD/RSI + rejection at major level + big reversal candle,Low-probability – require 4+ confluences

@@ -1,11 +1,18 @@
-import Dashboard from './components/Dashboard'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import KnowledgeBase from './components/KnowledgeBase';
 
 function App() {
   return (
-    <div className="min-h-screen bg-dashboard-bg text-white">
-      <Dashboard />
-    </div>
-  )
+    <Router>
+      <div className="min-h-screen bg-dashboard-bg text-white">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/kb" element={<KnowledgeBase />} />
+        </Routes>
+      </div>
+    </Router>
+  );
 }
 
-export default App
+export default App;

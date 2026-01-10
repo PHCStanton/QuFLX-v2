@@ -1,5 +1,6 @@
 import { Menu, Activity, TrendingUp, Bot, Settings } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
+import AnimatedLogo from './AnimatedLogo';
 
 const SIDEBAR_TABS = [
 	{ id: 'dashboard', label: 'Dashboard', icon: Activity },
@@ -20,7 +21,7 @@ const Sidebar = () => {
       <div className="p-4 flex items-center justify-between border-b border-border-primary">
         {isSidebarOpen && (
           <div className="quflx-logo">
-            <div className="quflx-logo-glow" />
+            <AnimatedLogo />
             <div className="quflx-logo-text">
               <span className="quflx-logo-text-main">QuFLX</span>
               <span className="quflx-logo-text-version">_v.2</span>

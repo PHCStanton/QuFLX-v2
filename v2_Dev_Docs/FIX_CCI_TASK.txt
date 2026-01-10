@@ -1,0 +1,302 @@
+🚨 CCI Indicator Issue - Root Cause Identified
+
+You mentioned CCI is having trouble. __@Investigator__ analysis reveals the issue:
+
+### __Location:__ `backend/services/strategy/indicators.py` → `_calculate_cci()` method
+
+```python
+def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        period = self.params['cci_period']  # 20
+        typical_price = (df['high'] + df['low'] + df['close']) / 3
+        sma_tp = typical_price.rolling(window=period).mean()
+        
+        # ❌ PROBLEM: Inefficient loop + NaN handling issue
+        mean_dev = pd.Series(index=df.index, dtype=float)
+        for i in range(period - 1, len(df)):
+            deviations = []
+            for j in range(i - period + 1, i + 1):
+                deviations.append(abs(typical_price.iloc[j] - sma_tp.iloc[i]))
+            mean_dev.iloc[i] = np.mean(deviations)
+        
+        cci = pd.Series(index=df.index, dtype=float)
+        for i in range(len(df)):
+            if mean_dev.iloc[i] != 0:
+                cci.iloc[i] = (typical_price.iloc[i] - sma_tp.iloc[i]) / (0.015 * mean_dev.iloc[i])
+            else:
+                cci.iloc[i] = 0  # ← Division edge case handled, but NaN not
+```
+
+### __Issues Identified:__
+
+1. __NaN Propagation__ - `mean_dev` starts as NaN for indices 0 to `period-2`, but the CCI loop iterates from 0, causing NaN output for early values
+2. __Division by Zero Handling__ - Checks for `!= 0` but doesn't check for `pd.isna()`
+3. __Performance__ - Double nested loop is O(n²), very slow for large datasets
+4. __CORE_PRINCIPLES #9 Violation__ - No early validation of `typical_price` or `sma_tp` for NaN/inf values
+
+---
+
+## 📋 Recommendations for Improvement
+
+### __P0 (Critical) - Fix CCI Calculation__
+
+__Delegate to:__ @Coder @Debugger
+
+```python
+# RECOMMENDED FIX for _calculate_cci():
+def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        period = self.params['cci_period']
+        
+        # 1. Calculate typical price
+        typical_price = (df['high'] + df['low'] + df['close']) / 3
+        
+        # 2. SMA of typical price
+        sma_tp = typical_price.rolling(window=period).mean()
+        
+        # 3. Mean deviation (vectorized, not looped!)
+        mean_dev = typical_price.rolling(window=period).apply(
+            lambda x: np.mean(np.abs(x - x.mean())), raw=True
+        )
+        
+        # 4. CCI with safe division
+        cci = (typical_price - sma_tp) / (0.015 * mean_dev.replace(0, np.nan))
+        
+        df['cci'] = cci
+        
+    except Exception as e:
+        self.logger.error(f"Error calculating CCI: {str(e)}")
+        df['cci'] = np.nan  # Explicit NaN, not None
+    
+    return df
+```
+
+__Why This Is Better:__
+
+- ✅ Vectorized (O(n) vs O(n²))
+- ✅ Handles NaN properly via pandas rolling
+- ✅ Uses `replace(0, np.nan)` to avoid division issues
+- ✅ Follows CORE_PRINCIPLES #1 (Functional Simplicity)
+
+---
+
+### __P1 (High) - Add Input Validation to Indicator Calculator__
+
+__Delegate to:__ @Coder
+
+In `indicator_calculator.py`, add early validation:
+
+```python
+def run(self, ctx: Ctx, inputs: Dict[str, Any]) -> CapResult:
+    csv_path = inputs.get("csv_path")
+    if not csv_path:
+        return CapResult.fail("csv_path is required", error_code="MISSING_CSV_PATH")
+    
+    if not os.path.exists(csv_path):
+        return CapResult.fail(f"CSV file not found: {csv_path}", error_code="CSV_NOT_FOUND")
+    
+    # ... rest of logic
+```
+
+This satisfies __CORE_PRINCIPLES #9__ (Fail Fast).
+
+---
+
+### __P2 (Medium) - Improve Error Boundary in Frontend__
+
+__Delegate to:__ @Frontend-Specialist
+
+In `marketStore.js` `loadIndicators()`, add structured error handling:
+
+```javascript
+// After fetching, validate the series structure
+const data = await res.json();
+const series = data.series || {};
+
+// Validate CCI specifically since it's problematic
+if (indicators.includes('cci') && (!series.cci || series.cci.length === 0)) {
+  console.warn('[Indicators] CCI returned empty - may have insufficient data');
+}
+```
+
+---
+
+### __P3 (Low) - Documentation Update__
+
+Update `History_Indicator_Stability_Plan.md` status to note:
+
+- CCI calculation bug discovered post-implementation
+- Reference to this assessment
+
+---
+
+## 📊 CORE_PRINCIPLES #7 Check (Stop Patching Rule)
+
+| Criteria | Assessment | |----------|------------| | More than 2-3 incremental fixes? | ❌ No - first CCI fix | | Code becoming tangled? | ❌ No - isolated to one method | | Same bug resurfacing? | ❌ No - newly discovered | | Fix exceeds 30-40 lines? | ❌ No - ~15 lines |
+
+__Verdict:__ ✅ Targeted fix is appropriate. No rewrite needed for `indicators.py`.
+
+---
+
+## 🎬 Next Steps
+
+1. __Toggle toAct Mode (⌘⇧A)__ to implement the CCI fix
+2. @Coder will apply the vectorized CCI calculation
+3. @Tester will verify all indicators load correctly
+4. @Reviewer will confirm CORE_PRINCIPLES compliance
+
+__Estimated effort:__ 15-20 minutes
+
+
+- Current Work: As __Team Leader 👔__, I conducted a critical review of the implemented `v2_Dev_Docs/History_Indicator_Stability_Plan.md` to verify CORE_PRINCIPLES compliance and investigate a reported CCI indicator issue. The user mentioned "All the indicators are loading just having trouble with the CCI."
+
+  The review covered:
+
+  - CapResult contract implementation (error_code field)
+  - Timeout alignment across frontend/backend/capabilities
+  - Indicator route response structure
+  - CCI calculation logic in TechnicalIndicatorsPipeline
+
+  __Key Discovery:__ The CCI indicator has a bug in `_calculate_cci()` method with NaN handling and O(n²) performance issues.
+
+- Key Technical Concepts:
+
+  - __CORE_PRINCIPLES.md__ - Non-negotiable engineering rules including:
+
+    - #1 Functional Simplicity First
+    - #7 Stop Patching, Start Rewriting Rule
+    - #8 Defensive & Explicit Error Handling
+    - #9 Fail Fast, Fail Loud, Fail Predictably
+
+  - __CapResult dataclass__ - Standard result type with `ok`, `data`, `error`, `error_code`, `artifacts`
+
+  - __Technical Indicators Pipeline__ - Calculates RSI, MACD, CCI, Bollinger Bands, etc.
+
+  - __Vectorized pandas operations__ - Preferred over loops for performance
+
+  - __Agent persona system__ - Team Leader, Investigator, Coder, Debugger, etc.
+
+- Relevant Files and Code:
+
+  - __`capabilities_v2/base.py`__
+
+    - Contains CapResult dataclass - correctly has error_code field
+    - Implements `fail()` and `success()` static methods
+
+  - __`capabilities_v2/runner.py`__
+
+    - Entry point for capability execution
+    - Has conditional browser attachment (`requires_browser` check)
+    - Serializes error_code in output JSON
+
+  - __`backend/services/strategy/indicators.py`__ (CRITICAL - Contains Bug)
+
+    - TechnicalIndicatorsPipeline class
+    - `_calculate_cci()` method at ~lines 285-310 has the bug:
+
+    ```python
+    # CURRENT BUGGY CODE:
+    def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            period = self.params['cci_period']
+            typical_price = (df['high'] + df['low'] + df['close']) / 3
+            sma_tp = typical_price.rolling(window=period).mean()
+            
+            # ❌ PROBLEM: O(n²) nested loops + NaN not handled
+            mean_dev = pd.Series(index=df.index, dtype=float)
+            for i in range(period - 1, len(df)):
+                deviations = []
+                for j in range(i - period + 1, i + 1):
+                    deviations.append(abs(typical_price.iloc[j] - sma_tp.iloc[i]))
+                mean_dev.iloc[i] = np.mean(deviations)
+            
+            cci = pd.Series(index=df.index, dtype=float)
+            for i in range(len(df)):
+                if mean_dev.iloc[i] != 0:  # ❌ Doesn't check for NaN
+                    cci.iloc[i] = (typical_price.iloc[i] - sma_tp.iloc[i]) / (0.015 * mean_dev.iloc[i])
+                else:
+                    cci.iloc[i] = 0
+            
+            df['cci'] = cci
+        except Exception as e:
+            self.logger.error(f"Error calculating CCI: {str(e)}")
+            df['cci'] = None
+        return df
+    ```
+
+  - __`backend/services/gateway/routes/indicators.py`__
+
+    - Fixed response structure (uses `**data` spread)
+    - Properly returns series at top level for frontend
+
+  - __`capabilities_v2/indicator_calculator.py`__
+
+    - Capability that invokes TechnicalIndicatorsPipeline
+    - Has `requires_browser = False` flag
+
+  - __`gui/Dashboard/src/store/marketStore.js`__
+
+    - Frontend store with `loadIndicators()` action
+    - Correctly reads `data.series` from response
+
+- Problem Solving:
+
+  - __History_Indicator_Stability_Plan.md__ was successfully implemented:
+
+    - ✅ CapResult error_code field added
+    - ✅ Timeouts aligned (15s frontend, +15s gateway buffer, min 3s collector)
+    - ✅ Runner serializes error_code
+    - ✅ Indicators route response fixed (Jan 7 Bug #1)
+
+  - __CCI Issue Root Cause Identified:__
+
+    - NaN values not handled in mean_dev checking
+    - O(n²) double nested loop is inefficient
+    - Division by zero check uses `!= 0` but doesn't use `pd.isna()`
+    - Early indices (0 to period-2) produce NaN that propagates
+
+- Pending Tasks and Next Steps:
+
+  - __[P0 - CRITICAL] Fix CCI Calculation__ Replace the buggy `_calculate_cci()` with vectorized version:
+
+    ```python
+    def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            period = self.params['cci_period']
+            
+            # 1. Calculate typical price
+            typical_price = (df['high'] + df['low'] + df['close']) / 3
+            
+            # 2. SMA of typical price
+            sma_tp = typical_price.rolling(window=period).mean()
+            
+            # 3. Mean deviation (vectorized!)
+            mean_dev = typical_price.rolling(window=period).apply(
+                lambda x: np.mean(np.abs(x - x.mean())), raw=True
+            )
+            
+            # 4. CCI with safe division
+            cci = (typical_price - sma_tp) / (0.015 * mean_dev.replace(0, np.nan))
+            
+            df['cci'] = cci
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating CCI: {str(e)}")
+            df['cci'] = np.nan
+        
+        return df
+    ```
+
+  - __[P1] Add Input Validation to indicator_calculator.py__ Add file existence check before processing
+
+  - __[P2] Frontend Error Boundary__ Add CCI-specific warning in loadIndicators() if series is empty
+
+  __Direct quote from assessment:__
+
+  > "The CCI indicator has a bug in `_calculate_cci()` method... Issues Identified: 1. NaN Propagation - `mean_dev` starts as NaN for indices 0 to `period-2`... 2. Division by Zero Handling - Checks for `!= 0` but doesn't check for `pd.isna()`... 3. Performance - Double nested loop is O(n²)..."
+
+  > "__Next Steps:__ 1. Toggle to
+  >
+  > Act Mode (⌘⇧A) to implement the CCI fix. 2. @Coder will apply the vectorized CCI calculation. 3. @Tester will verify all indicators load correctly."
+
+  __Estimated effort:__ 15-20 minutes to implement CCI fix

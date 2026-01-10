@@ -1,6 +1,6 @@
 // gui/Dashboard/src/components/ProfileMenu.jsx
 import { useEffect, useState } from 'react';
-import avatar from '../assets/Anime_Girl_Profile.jpg';
+import avatar from '../assets/Agent_Profile.jpg';
 
 const ProfileMenu = () => {
   const [open, setOpen] = useState(false);
