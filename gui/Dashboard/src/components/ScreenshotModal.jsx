@@ -56,8 +56,10 @@ const ScreenshotModal = ({ isOpen, imageDataUrl, onClose, onSave, asset, timefra
       return null;
     }
     const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const scaleX = rect.width ? canvas.width / rect.width : 1;
+    const scaleY = rect.height ? canvas.height / rect.height : 1;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
     return { x, y };
   };
 
@@ -227,7 +229,7 @@ const ToolButton = ({ label, active, onClick }) => (
 const drawShapes = (ctx, shapes, currentShape) => {
   const allShapes = currentShape ? shapes.concat([currentShape]) : shapes;
   ctx.lineWidth = 2;
-  ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.font = '16px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
   allShapes.forEach((shape) => {
     if (shape.type === TOOL_TEXT) {
       ctx.fillStyle = '#f97316';

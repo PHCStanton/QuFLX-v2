@@ -7,7 +7,8 @@ const OscillatorChart = ({
   type,
   title,
   params,
-  indicatorValue
+  indicatorValue,
+  onCrosshairTimeFromOscillator,
 }) => {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -95,7 +96,7 @@ const OscillatorChart = ({
       crosshairSubscriptionRef.current = null;
       priceLinesRef.current = [];
     };
-  }, [type, params, indicatorValue]);
+  }, [type, params, indicatorValue, title]);
 
   useEffect(() => {
     if (!mainChart || !chartRef.current || !mainChart.timeScale) {
@@ -162,6 +163,32 @@ const OscillatorChart = ({
     seriesRef.current.setData(sorted);
     dataRef.current = sorted;
   }, [data]);
+
+  useEffect(() => {
+    if (!chartRef.current || !chartRef.current.subscribeCrosshairMove) {
+      return;
+    }
+
+    if (!onCrosshairTimeFromOscillator) {
+      return;
+    }
+
+    const handleOscillatorCrosshairMove = (param) => {
+      if (!param || !param.time) {
+        return;
+      }
+      onCrosshairTimeFromOscillator(param.time);
+    };
+
+    const chart = chartRef.current;
+    chart.subscribeCrosshairMove(handleOscillatorCrosshairMove);
+
+    return () => {
+      if (chart && chart.unsubscribeCrosshairMove) {
+        chart.unsubscribeCrosshairMove(handleOscillatorCrosshairMove);
+      }
+    };
+  }, [onCrosshairTimeFromOscillator]);
 
   useEffect(() => {
     if (!mainChart || !chartRef.current || !seriesRef.current) {

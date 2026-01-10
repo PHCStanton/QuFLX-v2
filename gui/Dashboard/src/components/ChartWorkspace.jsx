@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import html2canvas from 'html2canvas';
 import Card from './Card';
 import useMarketStore from '../store/marketStore';
 import ChartContainer from './ChartContainer';
@@ -41,11 +42,35 @@ const ChartWorkspace = () => {
   const [isDraggingOsc, setIsDraggingOsc] = useState(false);
   const oscDragStateRef = useRef(null);
   const [isSyncingTimeframe, setIsSyncingTimeframe] = useState(false);
+  const lastMainCrosshairTimeRef = useRef(null);
 
   const handleChartReady = useCallback(({ chart, series }) => {
     setCandleSeries(series);
     setMainChart(chart);
   }, []);
+
+  const handleCrosshairTimeFromOscillator = useCallback((time) => {
+    if (!mainChart || !candleSeries || !time) {
+      return;
+    }
+
+    const lastTime = lastMainCrosshairTimeRef.current;
+    const numericLast = lastTime != null ? Number(lastTime) : null;
+    const numericNext = Number(time);
+
+    if (numericLast != null && !Number.isNaN(numericLast) && !Number.isNaN(numericNext) && numericLast === numericNext) {
+      return;
+    }
+
+    lastMainCrosshairTimeRef.current = time;
+
+    const defaultPrice = 0;
+    try {
+      mainChart.setCrosshairPosition(defaultPrice, time, candleSeries);
+    } catch (err) {
+      console.error('Failed to set main chart crosshair from oscillator', err);
+    }
+  }, [mainChart, candleSeries]);
 
   const { isLoading } = useTickAggregation({
     marketData,
@@ -334,12 +359,22 @@ const ChartWorkspace = () => {
     }
   };
 
-  const captureChart = () => {
+  const captureCompositeChart = async () => {
     const container = document.getElementById('quflx-chart-screenshot-root');
     if (!container) return null;
-    const canvas = container.querySelector('canvas');
-    if (!canvas) return null;
-    return canvas.toDataURL('image/png');
+
+    try {
+      const canvas = await html2canvas(container, {
+        backgroundColor: '#020617',
+        useCORS: true,
+        logging: false,
+        scale: window.devicePixelRatio || 1
+      });
+      return canvas.toDataURL('image/png');
+    } catch (err) {
+      console.error('Composite chart capture failed:', err);
+      return null;
+    }
   };
 
   const handleOpenScreenshot = async () => {
@@ -348,14 +383,15 @@ const ChartWorkspace = () => {
     }
     try {
       setIsCapturing(true);
-      const dataUrl = captureChart();
+      const dataUrl = await captureCompositeChart();
       if (!dataUrl) {
         window.alert('Chart not available for screenshot.');
         return;
       }
       setScreenshotDataUrl(dataUrl);
       setIsScreenshotOpen(true);
-    } catch {
+    } catch (err) {
+      console.error('Failed to capture screenshot:', err);
       window.alert('Failed to capture screenshot.');
     } finally {
       setIsCapturing(false);
@@ -365,7 +401,7 @@ const ChartWorkspace = () => {
   const handleAskAi = async () => {
     if (isAsking) return;
 
-    const image = captureChart();
+    const image = await captureCompositeChart();
     const recentTicks = marketData[selectedAssetKey]?.slice(-20) || [];
     const context = {
       asset: selectedAsset,
@@ -456,7 +492,10 @@ const ChartWorkspace = () => {
         }}
       />
 
-      <div className="flex-1 relative w-full min-h-0 flex flex-col">
+      <div
+        id="quflx-chart-screenshot-root"
+        className="flex-1 relative w-full min-h-0 flex flex-col"
+      >
         <div className="absolute top-2 right-2 z-10 flex gap-2">
           <span
             className={`backdrop-blur px-2 py-0.5 rounded text-[10px] uppercase font-bold border transition-all duration-500 ${
@@ -482,7 +521,7 @@ const ChartWorkspace = () => {
           </div>
         )}
         <div className="flex-1 min-h-[220px] relative">
-          <div id="quflx-chart-screenshot-root" className="w-full h-full">
+          <div className="w-full h-full">
             <ChartContainer onChartReady={handleChartReady} />
           </div>
         </div>
@@ -526,6 +565,7 @@ const ChartWorkspace = () => {
                         title={ind.name}
                         params={ind.params}
                         indicatorValue={ind.value}
+                        onCrosshairTimeFromOscillator={handleCrosshairTimeFromOscillator}
                       />
                       {statusKey === 'loading' && (
                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-[10px] text-gray-300">

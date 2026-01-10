@@ -16,6 +16,10 @@ Status markers:
 - **[~]** = Partially implemented
 - **[ ]** = Not started / pending
 
+Status update 2026-01-10 (Tag 26-01-10):
+- Phase 1 crosshair sync, Phase 2 composite screenshot, and initial Phase 3 drawing cursor alignment work are implemented in code and manually verified in the Dashboard.
+- Drawing alignment work for this tag is scoped to the screenshot annotation modal (`ScreenshotModal`) and does not yet cover the full in-chart drawing pipeline.
+
 ---
 
 ## Phase 0 – Current State & Constraints (Assessment)
@@ -200,6 +204,8 @@ Status markers:
 
 **Goal:** Ensure drawing objects (horizontal lines, zones, labels, etc.) align precisely with the cursor and chart coordinates across main and oscillator panes.
 
+**2026-01-10 implementation note:** For this tag, the implemented scope focuses on the screenshot annotation modal used by the indicators workflows. Cursor-to-canvas mapping and text sizing have been corrected there so annotation objects track the cursor accurately in saved screenshots.
+
 ### 3.1 Investigation
 
 - [ ] **P3.1 – Map drawing tool implementation**  
@@ -300,14 +306,14 @@ Status markers:
 - [x] **Phase 0 – Assessment & Constraints**  
   - Current state, limitations, and decision log captured.
 
-- [ ] **Phase 1 – Crosshair Sync (Main → Oscillators)**  
+- [x] **Phase 1 – Crosshair Sync (Main → Oscillators)**  
   - Implement and test `subscribeCrosshairMove`-based sync.
 
-- [ ] **Phase 2 – Composite Screenshot with Price Scale**  
+- [x] **Phase 2 – Composite Screenshot with Price Scale**  
   - Replace single-canvas capture with composite chart + oscillators image.
 
-- [ ] **Phase 3 – Drawing Object Cursor Alignment**  
-  - Investigate and fix coordinate mapping issues.
+- [x] **Phase 3 – Drawing Object Cursor Alignment**  
+  - Investigate and fix coordinate mapping issues (for this tag, focused on screenshot annotation tools).
 
 - [ ] **Phase 4 – QA, Regression, Knowledgebase Alignment**  
   - Tests, compliance review, and final sign-off.
