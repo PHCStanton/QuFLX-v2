@@ -63,7 +63,7 @@ class IndicatorCalculator:
                 'rsi_14', 'rsi_21', 'stoch_k', 'stoch_d', 'williams_r', 'roc_10',
                 'macd', 'macd_signal', 'macd_histogram',
                 'bb_upper', 'bb_middle', 'bb_lower', 'bb_width', 'bb_percent',
-                'atr_14', 'atr_21', 'schaff_tc', 'demarker', 'cci',
+                'atr_14', 'atr_21', 'adx', 'plus_di', 'minus_di', 'schaff_tc', 'demarker', 'cci',
                 'supertrend'
             ]
 

@@ -72,6 +72,9 @@ class IndicatorSet:
     atr_14: Optional[float] = None
     atr_21: Optional[float] = None
     true_range: Optional[float] = None
+    adx: Optional[float] = None
+    plus_di: Optional[float] = None
+    minus_di: Optional[float] = None
     
     # Custom Indicators
     supertrend: Optional[float] = None
@@ -110,14 +113,15 @@ class TechnicalIndicatorsPipeline:
             'stoch_d': 3,
             'williams_period': 14,
             'roc_period': 10,
-            'supertrend_period': 10,
+            'supertrend_period': 7,
             'supertrend_multiplier': 3.0,
             'schaff_fast': 10,
             'schaff_slow': 20,
             'schaff_d_macd': 3,
             'schaff_d_pf': 3,
             'demarker_period': 10,
-            'cci_period': 20
+            'cci_period': 14,
+            'adx_period': 14
         }
         
         if 'indicator_params' in self.config:
@@ -262,9 +266,44 @@ class TechnicalIndicatorsPipeline:
             # CCI
             df = self._calculate_cci(df)
             
+            # ADX
+            df = self._calculate_adx(df)
+            
         except Exception as e:
             self.logger.error(f"Error calculating momentum indicators: {str(e)}")
         
+        return df
+
+    def _calculate_adx(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            period = self.params.get('adx_period', 14)
+            high_diff = df['high'].diff()
+            low_diff = -df['low'].diff()
+            plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0.0)
+            minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0.0)
+
+            if 'atr_14' in df.columns:
+                atr = df['atr_14']
+            else:
+                df = self._calculate_volatility_indicators(df)
+                atr = df['atr_14']
+
+            plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, np.nan))
+            minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, np.nan))
+
+            denominator = (plus_di + minus_di).replace(0, np.nan)
+            dx = 100 * (abs(plus_di - minus_di) / denominator)
+
+            df['adx'] = dx.ewm(span=period, adjust=False).mean()
+            df['plus_di'] = plus_di
+            df['minus_di'] = minus_di
+
+        except Exception as e:
+            self.logger.error(f"Error calculating ADX: {str(e)}")
+            df['adx'] = np.nan
+            df['plus_di'] = np.nan
+            df['minus_di'] = np.nan
+
         return df
     
     def _calculate_volatility_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -343,26 +382,20 @@ class TechnicalIndicatorsPipeline:
             
             macd_min = macd.rolling(window=d_macd).min()
             macd_max = macd.rolling(window=d_macd).max()
-            
-            stoch_macd = pd.Series(index=df.index, dtype=float)
-            for i in range(len(df)):
-                if macd_max.iloc[i] - macd_min.iloc[i] != 0:
-                    stoch_macd.iloc[i] = 100 * (macd.iloc[i] - macd_min.iloc[i]) / (macd_max.iloc[i] - macd_min.iloc[i])
-                else:
-                    stoch_macd.iloc[i] = 0
-            
+
+            macd_range = macd_max - macd_min
+            stoch_macd = 100 * (macd - macd_min) / macd_range.replace(0, np.nan)
+            stoch_macd = stoch_macd.fillna(0)
+
             pf = stoch_macd.ewm(span=d_macd, adjust=False).mean()
-            
+
             pf_min = pf.rolling(window=d_pf).min()
             pf_max = pf.rolling(window=d_pf).max()
-            
-            stc = pd.Series(index=df.index, dtype=float)
-            for i in range(len(df)):
-                if pf_max.iloc[i] - pf_min.iloc[i] != 0:
-                    stc.iloc[i] = 100 * (pf.iloc[i] - pf_min.iloc[i]) / (pf_max.iloc[i] - pf_min.iloc[i])
-                else:
-                    stc.iloc[i] = 0
-            
+
+            pf_range = pf_max - pf_min
+            stc = 100 * (pf - pf_min) / pf_range.replace(0, np.nan)
+            stc = stc.fillna(0)
+
             df['schaff_tc'] = stc.ewm(span=d_pf, adjust=False).mean()
             
         except Exception as e:
@@ -375,31 +408,19 @@ class TechnicalIndicatorsPipeline:
         try:
             period = self.params['demarker_period']
             
-            demax = pd.Series(index=df.index, dtype=float)
-            for i in range(1, len(df)):
-                if df['high'].iloc[i] > df['high'].iloc[i-1]:
-                    demax.iloc[i] = df['high'].iloc[i] - df['high'].iloc[i-1]
-                else:
-                    demax.iloc[i] = 0
-            
-            demin = pd.Series(index=df.index, dtype=float)
-            for i in range(1, len(df)):
-                if df['low'].iloc[i] < df['low'].iloc[i-1]:
-                    demin.iloc[i] = df['low'].iloc[i-1] - df['low'].iloc[i]
-                else:
-                    demin.iloc[i] = 0
-            
+            high_diff = df['high'].diff()
+            low_diff = df['low'].diff()
+
+            demax = high_diff.clip(lower=0).fillna(0)
+            demin = (-low_diff).clip(lower=0).fillna(0)
+
             demax_sma = demax.rolling(window=period).mean()
             demin_sma = demin.rolling(window=period).mean()
-            
-            demarker = pd.Series(index=df.index, dtype=float)
-            for i in range(len(df)):
-                denominator = demax_sma.iloc[i] + demin_sma.iloc[i]
-                if denominator != 0:
-                    demarker.iloc[i] = demax_sma.iloc[i] / denominator
-                else:
-                    demarker.iloc[i] = 0
-            
+
+            denominator = demax_sma + demin_sma
+            demarker = demax_sma / denominator.replace(0, np.nan)
+            demarker = demarker.fillna(0)
+
             df['demarker'] = demarker
             
         except Exception as e:
@@ -410,29 +431,23 @@ class TechnicalIndicatorsPipeline:
     
     def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
-            period = self.params['cci_period']
+            period = self.params.get('cci_period', 14)
             typical_price = (df['high'] + df['low'] + df['close']) / 3
             sma_tp = typical_price.rolling(window=period).mean()
-            
-            mean_dev = pd.Series(index=df.index, dtype=float)
-            for i in range(period - 1, len(df)):
-                deviations = []
-                for j in range(i - period + 1, i + 1):
-                    deviations.append(abs(typical_price.iloc[j] - sma_tp.iloc[i]))
-                mean_dev.iloc[i] = np.mean(deviations)
-            
-            cci = pd.Series(index=df.index, dtype=float)
-            for i in range(len(df)):
-                if mean_dev.iloc[i] != 0:
-                    cci.iloc[i] = (typical_price.iloc[i] - sma_tp.iloc[i]) / (0.015 * mean_dev.iloc[i])
-                else:
-                    cci.iloc[i] = 0
-            
+
+            mean_dev = typical_price.rolling(window=period).apply(
+                lambda x: np.mean(np.abs(x - x.mean())),
+                raw=True,
+            )
+
+            denominator = (0.015 * mean_dev).replace(0, np.nan)
+            cci = (typical_price - sma_tp) / denominator
+
             df['cci'] = cci
             
         except Exception as e:
             self.logger.error(f"Error calculating CCI: {str(e)}")
-            df['cci'] = None
+            df['cci'] = np.nan
         
         return df
     
@@ -472,6 +487,9 @@ class TechnicalIndicatorsPipeline:
                 atr_14=self._safe_float(df_row.get('atr_14')),
                 atr_21=self._safe_float(df_row.get('atr_21')),
                 true_range=self._safe_float(df_row.get('true_range')),
+                adx=self._safe_float(df_row.get('adx')),
+                plus_di=self._safe_float(df_row.get('plus_di')),
+                minus_di=self._safe_float(df_row.get('minus_di')),
                 
                 supertrend=self._safe_float(df_row.get('supertrend')),
                 supertrend_direction=str(df_row.get('supertrend_direction', '')),

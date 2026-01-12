@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import Card from './Card';
-import { Upload, Activity, Search, RefreshCw, List, MonitorPlay, History, HelpCircle, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Upload, Activity, Search, RefreshCw, History, HelpCircle, X, ChevronUp, ChevronDown } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import ToggleSwitch from './ToggleSwitch';
 import TickerTape from './TickerTape';
@@ -286,7 +286,7 @@ const AssetPanel = () => {
                     <div className="absolute left-0 mt-2 w-64 rounded bg-gray-900 border border-gray-700 p-2 text-[11px] text-gray-200 shadow-lg z-20 hidden group-hover:block">
                       <span className="font-semibold">Workflow:</span>{' '}
                       <span>
-                        Set max assets and specific targets in the controls above, then click "Get Assets" to star them in Pocket Option. Select assets manually in the Pocket Option UI to trade.
+                        Set max assets and specific targets in the controls above, then click &quot;Get Assets&quot; to star them in Pocket Option. Select assets manually in the Pocket Option UI to trade.
                       </span>
                     </div>
                   </div>

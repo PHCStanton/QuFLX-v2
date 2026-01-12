@@ -82,7 +82,7 @@ Status update 2026-01-10 (Tag 26-01-10):
 - [x] **P1.1 – Confirm mainChart is available in OscillatorChart props**  
   - `ChartWorkspace.jsx` passes `mainChart` into each `OscillatorChart` instance once `handleChartReady` sets it.
 
-- [ ] **P1.2 – Define crosshair event data contract**  
+- [x] **P1.2 – Define crosshair event data contract**  
   - Determine which fields from `param` will be used:  
     - `param.time` – canonical time coordinate.  
     - `param.seriesData` – map for main series values (optional helper for aligning Y).  
@@ -90,14 +90,14 @@ Status update 2026-01-10 (Tag 26-01-10):
     - Prefer mapping from **oscillator data array** (`data`) keyed by `time`.  
     - Fallback behavior for missing data at a given time (e.g., use last known value or default to 0).
 
-- [ ] **P1.3 – Guardrails & CORE_PRINCIPLES alignment**  
+- [x] **P1.3 – Guardrails & CORE_PRINCIPLES alignment**  
   - Avoid cross-chart side effects other than visual crosshair positioning.  
   - Ensure crosshair sync is **read-only** from the oscillator perspective.  
   - Implement robust null checks and early returns to comply with “Fail Fast, Fail Loud”.
 
 ### 1.2 Implementation Steps (OscillatorChart.jsx)
 
-- [ ] **P1.4 – Add crosshair subscription effect**  
+- [x] **P1.4 – Add crosshair subscription effect**  
   - Extend the existing `useEffect` that depends on `mainChart` or add a dedicated effect.  
   - Implement a `handleCrosshairMove(param)` function that:  
     - Returns early if `!chartRef.current` or `!seriesRef.current`.  
@@ -108,29 +108,29 @@ Status update 2026-01-10 (Tag 26-01-10):
     - If `param.time` is null:  
       - Call `chartRef.current.clearCrosshairPosition()`.
 
-- [ ] **P1.5 – Wire crosshair subscription to mainChart**  
+- [x] **P1.5 – Wire crosshair subscription to mainChart**  
   - Subscribe via `mainChart.subscribeCrosshairMove(handleCrosshairMove)`.  
   - Store references for cleanup alongside existing `syncSubscriptionRef` or in a separate ref.
 
-- [ ] **P1.6 – Implement cleanup to avoid memory leaks**  
+- [x] **P1.6 – Implement cleanup to avoid memory leaks**  
   - On effect cleanup, call `mainChart.unsubscribeCrosshairMove(handleCrosshairMove)`.  
   - Ensure cleanup runs whenever `mainChart` changes or component unmounts.
 
 ### 1.3 Test Points – Crosshair Sync
 
-- [ ] **T1.1 – Basic hover sync**  
+- [x] **T1.1 – Basic hover sync**  
   - Hover over several candles in the main chart.  
   - Verify that each oscillator shows a crosshair at the same time index.
 
-- [ ] **T1.2 – Edge times and gaps**  
+- [x] **T1.2 – Edge times and gaps**  
   - Hover near the start and end of data, including regions where oscillators might have fewer points (e.g., early bars before indicator warm-up).  
   - Confirm crosshair does not jump erratically or cause errors.
 
-- [ ] **T1.3 – Rapid movement and performance**  
+- [x] **T1.3 – Rapid movement and performance**  
   - Move the mouse quickly across the main chart.  
   - Confirm crosshair keeps up visually without noticeable lag or console spam.
 
-- [ ] **T1.4 – Toggle indicators on/off**  
+- [x] **T1.4 – Toggle indicators on/off**  
   - Enable and disable oscillators while hover is active.  
   - Confirm crosshair subscription does not leak (no warnings or exceptions after repeated toggling).
 
@@ -146,7 +146,7 @@ Status update 2026-01-10 (Tag 26-01-10):
   - `captureChart()` currently selects the first `canvas` under `#quflx-chart-screenshot-root` and calls `toDataURL`.  
   - Oscillators are rendered outside this container, and price scale visibility is not guaranteed.
 
-- [ ] **P2.2 – Decide capture approach (html2canvas vs takeScreenshot)**  
+- [x] **P2.2 – Decide capture approach (html2canvas vs takeScreenshot)**  
   - Option A: Use a DOM-based capture library like `html2canvas` to render the composed chart region (main + oscillators + price scale) into a single canvas.  
   - Option B: Use `lightweight-charts` `takeScreenshot()` API per chart and manually stitch images together in an offscreen canvas.  
   - Decision criteria:  
@@ -154,7 +154,7 @@ Status update 2026-01-10 (Tag 26-01-10):
     - Visual fidelity across browsers.  
     - Runtime performance and implementation complexity.
 
-- [ ] **P2.3 – Define screenshot region**  
+- [x] **P2.3 – Define screenshot region**  
   - Identify a single container that wraps:  
     - Main chart (including price scale).  
     - Oscillator panels.  
@@ -162,39 +162,39 @@ Status update 2026-01-10 (Tag 26-01-10):
 
 ### 2.2 Implementation Steps (ChartWorkspace.jsx)
 
-- [ ] **P2.4 – Introduce composite capture function**  
+- [x] **P2.4 – Introduce composite capture function**  
   - Replace `captureChart()` with an async `captureCompositeChart()` that:  
     - Resolves the correct DOM root for the entire chart stack.  
     - Uses the chosen approach (html2canvas or stitched `takeScreenshot()` outputs).  
     - Returns a single `dataUrl` representing the composite image.
 
-- [ ] **P2.5 – Update screenshot consumers**  
+- [x] **P2.5 – Update screenshot consumers**  
   - Modify `handleOpenScreenshot` to call `captureCompositeChart()`.  
   - Ensure `handleAskAi` uses the same composite capture so AI sees all panels and price values.
 
-- [ ] **P2.6 – Error handling & user messaging**  
+- [x] **P2.6 – Error handling & user messaging**  
   - Replace generic alerts where appropriate with UX-consistent notifications if available.  
   - Provide clear messages when capture fails (e.g., “Chart region not available for screenshot”).
 
 ### 2.3 Test Points – Composite Screenshot
 
-- [ ] **T2.1 – Visual coverage**  
+- [x] **T2.1 – Visual coverage**  
   - Capture a screenshot with 2–3 oscillators enabled.  
   - Confirm the resulting image contains:  
     - Full main candlestick pane.  
     - Visible right-side price scale values.  
     - All oscillator panels.
 
-- [ ] **T2.2 – AI flow compatibility**  
+- [x] **T2.2 – AI flow compatibility**  
   - Trigger `Ask AI` and verify the image passed to the backend matches the composite capture.  
   - Confirm the backend receives and stores a single coherent image.
 
-- [ ] **T2.3 – Layout variability**  
+- [x] **T2.3 – Layout variability**  
   - Test with zero oscillators (main chart only).  
   - Test with multiple oscillators and different heights (using the resize handle).  
   - Ensure capture always includes the full visible chart area.
 
-- [ ] **T2.4 – Performance & reliability**  
+- [x] **T2.4 – Performance & reliability**  
   - Capture multiple screenshots sequentially.  
   - Ensure no memory leaks, hanging promises, or degraded UI responsiveness.
 
@@ -300,6 +300,43 @@ Status update 2026-01-10 (Tag 26-01-10):
     - Usable, predictable drawing tools for annotation and scenario capture.
 
 ---
+
+## Phase 5 – Streaming Indicators & AI Alignment
+
+**Goal:** Align indicator behavior, UI exposure, and AI context with the knowledgebase so that live trading views and AI assistance see the same, strategy-ready signal set.
+
+### 5.1 Streaming Indicator Behavior (Frontend & Store)
+
+- [ ] **P5.1 – Document current historical-only indicator behavior**  
+  - Capture that `loadIndicators()` in `marketStore.js` depends on `historyCandles` and does not yet refresh on streaming ticks.  
+  - Reference the assessment in `report_indicators_knowledgebase_ready_26-01-10.md`.
+
+- [ ] **P5.2 – Design incremental streaming refresh model**  
+  - Decide whether indicators should be recomputed on every tick, on a cadence, or on candle-close boundaries.  
+  - Ensure the design respects CORE_PRINCIPLES (simplicity, fail-fast, no feedback-loop hazards).
+
+- [ ] **P5.3 – Implement and wire indicator refresh triggers**  
+  - Extend the Dashboard store/hooks so oscillator series can update in response to streaming data without blocking the UI.  
+  - Keep the API contract with `/api/v1/indicators` explicit and backwards-compatible.
+
+### 5.2 Backend Indicator Fixes (ADX & CCI Dependencies)
+
+- [ ] **P5.4 – Track backend ADX implementation and CCI fix**  
+  - Ensure `backend/services/strategy/indicators.py` implements ADX with KB parameters and applies the vectorized CCI fix from `v2_Dev_Docs/FIX_CCI_TASK.txt`.  
+  - Update this plan once backend work is complete so frontend assumptions stay accurate.
+
+### 5.3 Dashboard Indicator Exposure (UI)
+
+- [ ] **P5.5 – Expose additional knowledgebase indicators in Dashboard**  
+  - Extend `ChartWorkspace.jsx` / related components so the indicator selector can enable KB-critical indicators (e.g., ADX, ATR, Stochastic, Supertrend overlays) alongside existing oscillators.  
+  - Keep the options in sync with the backend indicator set and knowledgebase tables.
+
+### 5.4 AI Context Extension
+
+- [x] **P5.6 – Enrich Ask AI context with structured indicator data**  
+  - Extend `handleAskAi` so the `context` payload includes recent indicator snapshots (e.g., last N RSI, MACD histogram, CCI values) in addition to the composite screenshot.  
+  - Ensure payload shape is documented and consistent with backend AI expectations.
+
 
 ## Phase Overview – High-Level Checklist
 

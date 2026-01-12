@@ -188,7 +188,7 @@ const OscillatorChart = ({
         chart.unsubscribeCrosshairMove(handleOscillatorCrosshairMove);
       }
     };
-  }, [onCrosshairTimeFromOscillator]);
+  }, [onCrosshairTimeFromOscillator, type, params, indicatorValue, title]);
 
   useEffect(() => {
     if (!mainChart || !chartRef.current || !seriesRef.current) {

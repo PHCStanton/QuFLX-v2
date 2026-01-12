@@ -1,4 +1,3 @@
-import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -86,23 +85,23 @@ const KnowledgeBase = () => {
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
-              h1: ({node, ...props}) => <h1 className="text-3xl font-bold text-accent-blue mb-6 border-b border-border-primary pb-2" {...props} />,
-              h2: ({node, ...props}) => <h2 className="text-2xl font-semibold text-accent-blue mt-8 mb-4" {...props} />,
-              h3: ({node, ...props}) => <h3 className="text-xl font-medium text-text-primary mt-6 mb-3" {...props} />,
-              p: ({node, ...props}) => <p className="text-text-secondary mb-4 leading-relaxed" {...props} />,
-              ul: ({node, ...props}) => <ul className="list-disc list-inside mb-4 space-y-2 text-text-secondary" {...props} />,
-              li: ({node, ...props}) => <li className="ml-4" {...props} />,
-              table: ({node, ...props}) => (
+              h1: (props) => <h1 className="text-3xl font-bold text-accent-blue mb-6 border-b border-border-primary pb-2" {...props} />,
+              h2: (props) => <h2 className="text-2xl font-semibold text-accent-blue mt-8 mb-4" {...props} />,
+              h3: (props) => <h3 className="text-xl font-medium text-text-primary mt-6 mb-3" {...props} />,
+              p: (props) => <p className="text-text-secondary mb-4 leading-relaxed" {...props} />,
+              ul: (props) => <ul className="list-disc list-inside mb-4 space-y-2 text-text-secondary" {...props} />,
+              li: (props) => <li className="ml-4" {...props} />,
+              table: (props) => (
                 <div className="overflow-x-auto my-8">
                   <table className="w-full border-collapse border border-border-primary text-sm" {...props} />
                 </div>
               ),
-              thead: ({node, ...props}) => <thead className="bg-section-bg" {...props} />,
-              th: ({node, ...props}) => <th className="border border-border-primary p-3 text-left font-semibold text-accent-blue" {...props} />,
-              td: ({node, ...props}) => <td className="border border-border-primary p-3 text-text-secondary" {...props} />,
-              strong: ({node, ...props}) => <strong className="text-accent-orange font-semibold" {...props} />,
-              blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-accent-blue pl-4 italic my-4 text-text-secondary" {...props} />,
-              code: ({node, ...props}) => <code className="bg-section-bg px-1 rounded text-accent-green" {...props} />,
+              thead: (props) => <thead className="bg-section-bg" {...props} />,
+              th: (props) => <th className="border border-border-primary p-3 text-left font-semibold text-accent-blue" {...props} />,
+              td: (props) => <td className="border border-border-primary p-3 text-text-secondary" {...props} />,
+              strong: (props) => <strong className="text-accent-orange font-semibold" {...props} />,
+              blockquote: (props) => <blockquote className="border-l-4 border-accent-blue pl-4 italic my-4 text-text-secondary" {...props} />,
+              code: (props) => <code className="bg-section-bg px-1 rounded text-accent-green" {...props} />,
             }}
           >
             {KNOWLEDGE_BASE_CONTENT}

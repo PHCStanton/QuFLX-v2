@@ -169,6 +169,52 @@ const ChartWorkspace = () => {
     });
   }, [selectedAsset, selectedTimeframe, oscillatorIndicators, loadIndicators]);
 
+  useEffect(() => {
+    if (health !== 'streaming') {
+      return;
+    }
+
+    if (!selectedAsset || !selectedTimeframe || oscillatorIndicators.length === 0) {
+      return;
+    }
+
+    const indicators = [];
+    const paramsByKey = {};
+
+    oscillatorIndicators.forEach((ind) => {
+      if (!ind || typeof ind.key !== 'string') {
+        return;
+      }
+
+      indicators.push(ind.key);
+
+      if (ind.params && typeof ind.params === 'object' && !Array.isArray(ind.params)) {
+        paramsByKey[ind.key] = ind.params;
+      }
+    });
+
+    if (indicators.length === 0) {
+      return;
+    }
+
+    const hasParams = Object.keys(paramsByKey).length > 0;
+
+    const refresh = () => {
+      loadIndicators({
+        asset: selectedAsset,
+        timeframe: selectedTimeframe,
+        indicators,
+        params: hasParams ? paramsByKey : undefined
+      });
+    };
+
+    const intervalId = setInterval(refresh, 10000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [health, selectedAsset, selectedTimeframe, oscillatorIndicators, loadIndicators]);
+
   // Options for Comboboxes
   const assetList = Array.from(new Set([...(payoutAssets || []), selectedAsset].filter(Boolean)));
   const assetOptions = assetList.map(a => ({ label: a, value: a }));
@@ -403,12 +449,32 @@ const ChartWorkspace = () => {
 
     const image = await captureCompositeChart();
     const recentTicks = marketData[selectedAssetKey]?.slice(-20) || [];
+    const indicatorKey = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
+    const seriesForKey = indicatorKey && indicatorSeries ? indicatorSeries[indicatorKey] : null;
+    const indicatorSnapshots = {};
+
+    if (seriesForKey && Array.isArray(activeIndicators)) {
+      activeIndicators.forEach((ind) => {
+        if (!ind || !ind.key) {
+          return;
+        }
+        const series = seriesForKey[ind.key];
+        if (!Array.isArray(series) || series.length === 0) {
+          return;
+        }
+        const tail = series.slice(-50);
+        const name = ind.name || ind.key;
+        indicatorSnapshots[name] = tail;
+      });
+    }
+
     const context = {
       asset: selectedAsset,
       timeframe: selectedTimeframe,
       currentPrice: recentTicks[recentTicks.length - 1]?.price,
       activeIndicators: activeIndicators.map((i) => i.name),
-      recentTicks
+      recentTicks,
+      indicatorSnapshots
     };
 
     const prompt = window.prompt('Ask AI about the current market context:');

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import useSettingsStore from '../store/settingsStore';
 import { 
   SettingsSection, 
@@ -11,7 +11,7 @@ import NeomorphicSwitch from './NeomorphicSwitch';
 import { Save, RotateCcw, Download } from 'lucide-react';
 
 const SettingsPanel = () => {
-  const { settings, updateSection, resetSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
+  const { settings, updateSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
 
   useEffect(() => {
     fetchSettings();

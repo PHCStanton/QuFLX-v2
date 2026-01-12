@@ -1,5 +1,3 @@
-import React from 'react';
-
 const AnimatedLogo = () => {
   return (
     <div className="logo-scene">

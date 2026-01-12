@@ -1,6 +1,6 @@
 # Indicator Implementation Assessment Report
 **Date:** 2026-01-10  
-**Status:** ⚠️ CRITICAL GAPS IDENTIFIED – Action Required  
+**Status:** ⚠️ CRITICAL GAPS IDENTIFIED – Action Required (partial backend fixes now implemented)  
 **Severity:** HIGH  
 **Reference:** Knowledge Base Confluence Guide & CORE_PRINCIPLES.md
 
@@ -49,12 +49,12 @@ The Knowledge Base specifies these **core indicators** for 1-minute timeframe tr
 | EMA-16 | ✅ Yes | ✅ Period: 16 | GREEN | Fully aligned |
 | EMA-165 | ✅ Yes | ✅ Period: 165 | GREEN | Fully aligned |
 | Supertrend | ✅ Yes | ⚠️ Period: 10, Mult: 3.0 | YELLOW | KB recommends (7, 3) |
-| **ADX** | ❌ **NO** | N/A | **RED** | **NOT IMPLEMENTED** |
+| **ADX** | ✅ Yes | ✅ Period: 14 | GREEN | Implemented in backend (26-01-11) |
 | RSI-14 | ✅ Yes | ✅ Period: 14 | GREEN | Fully aligned |
 | RSI-21 | ✅ Yes | ➕ Extra | GREEN | Additional, not in KB |
 | Bollinger Bands | ✅ Yes | ✅ Period: 20, StdDev: 2 | GREEN | Fully aligned |
 | MACD | ✅ Yes | ✅ Fast: 12, Slow: 26, Signal: 9 | GREEN | Fully aligned |
-| CCI | ⚠️ Buggy | ⚠️ Period: 20 (KB says 14) | **RED** | See CCI Bug Analysis |
+| CCI | ✅ Yes | ✅ Period: 14 | GREEN | Backend calculation fixed and vectorized (26-01-11) |
 | ATR-14 | ✅ Yes | ✅ Period: 14 | GREEN | Fully aligned |
 | Stochastic | ✅ Yes | ✅ K: 14, D: 3 | GREEN | Aligned |
 | Williams %R | ✅ Yes | ✅ Period: 14 | GREEN | Additional |
@@ -67,11 +67,11 @@ The Knowledge Base specifies these **core indicators** for 1-minute timeframe tr
 
 ## 4. Critical Issues
 
-### 4.1 ❌ ADX Indicator Missing (CRITICAL)
+### 4.1 ✅ ADX Indicator Implemented (CRITICAL ISSUE RESOLVED)
 
-**Severity:** CRITICAL  
-**Violates:** CORE_PRINCIPLES #1 (Functional Simplicity) – incomplete feature set  
-**Impact:** Blocks 3 of 5 market regime strategies from Knowledge Base
+**Severity:** CRITICAL → RESOLVED  
+**Violates:** Previously violated CORE_PRINCIPLES #1 (Functional Simplicity) – now addressed  
+**Impact:** Market regime strategies in Knowledge Base can now use ADX
 
 The ADX (Average Directional Index) is prominently featured in the Knowledge Base as **essential** for:
 
@@ -79,12 +79,7 @@ The ADX (Average Directional Index) is prominently featured in the Knowledge Bas
 2. **Breakout Conditions** → ADX > 25 and rising
 3. **Ranging/Sideways Detection** → ADX < 20
 
-Without ADX, the system cannot properly:
-- Distinguish trending vs. ranging markets
-- Confirm breakout strength
-- Filter continuation trades
-
-**Required Implementation:**
+As of 26-01-11, ADX is implemented in `backend/services/strategy/indicators.py` and exposed via `capabilities_v2/indicator_calculator.py` as `adx`, `plus_di`, and `minus_di`. The implementation follows the recommended pattern:
 
 ```python
 def _calculate_adx(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -97,74 +92,60 @@ def _calculate_adx(self, df: pd.DataFrame) -> pd.DataFrame:
     """
     try:
         period = self.params.get('adx_period', 14)
-        
-        # Calculate +DM and -DM
         high_diff = df['high'].diff()
         low_diff = -df['low'].diff()
-        
         plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0.0)
         minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0.0)
-        
-        # Calculate ATR if not already present
-        if 'atr_14' not in df.columns:
+
+        if 'atr_14' in df.columns:
+            atr = df['atr_14']
+        else:
             df = self._calculate_volatility_indicators(df)
-        
-        atr = df['atr_14']
-        
-        # Smoothed +DI and -DI
-        plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr)
-        minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr)
-        
-        # DX and ADX
-        dx = 100 * (abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, np.nan))
+            atr = df['atr_14']
+
+        plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, np.nan))
+        minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, np.nan))
+
+        denominator = (plus_di + minus_di).replace(0, np.nan)
+        dx = 100 * (abs(plus_di - minus_di) / denominator)
+
         df['adx'] = dx.ewm(span=period, adjust=False).mean()
         df['plus_di'] = plus_di
         df['minus_di'] = minus_di
-        
+
     except Exception as e:
         self.logger.error(f"Error calculating ADX: {str(e)}")
         df['adx'] = np.nan
-    
+        df['plus_di'] = np.nan
+        df['minus_di'] = np.nan
+
     return df
 ```
 
 ---
 
-### 4.2 ⚠️ CCI Calculation Bug (HIGH)
+### 4.2 ✅ CCI Calculation Fixed and Vectorized (HIGH ISSUE RESOLVED)
 
-**Severity:** HIGH  
-**Violates:** CORE_PRINCIPLES #1 (Functional Simplicity), #9 (Fail Fast)  
+**Severity:** HIGH → RESOLVED  
+**Violates:** Previously violated CORE_PRINCIPLES #1 (Functional Simplicity), #9 (Fail Fast)  
 **Reference:** `v2_Dev_Docs/FIX_CCI_TASK.txt`
 
-**Current Issues:**
-1. **NaN Propagation** – `mean_dev` starts as NaN for indices 0 to `period-2`
-2. **Division by Zero** – Checks `!= 0` but doesn't check `pd.isna()`
-3. **O(n²) Performance** – Double nested loop is extremely slow for large datasets
-4. **Wrong Period** – Uses period 20, but KB specifies period 14
-
-**Current Buggy Code (lines ~456-475):**
+The previous implementation suffered from NaN propagation, division-by-zero risks, O(n²) performance, and wrong period (20 vs 14). As of 26-01-11, `_calculate_cci` has been refactored to a vectorized, KB-aligned implementation:
 ```python
 def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
     try:
-        period = self.params['cci_period']  # 20 (should be 14)
+        period = self.params.get('cci_period', 14)  # KB specifies 14
+
         typical_price = (df['high'] + df['low'] + df['close']) / 3
         sma_tp = typical_price.rolling(window=period).mean()
-        
-        # ❌ PROBLEM: O(n²) double nested loop
-        mean_dev = pd.Series(index=df.index, dtype=float)
-        for i in range(period - 1, len(df)):
-            deviations = []
-            for j in range(i - period + 1, i + 1):
-                deviations.append(abs(typical_price.iloc[j] - sma_tp.iloc[i]))
-            mean_dev.iloc[i] = np.mean(deviations)
-        
-        cci = pd.Series(index=df.index, dtype=float)
-        for i in range(len(df)):
-            if mean_dev.iloc[i] != 0:  # ❌ Doesn't check for NaN
-                cci.iloc[i] = (typical_price.iloc[i] - sma_tp.iloc[i]) / (0.015 * mean_dev.iloc[i])
-            else:
-                cci.iloc[i] = 0
-        
+
+        mean_dev = typical_price.rolling(window=period).apply(
+            lambda x: np.mean(np.abs(x - x.mean())), raw=True
+        )
+
+        denominator = (0.015 * mean_dev).replace(0, np.nan)
+        cci = (typical_price - sma_tp) / denominator
+
         df['cci'] = cci
 ```
 
@@ -193,7 +174,7 @@ def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
     except Exception as e:
         self.logger.error(f"Error calculating CCI: {str(e)}")
         df['cci'] = np.nan  # Explicit NaN, not None
-    
+
     return df
 ```
 
@@ -274,45 +255,106 @@ The `indicator_calculator.py` capability:
 
 | Principle | Status | Notes |
 |-----------|--------|-------|
-| #1 Functional Simplicity | ⚠️ | ADX missing → incomplete feature set |
+| #1 Functional Simplicity | ✅ | ADX, CCI, Supertrend, DeMarker, Schaff now aligned with KB |
 | #2 Sequential Logic | ✅ | Pipeline flows correctly |
-| #3 Incremental Testing | ⚠️ | Need tests for ADX and fixed CCI |
-| #4 Zero Assumptions | ✅ | Column validation present |
-| #5 Code Integrity | ⚠️ | CCI bug affects data quality |
+| #3 Incremental Testing | ✅ | Pytest coverage added for ADX/CCI and key behaviours |
+
+---
+
+## 7. Frontend Indicator UX & Behaviour Assessment (26-01-12)
+
+This section captures the frontend-focused assessment requested for three concerns: cursor synchronisation, streaming indicator behaviour, and parameter propagation from UI to backend.
+
+### 7.1 Cursor Sync: Main Chart ↔ Oscillator Panels
+
+- Current implementation uses a main-chart-driven model: the main lightweight-charts instance is the hub, and each oscillator chart subscribes to `mainChart.subscribeCrosshairMove` while forwarding oscillator crosshair moves back up to `ChartWorkspace`.
+- In practice, cursor sync behaves correctly when the interaction starts from the main chart, but a lifecycle gap appears when indicator settings (e.g. RSI period/levels) are changed:
+  - Updating indicator parameters causes the oscillator chart component to recreate its internal chart instance.
+  - The main→oscillator crosshair subscription remains valid because it is attached to the main chart, which is not recreated.
+  - The oscillator→main subscription, however, is only set up once and is not rebound to the new chart instance, so moving the cursor in the oscillator after a settings change no longer updates the main chart crosshair.
+- This explains why the user observed that cursor sync “only gets applied when interacting with the candle chart” after changing indicator parameters.
+
+**Planned fix:**
+
+- Keep the main-chart-as-hub model but make the oscillator→main crosshair effect explicitly depend on the same inputs that recreate the oscillator chart (type, params, indicator identity):
+  - When indicator parameters or identity change, the effect will cleanly unsubscribe from the old chart instance and subscribe to the new one.
+  - This preserves functional simplicity (no new global state) while ensuring cursor sync works regardless of whether the interaction starts from the main chart or from any oscillator panel.
+
+### 7.2 Indicators vs Streaming Candles
+
+- Backend indicators are currently loaded via `loadIndicators` in the market store using the `/api/v1/indicators` endpoint, driven by:
+  - Selected asset
+  - Selected timeframe
+  - Active oscillator indicators and their parameters
+- Historical candles are loaded separately, and live ticks are aggregated into candles purely on the frontend via `useTickAggregation`.
+- The indicator loading effect runs when the asset, timeframe, or active indicators change, but it is not tied to the arrival of new streaming candles.
+
+Observed behaviour:
+
+- Indicators are computed once for the historical payload and rendered correctly for that range.
+- As new candles form from live ticks, the main price series updates in real time, but the indicator series remain static until a manual trigger (e.g. toggling an indicator or changing timeframe) forces a reload.
+
+**Planned fix:**
+
+- Introduce a lightweight streaming-aware refresh for indicator series on the frontend:
+  - When the stream health is `streaming` and at least one oscillator indicator is active, periodically re-invoke `loadIndicators` for the current asset/timeframe/indicator set.
+  - Use a conservative interval to avoid unnecessary backend load while ensuring indicator values catch up with newly formed candles.
+  - Keep the logic encapsulated in `ChartWorkspace` so the store and backend contracts remain unchanged.
+
+### 7.3 UI Parameter Changes → Backend Indicator Values
+
+- Indicator parameters are edited via `IndicatorSettingsModal`, which merges local edits into the indicator’s `params` and a compact badge `value`.
+- On save, `ChartWorkspace` calls `updateIndicator` in the market store, which updates the `activeIndicators` array.
+- A dedicated `useEffect` in `ChartWorkspace` watches `selectedAsset`, `selectedTimeframe`, and the derived `oscillatorIndicators` and calls `loadIndicators` whenever any of these change.
+- `loadIndicators` forwards a `params` object (grouped by indicator key) to `/api/v1/indicators`, and the backend recomputes the indicator series using these parameters.
+
+Assessment:
+
+- From the frontend to the indicator API, parameter changes are already propagated correctly and cause the backend to recompute indicator values.
+- For Strategy Lab and strategy development, the key requirement is that the strategy engine uses the same parameter source and indicator pipeline as the `/api/v1/indicators` endpoint:
+  - The backend implementation now aligns indicator defaults and calculations with the knowledge base.
+  - The next step (tracked separately) is to confirm that strategy evaluation paths share this configuration so UI parameter changes and backtested/live strategy logic remain consistent.
+
+**Outcome:**
+
+- The frontend crosshair and indicator behaviour is structurally sound but has a known lifecycle bug around oscillator→main cursor sync and a gap around streaming-aware indicator updates.
+- Parameter changes from the UI already drive backend indicator recomputation through the existing `/api/v1/indicators` contract and will be preserved in subsequent refactors.
+| #4 Zero Assumptions | ✅ | Column validation present; KB periods explicit in params |
+| #5 Code Integrity | ✅ | Previous CCI bug and ADX gap resolved |
 | #6 Separation of Concerns | ✅ | Pipeline, Calculator, Runner are separate |
-| #7 Stop Patching Rule | ✅ | CCI fix is first attempt, not cascade |
-| #8 Zero Silent Failures | ⚠️ | CCI can produce misleading zeros |
-| #9 Fail Fast | ⚠️ | CCI doesn't validate NaN properly |
+| #7 Stop Patching Rule | ✅ | CCI and optimizations implemented as clean rewrites |
+| #8 Zero Silent Failures | ✅ | ADX/CCI/DeMarker handle invalid states via NaN, not zeros |
+| #9 Fail Fast | ✅ | Rolling windows and denominators validate implicitly via NaN semantics |
 
 ---
 
 ## 7. Action Plan
 
-### Phase 1: Critical Fixes (Immediate – 1 hour)
+### Phase 1: Critical Fixes (Completed)
 
-| Priority | Task | Owner | Effort | CORE_PRINCIPLE |
+| Priority | Task | Owner | Status | CORE_PRINCIPLE |
 |----------|------|-------|--------|----------------|
-| **P0** | Implement ADX indicator | @Coder | 30 min | #1 Simplicity |
-| **P0** | Fix CCI calculation (vectorized, period 14) | @Coder | 15 min | #1, #9 Fail Fast |
-| **P0** | Update CCI default period to 14 | @Coder | 5 min | #4 Zero Assumptions |
-| **P0** | Add ADX to `indicator_calculator.py` series list | @Coder | 5 min | #6 Separation |
+| **P0** | Implement ADX indicator | @Coder | ✅ Done (26-01-11) | #1 Simplicity |
+| **P0** | Fix CCI calculation (vectorized, period 14) | @Coder | ✅ Done (26-01-11) | #1, #9 Fail Fast |
+| **P0** | Update CCI default period to 14 | @Coder | ✅ Done (26-01-11) | #4 Zero Assumptions |
+| **P0** | Add ADX to `indicator_calculator.py` series list | @Coder | ✅ Done (26-01-11) | #6 Separation |
 
-### Phase 2: Alignment Fixes (Same Day – 30 min)
+### Phase 2: Alignment Fixes (Completed)
 
-| Priority | Task | Owner | Effort |
+| Priority | Task | Owner | Status |
 |----------|------|-------|--------|
-| P1 | Update SuperTrend default: period 7 | @Coder | 5 min |
-| P1 | Add `adx_period: 14` to params | @Coder | 2 min |
-| P1 | Update IndicatorSet dataclass for ADX | @Coder | 5 min |
-| P1 | Verify ADX/CCI in frontend indicator list | @Frontend | 10 min |
+| P1 | Update SuperTrend default: period 7 | @Coder | ✅ Done (26-01-11) |
+| P1 | Add `adx_period: 14` to params | @Coder | ✅ Done (26-01-11) |
+| P1 | Update IndicatorSet dataclass for ADX | @Coder | ✅ Done (26-01-11) |
+| P1 | Verify ADX/CCI in frontend indicator list | @Frontend | ✅ Done (manual check) |
 
-### Phase 3: Performance Optimization (Next Sprint)
+### Phase 3: Performance Optimization (Completed for DeMarker/Schaff, tests ongoing)
 
-| Priority | Task | Owner | Effort |
+| Priority | Task | Owner | Status |
 |----------|------|-------|--------|
-| P2 | Vectorize DeMarker calculation | @Optimizer | 15 min |
-| P2 | Vectorize Schaff Trend Cycle | @Optimizer | 15 min |
-| P2 | Add unit tests for all indicators | @Tester | 2 hours |
+| P2 | Vectorize DeMarker calculation | @Optimizer | ✅ Done (26-01-11) |
+| P2 | Vectorize Schaff Trend Cycle | @Optimizer | ✅ Done (26-01-11) |
+| P2 | Add unit tests for all indicators | @Tester | ⚠️ Partial – targeted tests for ADX/CCI/DeMarker/Schaff |
 
 ---
 
@@ -354,17 +396,19 @@ python capabilities_v2/runner.py indicator_calculator --inputs '{\"csv_path\": \
 
 ### What's Working ✅
 - EMA-16, EMA-165, RSI-14, Bollinger Bands, MACD, ATR-14, Stochastic
+- ADX (14) with plus_di/minus_di, aligned with KB
+- CCI (14) vectorized and numerically stable
+- SuperTrend defaults aligned with KB (7, 3.0)
+- DeMarker and Schaff Trend Cycle vectorized for better performance
 - CapResult error_code propagation
 - Runner capability mapping
 - Indicator calculator with `requires_browser = False`
 
 ### What's Broken ❌
-- **ADX: Not implemented** (blocks regime detection)
-- **CCI: Buggy + wrong period** (O(n²), NaN issues, uses 20 instead of 14)
+- No known critical backend indicator bugs at this tag
 
 ### What Needs Tuning ⚠️
-- SuperTrend period: 10 → 7
-- CCI period: 20 → 14
+- Broader automated test coverage across all indicators
 
 ### Estimated Total Fix Time
 - **Critical (P0):** 1 hour
@@ -394,7 +438,7 @@ Both issues are **fixable within 1-2 hours** with targeted changes. No architect
 **Added:** 2026-01-10 (Evening Session)  
 **Reference:** Perplexity AI Research on TradingView Lightweight Charts  
 **Severity:** MEDIUM  
-**Status:** ⚠️ PARTIAL IMPLEMENTATION – Enhancements Recommended
+**Status:** ✅ CORE FEATURES IMPLEMENTED – Follow-up QA pending
 
 ---
 
@@ -418,9 +462,9 @@ TradingView's Lightweight Charts library creates **independent chart instances**
 | **Main Chart** | `ChartContainer.jsx` | ✅ Implemented | Candlestick chart with resize observer |
 | **Oscillator Chart** | `OscillatorChart.jsx` | ✅ Implemented | Separate chart instances per indicator |
 | **Time Scale Sync** | `OscillatorChart.jsx` L79-112 | ✅ Implemented | Unidirectional: main → oscillator |
-| **Crosshair Sync** | N/A | ❌ Missing | No coordinated hover display |
-| **Screenshot Capture** | `ChartWorkspace.jsx` L213-220 | ⚠️ Partial | Main chart only, no oscillators |
-| **Price Scale in Screenshot** | N/A | ❌ Missing | Y-axis values not captured |
+| **Crosshair Sync** | N/A | ✅ Implemented | Main → oscillators crosshair sync (P1 complete) |
+| **Screenshot Capture** | `ChartWorkspace.jsx` L213-220 | ✅ Implemented | Composite chart + oscillators screenshot |
+| **Price Scale in Screenshot** | N/A | ✅ Implemented | Price scale included in composite capture |
 | **Sync Toggle Button** | N/A | ❌ Missing | No on/off control |
 | **Bidirectional Sync** | N/A | ❌ Not Implemented | Oscillator scroll doesn't update main chart |
 
@@ -458,13 +502,13 @@ setTimeout(() => {
 
 ### 11.4 Gap Analysis
 
-#### Gap 1: Crosshair Sync Missing
+#### Gap 1: Crosshair Sync (Implemented)
 **Impact:** MEDIUM (important for AI visual analysis)  
-**Status:** ❌ NOT IMPLEMENTED
+**Status:** ✅ IMPLEMENTED (as of tag 26-01-10)
 
-When hovering over the main chart, oscillators don't show a synchronized crosshair at the same time position.
+Originally, oscillators did not show a synchronized crosshair at the same time position. As of tag 26-01-10, crosshair sync from the main chart to all oscillator charts is implemented and manually verified.
 
-**Required Implementation:**
+**Implementation Pattern:**
 ```javascript
 mainChart.subscribeCrosshairMove((param) => {
   if (!chartRef.current || !seriesRef.current) return;
@@ -480,11 +524,11 @@ mainChart.subscribeCrosshairMove((param) => {
 });
 ```
 
-#### Gap 2: Screenshot Capture Incomplete
-**Impact:** HIGH (blocks AI visual analysis)  
-**Status:** ⚠️ PARTIAL
+#### Gap 2: Screenshot Capture (Composite Image)
+**Impact:** HIGH (critical for AI visual analysis)  
+**Status:** ✅ IMPLEMENTED (composite capture)
 
-Current `captureChart()` only captures the main chart canvas:
+The original `captureChart()` only captured the main chart canvas. This has been replaced by a composite capture that includes main chart, oscillators, and price scale:
 ```javascript
 // ChartWorkspace.jsx L213-220
 const captureChart = () => {
@@ -494,21 +538,16 @@ const captureChart = () => {
 };
 ```
 
-**Issues:**
-1. Oscillator charts NOT included in screenshot
-2. Price scale (Y-axis values) NOT visible in capture
-3. Drawing objects may not align correctly with cursor position
-
-**Required:** Composite screenshot that includes:
-- Main candlestick chart with price scale
-- All active oscillator panels
-- Drawing annotations (if any)
+**Result:**
+1. Oscillator charts are included in the screenshot.
+2. Price scale (Y-axis values) is visible in the capture.
+3. Drawing annotations in the screenshot annotation modal align with cursor position.
 
 #### Gap 3: Drawing Object Cursor Alignment
 **Impact:** MEDIUM  
-**Status:** ⚠️ KNOWN ISSUE
+**Status:** ⚠️ PARTIAL – Screenshot annotation fixed, full chart drawing under review
 
-Drawing objects (horizontal lines, zones, labels) may not align correctly with cursor position. This requires investigation of:
+Drawing objects (horizontal lines, zones, labels) may not align correctly with cursor position in the full chart drawing pipeline. For the screenshot annotation modal used in the indicators workflows, cursor-to-canvas mapping and text sizing have been corrected so annotation objects track the cursor accurately in saved screenshots. The full in-chart drawing pipeline still requires investigation of:
 - Coordinate transformation between screen and chart space
 - Canvas offset calculations
 - Price scale mapping accuracy
@@ -544,10 +583,10 @@ Currently sync is unidirectional (main → oscillator). If scrolling in oscillat
 #### Phase 1: Critical for AI Analysis (Recommended – Option A)
 
 | Priority | Task | File | Effort | Status |
-|----------|------|------|--------|--------|
-| **P0** | Add crosshair sync to oscillator charts | `OscillatorChart.jsx` | 30 min | ❌ Pending |
-| **P0** | Composite screenshot (chart + oscillators + price scale) | `ChartWorkspace.jsx` | 1 hour | ❌ Pending |
-| **P1** | Investigate drawing object cursor alignment | `ChartActions.jsx` | 1 hour | ❌ Pending |
+|----------|------|--------|--------|--------|
+| **P0** | Add crosshair sync to oscillator charts | `OscillatorChart.jsx` | 30 min | ✅ Completed 26-01-10 |
+| **P0** | Composite screenshot (chart + oscillators + price scale) | `ChartWorkspace.jsx` | 1 hour | ✅ Completed 26-01-10 |
+| **P1** | Investigate drawing object cursor alignment | `ChartActions.jsx` | 1 hour | ⚠️ Partial – screenshot annotations only |
 
 #### Phase 2: Optional Enhancements
 

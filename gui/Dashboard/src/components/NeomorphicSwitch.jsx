@@ -1,5 +1,3 @@
-import React from 'react';
-
 const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel }) => {
   return (
     <div className="flex flex-col items-center gap-1 group">
