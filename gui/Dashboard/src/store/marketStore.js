@@ -281,7 +281,11 @@ const createMarketSlice = (set, get) => ({
       }
 
       const data = await res.json();
-      const series = data.series || {};
+      
+      // The backend returns series in data.series if using **data unpacking, 
+      // or in data.data.series if returned as a nested object.
+      // Based on gateway/routes/indicators.py, it should be top-level.
+      const series = data.series || (data.data && data.data.series) || {};
 
       set((state) => ({
         indicatorSeries: {

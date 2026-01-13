@@ -20,10 +20,14 @@ class IndicatorCalculator:
             csv_path (str): Path to the CSV history file
             asset (str): Asset name
             timeframe (int): Timeframe in minutes
+            indicators (List[str]): Optional list of indicators to calculate
+            params (Dict[str, Dict[str, Any]]): Optional per-indicator parameters
         """
         csv_path = inputs.get("csv_path")
         asset = inputs.get("asset")
         timeframe = inputs.get("timeframe", 1)
+        requested_indicators = inputs.get("indicators", [])
+        custom_params = inputs.get("params", {})
 
         if not csv_path:
             return CapResult.fail("csv_path is required")
@@ -37,11 +41,44 @@ class IndicatorCalculator:
             # 2. Ensure column names are lowercase (pipeline expects open, high, low, close)
             df.columns = [col.lower() for col in df.columns]
 
-            # 3. Calculate indicators
-            pipeline = TechnicalIndicatorsPipeline()
+            # 3. Map frontend params to pipeline params
+            # Frontend sends params per indicator key (e.g., {"rsi": {"period": 14}})
+            # Pipeline expects a flat dict with specific naming conventions (e.g., {"rsi_period": 14})
+            pipeline_params = {}
+            for ind_key, p in custom_params.items():
+                if ind_key == 'rsi':
+                    if 'period' in p: pipeline_params['rsi_period'] = p['period']
+                elif ind_key == 'cci':
+                    if 'period' in p: pipeline_params['cci_period'] = p['period']
+                elif ind_key == 'demarker':
+                    if 'period' in p: pipeline_params['demarker_period'] = p['period']
+                elif ind_key == 'macd_histogram' or ind_key == 'macd':
+                    if 'fast' in p: pipeline_params['macd_fast'] = p['fast']
+                    if 'slow' in p: pipeline_params['macd_slow'] = p['slow']
+                    if 'signal' in p: pipeline_params['macd_signal'] = p['signal']
+                elif ind_key == 'supertrend':
+                    if 'period' in p: pipeline_params['supertrend_period'] = p['period']
+                    if 'multiplier' in p: pipeline_params['supertrend_multiplier'] = p['multiplier']
+                elif ind_key == 'ema' or ind_key == 'ema_16':
+                    if 'period' in p: pipeline_params['ema_fast'] = p['period']
+                elif ind_key == 'adx':
+                    if 'period' in p: pipeline_params['adx_period'] = p['period']
+                elif ind_key == 'stc' or ind_key == 'schaff_tc':
+                    if 'fast' in p: pipeline_params['schaff_fast'] = p['fast']
+                    if 'slow' in p: pipeline_params['schaff_slow'] = p['slow']
+                    if 'period' in p: 
+                        pipeline_params['schaff_d_macd'] = p['period']
+                        pipeline_params['schaff_d_pf'] = p['period']
+                elif ind_key == 'bollinger_bands' or ind_key == 'bb_middle':
+                    if 'period' in p: pipeline_params['bb_period'] = p['period']
+                    if 'std' in p: pipeline_params['bb_std'] = p['std']
+                # Add more mappings as needed
+
+            # 4. Calculate indicators
+            pipeline = TechnicalIndicatorsPipeline(config={'indicator_params': pipeline_params})
             result_df = pipeline.calculate_indicators(df)
 
-            # 4. Prepare output series for the frontend
+            # 5. Prepare output series for the frontend
             # The frontend expects a dictionary of indicator series
             # We'll convert the relevant columns to the expected format
             series = {}
@@ -64,12 +101,20 @@ class IndicatorCalculator:
                 'macd', 'macd_signal', 'macd_histogram',
                 'bb_upper', 'bb_middle', 'bb_lower', 'bb_width', 'bb_percent',
                 'atr_14', 'atr_21', 'adx', 'plus_di', 'minus_di', 'schaff_tc', 'demarker', 'cci',
-                'supertrend'
+                'supertrend', 'supertrend_direction'
             ]
 
             for name in indicator_names:
                 if name in result_df.columns:
-                    series[name] = extract_series(name)
+                    if name == 'supertrend_direction':
+                        # Special extraction for string/categorical data
+                        valid = result_df[['timestamp', name]].dropna()
+                        series[name] = [
+                            {"time": int(float(row['timestamp'])), "value": str(row[name])}
+                            for _, row in valid.iterrows()
+                        ]
+                    else:
+                        series[name] = extract_series(name)
 
             return CapResult.success(data={
                 "asset": asset,

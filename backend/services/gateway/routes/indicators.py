@@ -24,6 +24,9 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=400, detail="asset required")
 
     timeframe = payload.get("timeframe", "1m")
+    indicators = payload.get("indicators", [])
+    params = payload.get("params", {})
+    
     timeframe_min = 1
     if isinstance(timeframe, str):
         tf = timeframe.strip().lower()
@@ -52,12 +55,20 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
         if not csv_path:
             raise HTTPException(status_code=404, detail=f"History not found for {asset} @ {timeframe_min}m")
 
+        inputs = {
+            "csv_path": str(csv_path),
+            "asset": asset,
+            "timeframe": timeframe_min,
+            "indicators": indicators,
+            "params": params
+        }
+
         args = [
             sys.executable,
             runner_path,
             "indicator_calculator",
             "--inputs",
-            json.dumps({"csv_path": str(csv_path), "asset": asset, "timeframe": timeframe_min}),
+            json.dumps(inputs),
         ]
 
         env = dict(os.environ)

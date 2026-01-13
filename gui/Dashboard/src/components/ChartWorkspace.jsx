@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { LineSeries, LineStyle } from 'lightweight-charts';
 import html2canvas from 'html2canvas';
 import Card from './Card';
 import useMarketStore from '../store/marketStore';
@@ -72,6 +73,133 @@ const ChartWorkspace = () => {
     }
   }, [mainChart, candleSeries]);
 
+  const oscillatorIndicators = useMemo(
+    () => (Array.isArray(activeIndicators)
+      ? activeIndicators.filter((ind) => ind.kind === 'oscillator')
+      : []),
+    [activeIndicators]
+  );
+
+  const overlayIndicators = useMemo(
+    () => (Array.isArray(activeIndicators)
+      ? activeIndicators.filter((ind) => ind.kind === 'overlay')
+      : []),
+    [activeIndicators]
+  );
+
+  const overlaySeriesRef = useRef({});
+
+  useEffect(() => {
+    if (!mainChart) return;
+
+    // Clean up old series that are no longer active
+    const activeIds = new Set(overlayIndicators.map(ind => ind.id));
+    Object.keys(overlaySeriesRef.current).forEach(id => {
+      if (!activeIds.has(id)) {
+        try {
+          mainChart.removeSeries(overlaySeriesRef.current[id].series);
+          // If it's Bollinger Bands, remove upper/lower too
+          if (overlaySeriesRef.current[id].upper) mainChart.removeSeries(overlaySeriesRef.current[id].upper);
+          if (overlaySeriesRef.current[id].lower) mainChart.removeSeries(overlaySeriesRef.current[id].lower);
+        } catch (e) {
+          console.warn('Failed to remove series:', e);
+        }
+        delete overlaySeriesRef.current[id];
+      }
+    });
+
+    // Add or update series for active overlay indicators
+    overlayIndicators.forEach(ind => {
+      const key = `${selectedAsset}|${selectedTimeframe}`;
+      const seriesForKey = indicatorSeries && indicatorSeries[key];
+      if (!seriesForKey) return;
+
+      if (!overlaySeriesRef.current[ind.id]) {
+        let series;
+        let upper;
+        let lower;
+
+        if (ind.value === 'bollinger_bands') {
+          // Purple for Bollinger Bands
+          series = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 2, title: 'BB Middle' });
+          upper = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB Upper' });
+          lower = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB Lower' });
+        } else if (ind.value === 'supertrend') {
+          // Pink for SuperTrend
+          series = mainChart.addSeries(LineSeries, { color: '#ec4899', lineWidth: 2, title: 'SuperTrend' });
+        } else if (ind.value === 'ema') {
+          // Amber for EMA
+          series = mainChart.addSeries(LineSeries, { color: '#fbbf24', lineWidth: 2, title: `EMA ${ind.params?.period || 16}` });
+        } else {
+          // Default blue
+          series = mainChart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2, title: ind.label });
+        }
+
+        overlaySeriesRef.current[ind.id] = { series, upper, lower, lastDataHash: '', lastParamsHash: JSON.stringify(ind.params) };
+      }
+
+      const seriesObj = overlaySeriesRef.current[ind.id];
+      const data = seriesForKey[ind.key] || [];
+      
+      // Update title/options if parameters changed
+      const currentParamsHash = JSON.stringify(ind.params);
+      if (seriesObj.lastParamsHash !== currentParamsHash) {
+        if (ind.value === 'ema') {
+          seriesObj.series.applyOptions({ title: `EMA ${ind.params?.period || 16}` });
+        } else if (ind.value === 'bollinger_bands') {
+          seriesObj.series.applyOptions({ title: 'BB Middle' });
+          if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper' });
+          if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower' });
+        } else if (ind.value === 'supertrend') {
+          seriesObj.series.applyOptions({ title: 'SuperTrend' });
+        }
+        seriesObj.lastParamsHash = currentParamsHash;
+      }
+
+      // Special handling for multi-line indicators
+      if (ind.value === 'bollinger_bands') {
+        const upperData = seriesForKey['bb_upper'] || [];
+        const lowerData = seriesForKey['bb_lower'] || [];
+        
+        const dataHash = JSON.stringify([data.slice(-1), upperData.slice(-1), lowerData.slice(-1)]);
+        if (seriesObj.lastDataHash !== dataHash) {
+          seriesObj.series.setData(data);
+          if (seriesObj.upper) seriesObj.upper.setData(upperData);
+          if (seriesObj.lower) seriesObj.lower.setData(lowerData);
+          seriesObj.lastDataHash = dataHash;
+        }
+      } else if (ind.value === 'supertrend') {
+        const dataHash = JSON.stringify(data.slice(-1));
+        if (seriesObj.lastDataHash !== dataHash) {
+          seriesObj.series.setData(data);
+          
+          // Color coding for SuperTrend if direction is available
+          const directionData = seriesForKey['supertrend_direction'] || [];
+          if (directionData.length > 0) {
+            // Find direction for each point
+            // For simplicity, we just use the last direction for the whole line if it changes
+            // or we can set markers. But Lightweight Charts LineSeries is single color.
+            // If we want multi-color, we'd need multiple series or markers.
+            const lastDir = directionData[directionData.length - 1]?.value;
+            if (lastDir === 'up') {
+              seriesObj.series.applyOptions({ color: '#22c55e' }); // Green
+            } else if (lastDir === 'down') {
+              seriesObj.series.applyOptions({ color: '#ef4444' }); // Red
+            }
+          }
+          
+          seriesObj.lastDataHash = dataHash;
+        }
+      } else {
+        const dataHash = JSON.stringify(data.slice(-1));
+        if (seriesObj.lastDataHash !== dataHash) {
+          seriesObj.series.setData(data);
+          seriesObj.lastDataHash = dataHash;
+        }
+      }
+    });
+  }, [mainChart, overlayIndicators, indicatorSeries, selectedAsset, selectedTimeframe]);
+
   const { isLoading } = useTickAggregation({
     marketData,
     selectedAssetKey,
@@ -79,15 +207,61 @@ const ChartWorkspace = () => {
     candleSeries,
     historyCandles,
     historyStatus,
-    selectedAsset
+    selectedAsset,
+    onNewCandle: useCallback(() => {
+      // Logic for new candle formed
+      if (health !== 'streaming' || activeIndicators.length === 0) {
+        return;
+      }
+
+      const indicators = [];
+      const paramsByKey = {};
+
+      activeIndicators.forEach((ind) => {
+        if (!ind || typeof ind.key !== 'string') return;
+        indicators.push(ind.key);
+        if (ind.params && typeof ind.params === 'object' && !Array.isArray(ind.params)) {
+          paramsByKey[ind.key] = ind.params;
+        }
+      });
+
+      if (indicators.length === 0) return;
+
+      loadIndicators({
+        asset: selectedAsset,
+        timeframe: selectedTimeframe,
+        indicators,
+        params: Object.keys(paramsByKey).length > 0 ? paramsByKey : undefined
+      });
+    }, [health, selectedAsset, selectedTimeframe, activeIndicators, loadIndicators])
   });
 
-  const oscillatorIndicators = useMemo(
-    () => (Array.isArray(activeIndicators)
-      ? activeIndicators.filter((ind) => ind.kind === 'oscillator')
-      : []),
-    [activeIndicators]
-  );
+  // Effect to load indicators when asset, timeframe or activeIndicators change
+  useEffect(() => {
+    if (health !== 'streaming' || activeIndicators.length === 0) {
+      return;
+    }
+
+    const indicators = [];
+    const paramsByKey = {};
+
+    activeIndicators.forEach((ind) => {
+      if (!ind || typeof ind.key !== 'string') return;
+      indicators.push(ind.key);
+      if (ind.params && typeof ind.params === 'object' && !Array.isArray(ind.params)) {
+        paramsByKey[ind.key] = ind.params;
+      }
+    });
+
+    if (indicators.length === 0) return;
+
+    loadIndicators({
+      asset: selectedAsset,
+      timeframe: selectedTimeframe,
+      indicators,
+      params: Object.keys(paramsByKey).length > 0 ? paramsByKey : undefined
+    });
+  }, [selectedAsset, selectedTimeframe, activeIndicators, loadIndicators]); // Removed 'health' to avoid unnecessary reloads, but kept others for reactivity
 
   const handleIndicatorClick = (indicator) => {
     setSettingsIndicator(indicator);
@@ -169,52 +343,6 @@ const ChartWorkspace = () => {
     });
   }, [selectedAsset, selectedTimeframe, oscillatorIndicators, loadIndicators]);
 
-  useEffect(() => {
-    if (health !== 'streaming') {
-      return;
-    }
-
-    if (!selectedAsset || !selectedTimeframe || oscillatorIndicators.length === 0) {
-      return;
-    }
-
-    const indicators = [];
-    const paramsByKey = {};
-
-    oscillatorIndicators.forEach((ind) => {
-      if (!ind || typeof ind.key !== 'string') {
-        return;
-      }
-
-      indicators.push(ind.key);
-
-      if (ind.params && typeof ind.params === 'object' && !Array.isArray(ind.params)) {
-        paramsByKey[ind.key] = ind.params;
-      }
-    });
-
-    if (indicators.length === 0) {
-      return;
-    }
-
-    const hasParams = Object.keys(paramsByKey).length > 0;
-
-    const refresh = () => {
-      loadIndicators({
-        asset: selectedAsset,
-        timeframe: selectedTimeframe,
-        indicators,
-        params: hasParams ? paramsByKey : undefined
-      });
-    };
-
-    const intervalId = setInterval(refresh, 10000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [health, selectedAsset, selectedTimeframe, oscillatorIndicators, loadIndicators]);
-
   // Options for Comboboxes
   const assetList = Array.from(new Set([...(payoutAssets || []), selectedAsset].filter(Boolean)));
   const assetOptions = assetList.map(a => ({ label: a, value: a }));
@@ -273,7 +401,7 @@ const ChartWorkspace = () => {
     {
       label: 'CCI',
       value: 'cci',
-      key: 'cci_14',
+      key: 'cci',
       kind: 'oscillator',
       displayValue: '14',
       source: 'backend',
@@ -374,6 +502,159 @@ const ChartWorkspace = () => {
           max: 0.5,
           step: 0.1,
           default: 0.3
+        }
+      ]
+    },
+    {
+      label: 'ADX',
+      value: 'adx',
+      key: 'adx',
+      kind: 'oscillator',
+      displayValue: '14',
+      source: 'backend',
+      params: { period: 14, overbought: 30 },
+      paramConfig: [
+        {
+          name: 'period',
+          label: 'Period',
+          type: 'number',
+          min: 2,
+          max: 50,
+          default: 14
+        },
+        {
+          name: 'overbought',
+          label: 'Strong Trend Level',
+          type: 'number',
+          min: 10,
+          max: 90,
+          default: 30
+        }
+      ]
+    },
+    {
+      label: 'Schaff Trend Cycle',
+      value: 'stc',
+      key: 'schaff_tc',
+      kind: 'oscillator',
+      displayValue: '10,20,3',
+      source: 'backend',
+      params: { fast: 10, slow: 20, period: 3, overbought: 75, oversold: 25 },
+      paramConfig: [
+        {
+          name: 'fast',
+          label: 'Fast Period',
+          type: 'number',
+          min: 1,
+          max: 100,
+          default: 10
+        },
+        {
+          name: 'slow',
+          label: 'Slow Period',
+          type: 'number',
+          min: 1,
+          max: 200,
+          default: 20
+        },
+        {
+          name: 'period',
+          label: 'Cycle Period',
+          type: 'number',
+          min: 1,
+          max: 50,
+          default: 3
+        },
+        {
+          name: 'overbought',
+          label: 'Overbought',
+          type: 'number',
+          min: 50,
+          max: 100,
+          default: 75
+        },
+        {
+          name: 'oversold',
+          label: 'Oversold',
+          type: 'number',
+          min: 0,
+          max: 50,
+          default: 25
+        }
+      ]
+    },
+    {
+      label: 'SuperTrend',
+      value: 'supertrend',
+      key: 'supertrend',
+      kind: 'overlay',
+      displayValue: '7,3.0',
+      source: 'backend',
+      params: { period: 7, multiplier: 3.0 },
+      paramConfig: [
+        {
+          name: 'period',
+          label: 'Period',
+          type: 'number',
+          min: 1,
+          max: 50,
+          default: 7
+        },
+        {
+          name: 'multiplier',
+          label: 'Multiplier',
+          type: 'number',
+          min: 0.1,
+          max: 10,
+          step: 0.1,
+          default: 3.0
+        }
+      ]
+    },
+    {
+      label: 'EMA',
+      value: 'ema',
+      key: 'ema_16',
+      kind: 'overlay',
+      displayValue: '16',
+      source: 'backend',
+      params: { period: 16 },
+      paramConfig: [
+        {
+          name: 'period',
+          label: 'Period',
+          type: 'number',
+          min: 1,
+          max: 500,
+          default: 16
+        }
+      ]
+    },
+    {
+      label: 'Bollinger Bands',
+      value: 'bollinger_bands',
+      key: 'bb_middle',
+      kind: 'overlay',
+      displayValue: '20,2.0',
+      source: 'backend',
+      params: { period: 20, stdDev: 2.0 },
+      paramConfig: [
+        {
+          name: 'period',
+          label: 'Period',
+          type: 'number',
+          min: 1,
+          max: 100,
+          default: 20
+        },
+        {
+          name: 'stdDev',
+          label: 'Std Dev',
+          type: 'number',
+          min: 0.1,
+          max: 5.0,
+          step: 0.1,
+          default: 2.0
         }
       ]
     }

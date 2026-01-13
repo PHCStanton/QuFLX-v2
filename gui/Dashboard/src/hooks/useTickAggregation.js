@@ -7,7 +7,8 @@ const useTickAggregation = ({
   candleSeries,
   historyCandles,
   historyStatus,
-  selectedAsset
+  selectedAsset,
+  onNewCandle
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const currentCandleRef = useRef(null);
@@ -119,6 +120,11 @@ const useTickAggregation = ({
 
         // Check if we are in a new bucket
         if (!candle || candle.time !== candleTime) {
+          // If it's a new bucket and we had a previous candle, it means the previous one just finished
+          if (candle && onNewCandle) {
+            onNewCandle();
+          }
+
           // Start new candle
           candle = {
             time: candleTime,

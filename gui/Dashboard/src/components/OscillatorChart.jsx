@@ -54,25 +54,30 @@ const OscillatorChart = ({
     }
 
     // Add Levels
-    if (params && params.overbought !== undefined && params.oversold !== undefined) {
+    const levels = [];
+    if (params && params.overbought !== undefined) {
       const obLine = series.createPriceLine({
         price: params.overbought,
-        color: isRSI ? '#ef4444' : '#facc15', // Red for RSI, Yellow for CCI
+        color: isRSI ? '#ef4444' : '#facc15', // Red for RSI, Yellow for CCI/Others
         lineWidth: 1,
         lineStyle: isRSI ? LineStyle.Dotted : LineStyle.Solid,
         axisLabelVisible: true,
-        title: 'OB',
+        title: isRSI ? 'OB' : 'Level',
       });
+      levels.push(obLine);
+    }
+    if (params && params.oversold !== undefined) {
       const osLine = series.createPriceLine({
         price: params.oversold,
-        color: isRSI ? '#3b82f6' : '#facc15', // Blue for RSI, Yellow for CCI
+        color: isRSI ? '#3b82f6' : '#facc15', // Blue for RSI, Yellow for CCI/Others
         lineWidth: 1,
         lineStyle: isRSI ? LineStyle.Dotted : LineStyle.Solid,
         axisLabelVisible: true,
-        title: 'OS',
+        title: isRSI ? 'OS' : 'Level',
       });
-      priceLinesRef.current = [obLine, osLine];
+      levels.push(osLine);
     }
+    priceLinesRef.current = levels;
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -136,7 +141,7 @@ const OscillatorChart = ({
       }
       syncSubscriptionRef.current = null;
     };
-  }, [mainChart]);
+  }, [mainChart, type, params, indicatorValue, title]);
 
   useEffect(() => {
     if (!seriesRef.current) return;
@@ -253,7 +258,7 @@ const OscillatorChart = ({
       }
       crosshairSubscriptionRef.current = null;
     };
-  }, [mainChart]);
+  }, [mainChart, type, params, indicatorValue, title]);
 
   return (
     <div className="w-full h-full flex flex-col">

@@ -433,37 +433,45 @@ Both issues are **fixable within 1-2 hours** with targeted changes. No architect
 
 ---
 
-## 11. Frontend Chart & Indicator Synchronization Assessment
+## 11. Final Assessment & Next Steps (2026-01-12)
 
-**Added:** 2026-01-10 (Evening Session)  
-**Reference:** Perplexity AI Research on TradingView Lightweight Charts  
-**Severity:** MEDIUM  
-**Status:** ✅ CORE FEATURES IMPLEMENTED – Follow-up QA pending
+Following the research and deep-dive into the current codebase, three critical concerns have been identified and scheduled for immediate implementation:
+
+### 11.1 Cursor Sync Lifecycle Fix (High Priority)
+- **Concern:** Crosshair sync from indicator panels to the main chart breaks after modifying indicator parameters.
+- **Root Cause:** The `useEffect` in `OscillatorChart.jsx` that handles the oscillator-to-main subscription does not include `chartRef.current` in its dependency array. When parameters change, the chart instance is recreated, but the subscription remains attached to the old, unmounted instance.
+- **Solution:** Add `chartRef.current` to the dependency array and ensure clean unsubscription/resubscription logic.
+
+### 11.2 Streaming Indicator Refresh (High Priority)
+- **Concern:** Indicators only apply to historical data and do not update as new streaming candles form.
+- **Root Cause:** `loadIndicators` is currently only triggered by asset/timeframe changes or manual indicator toggles. The `useTickAggregation` hook updates the price chart, but does not notify the indicator pipeline.
+- **Solution:** Modify `marketStore.js` or `ChartWorkspace.jsx` to trigger a lightweight indicator refresh when a new candle is finalized from the streaming tick data.
+
+### 11.3 Backend Parameter Synchronization (High Priority)
+- **Concern:** User changes to indicator settings in the UI must propagate to the backend to ensure consistency for Strategy Lab and automated execution.
+- **Root Cause:** Current implementation updates frontend state but does not explicitly sync the "active" parameter set back to a persistent backend session or strategy context.
+- **Solution:** Ensure `IndicatorSettingsModal` updates are reflected in the `loadIndicators` payload and explore a persistent "Indicator Session" on the backend to maintain alignment between UI and Strategy Lab.
+
+### 11.4 Recommended Enhancements
+- **Volume Profile/VWAP:** Standard for institutional-grade platforms; should be considered for next-phase implementation.
+- **Alert Sync:** Ability to set alerts directly on indicator levels (e.g., RSI > 70) that sync with backend notification services.
+- **Multi-Timeframe Overlays:** Essential for advanced technical analysis (e.g., viewing 15m EMA on a 1m chart).
 
 ---
 
-### 11.1 Context: TradingView Lightweight Charts Sync Limitation
+## 12. Conclusion & Authorization to Proceed
 
-TradingView's Lightweight Charts library creates **independent chart instances** that do not automatically lock or sync with a main price chart. This is by design:
+The indicator pipeline is now verified to be **KB-aligned in the backend** and **structurally sound in the frontend**. The remaining gaps are lifecycle and synchronization issues that do not require architectural changes.
 
-- Time scales, crosshairs, and zooming remain unlinked by default
-- Manual code is required to enable synchronization via:
-  - `subscribeVisibleLogicalRangeChange` for time scale syncing
-  - `subscribeCrosshairMove` for crosshair alignment
+**Proceeding with:**
+1. Fix for `OscillatorChart.jsx` cursor sync.
+2. Implementation of streaming-aware indicator refresh in `marketStore.js`.
+3. Validation of backend parameter sync.
 
-**Source:** Perplexity AI research confirmed this behavior and recommended manual sync implementation.
-
----
-
-### 11.2 Current Implementation Status
-
-| Component | File | Status | Notes |
-|-----------|------|--------|-------|
-| **Main Chart** | `ChartContainer.jsx` | ✅ Implemented | Candlestick chart with resize observer |
-| **Oscillator Chart** | `OscillatorChart.jsx` | ✅ Implemented | Separate chart instances per indicator |
-| **Time Scale Sync** | `OscillatorChart.jsx` L79-112 | ✅ Implemented | Unidirectional: main → oscillator |
-| **Crosshair Sync** | N/A | ✅ Implemented | Main → oscillators crosshair sync (P1 complete) |
-| **Screenshot Capture** | `ChartWorkspace.jsx` L213-220 | ✅ Implemented | Composite chart + oscillators screenshot |
+**CORE_PRINCIPLES Status:** MAINTAINED.
+- #1 (Functional Simplicity): Reusing existing `loadIndicators` and `setCrosshairPosition` APIs.
+- #2 (Sequential Logic): Addressing lifecycle gaps before adding new features.
+- #3 (Incremental Testing): Each fix will be verified via UI interaction and store state inspection.
 | **Price Scale in Screenshot** | N/A | ✅ Implemented | Price scale included in composite capture |
 | **Sync Toggle Button** | N/A | ❌ Missing | No on/off control |
 | **Bidirectional Sync** | N/A | ❌ Not Implemented | Oscillator scroll doesn't update main chart |

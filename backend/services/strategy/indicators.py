@@ -339,13 +339,23 @@ class TechnicalIndicatorsPipeline:
                     df['supertrend_direction'] = supertrend_data[f"SUPERTd_{self.params['supertrend_period']}_{self.params['supertrend_multiplier']}"].map({1: 'up', -1: 'down'})
             else:
                 hl2 = (df['high'] + df['low']) / 2
-                if 'atr_14' in df.columns:
-                    atr = df['atr_14']
-                else:
-                    atr = df['true_range'].rolling(window=self.params['supertrend_period']).mean()
                 
-                upper_band = hl2 + (self.params['supertrend_multiplier'] * atr)
-                lower_band = hl2 - (self.params['supertrend_multiplier'] * atr)
+                # Use a period-specific ATR for SuperTrend
+                st_period = self.params.get('supertrend_period', 7)
+                if 'true_range' not in df.columns:
+                    # Calculate TR if missing
+                    high_low = df['high'] - df['low']
+                    high_close_prev = np.abs(df['high'] - df['close'].shift(1))
+                    low_close_prev = np.abs(df['low'] - df['close'].shift(1))
+                    tr = np.maximum(high_low, np.maximum(high_close_prev, low_close_prev))
+                else:
+                    tr = df['true_range']
+                
+                atr = tr.rolling(window=st_period).mean()
+                
+                multiplier = self.params.get('supertrend_multiplier', 3.0)
+                upper_band = hl2 + (multiplier * atr)
+                lower_band = hl2 - (multiplier * atr)
                 
                 supertrend = pd.Series(index=df.index, dtype=float)
                 direction = pd.Series(index=df.index, dtype=str)
