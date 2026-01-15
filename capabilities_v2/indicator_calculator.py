@@ -28,6 +28,7 @@ class IndicatorCalculator:
         timeframe = inputs.get("timeframe", 1)
         requested_indicators = inputs.get("indicators", [])
         custom_params = inputs.get("params", {})
+        current_candle = inputs.get("current_candle")
 
         if not csv_path:
             return CapResult.fail("csv_path is required")
@@ -35,10 +36,30 @@ class IndicatorCalculator:
         try:
             # 1. Load data from CSV
             df = pd.read_csv(csv_path)
+            
+            # 2. Append current candle if provided (for real-time updates)
+            if current_candle:
+                # Map frontend keys (time/timestamp) to backend key (timestamp)
+                ts = current_candle.get("time") or current_candle.get("timestamp")
+                new_row = {
+                    "timestamp": float(ts),
+                    "open": float(current_candle.get("open")),
+                    "high": float(current_candle.get("high")),
+                    "low": float(current_candle.get("low")),
+                    "close": float(current_candle.get("close")),
+                }
+                
+                # If last row has same timestamp, update it. Otherwise append.
+                if not df.empty and float(df.iloc[-1]["timestamp"]) == float(ts):
+                    for k, v in new_row.items():
+                        df.loc[df.index[-1], k] = v
+                else:
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
             if df.empty:
                 return CapResult.fail(f"History file is empty: {csv_path}")
 
-            # 2. Ensure column names are lowercase (pipeline expects open, high, low, close)
+            # 3. Ensure column names are lowercase (pipeline expects open, high, low, close)
             df.columns = [col.lower() for col in df.columns]
 
             # 3. Map frontend params to pipeline params
@@ -71,7 +92,8 @@ class IndicatorCalculator:
                         pipeline_params['schaff_d_pf'] = p['period']
                 elif ind_key == 'bollinger_bands' or ind_key == 'bb_middle':
                     if 'period' in p: pipeline_params['bb_period'] = p['period']
-                    if 'std' in p: pipeline_params['bb_std'] = p['std']
+                    if 'stdDev' in p: pipeline_params['bb_std'] = p['stdDev']
+                    elif 'std' in p: pipeline_params['bb_std'] = p['std']
                 # Add more mappings as needed
 
             # 4. Calculate indicators

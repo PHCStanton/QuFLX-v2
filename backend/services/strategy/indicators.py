@@ -140,6 +140,9 @@ class TechnicalIndicatorsPipeline:
             if not all(col in df.columns for col in required_cols):
                 raise ValueError(f"DataFrame must contain columns: {required_cols}")
             
+            # 0. Defensive: Handle infinity/NaN in input data
+            df = df.replace([np.inf, -np.inf], np.nan)
+            
             result_df = df.copy()
             
             result_df = self._calculate_trend_indicators(result_df)
@@ -395,7 +398,6 @@ class TechnicalIndicatorsPipeline:
 
             macd_range = macd_max - macd_min
             stoch_macd = 100 * (macd - macd_min) / macd_range.replace(0, np.nan)
-            stoch_macd = stoch_macd.fillna(0)
 
             pf = stoch_macd.ewm(span=d_macd, adjust=False).mean()
 
@@ -404,7 +406,6 @@ class TechnicalIndicatorsPipeline:
 
             pf_range = pf_max - pf_min
             stc = 100 * (pf - pf_min) / pf_range.replace(0, np.nan)
-            stc = stc.fillna(0)
 
             df['schaff_tc'] = stc.ewm(span=d_pf, adjust=False).mean()
             
@@ -429,7 +430,6 @@ class TechnicalIndicatorsPipeline:
 
             denominator = demax_sma + demin_sma
             demarker = demax_sma / denominator.replace(0, np.nan)
-            demarker = demarker.fillna(0)
 
             df['demarker'] = demarker
             

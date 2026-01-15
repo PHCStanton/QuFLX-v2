@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
 from .common import parse_script_json
-from backend.utils.history_utils import persist_history_csv, get_recent_history_file
+from backend.utils.history_utils import persist_history_csv, get_recent_history_file, append_candle_to_history
 from backend.utils.asset_utils import normalize_asset
 from backend.models.errors import (
     HistoryErrorCode, 
@@ -99,13 +99,13 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
         # Add both root and v2 to PYTHONPATH to be absolutely sure
         env["PYTHONPATH"] = project_root + os.pathsep + os.path.join(project_root, "v2")
 
-        logger.info(f"BOOTSTRAP: Starting history_collector for {asset} (waiting {duration_s}s for manual click)")
-        logger.info(f"BOOTSTRAP: runner_path={runner_path}")
-        logger.info(f"BOOTSTRAP: PYTHONPATH={env['PYTHONPATH']}")
-
-        # WINDOWS FIX: Use sync subprocess in thread pool instead of asyncio.create_subprocess_exec
-        # asyncio.create_subprocess_exec raises NotImplementedError on Windows with SelectorEventLoop
         def run_subprocess():
+            inputs = {
+                "action": "collect_and_save",
+                "asset": asset,
+                "timeframe": timeframe_min,
+                "duration": duration_s,
+            }
             return subprocess.run(
                 [
                     sys.executable,
@@ -113,15 +113,14 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
                     "history_collector",
                     "--verbose",
                     "--inputs",
-                    json.dumps({"action": "collect_and_save", "asset": asset, "timeframe": timeframe_min, "duration": duration_s}),
+                    json.dumps(inputs),
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
-                timeout=duration_s + 15  # Add 15s buffer for subprocess overhead
+                timeout=duration_s + 15,
             )
-        
-        # Run subprocess in thread pool to avoid blocking event loop
+
         loop = asyncio.get_event_loop()
         with ThreadPoolExecutor(max_workers=1) as executor:
             process = await loop.run_in_executor(executor, run_subprocess)
@@ -130,99 +129,92 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
         stderr = process.stderr
 
         if process.returncode != 0:
-            err_msg = stderr.decode().strip()
+            err_msg = (stderr.decode(errors="replace") or "").strip()
             logger.error(f"Bootstrap history subprocess failed: {err_msg}")
-            
-            # Return structured error response
             error_response = create_error_response(
                 error_code=HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
                 error_message=f"History collection subprocess failed: {err_msg}",
-                details={"asset": asset, "returncode": process.returncode}
+                details={"asset": asset, "returncode": process.returncode},
             )
             return error_response.dict()
 
-        output_str = stdout.decode().strip()
-        try:
-            out = parse_script_json(output_str)
-        except Exception as e:
-            logger.error(f"Invalid bootstrap history output: {e} | raw={output_str}")
-            error_response = create_error_response(
-                error_code=HistoryErrorCode.UNKNOWN_ERROR,
-                error_message=f"Failed to parse subprocess output: {str(e)}",
-                details={"asset": asset, "raw_output": output_str[:500]}
-            )
-            return error_response.dict()
-
+        output_str = (stdout.decode(errors="replace") or "").strip()
+        out = parse_script_json(output_str)
         if not out.get("ok"):
-            # Extract error code from capability result if available
-            error_code_str = out.get("error_code", "unknown_error")
-            error_msg = out.get("error", "History collection failed")
-            
-            # Map capability error codes to enum
+            error_code_str = out.get("error_code") or out.get("data", {}).get("error_code") or "unknown_error"
+            error_msg = out.get("error") or "History collection failed"
+
             try:
                 error_code = HistoryErrorCode(error_code_str)
             except ValueError:
                 error_code = HistoryErrorCode.UNKNOWN_ERROR
-            
+
             logger.error(f"Bootstrap history failed: {error_msg} (code: {error_code_str})")
-            
             error_response = create_error_response(
                 error_code=error_code,
                 error_message=error_msg,
-                details={"asset": asset, "timeframe": timeframe_min, "duration": duration_s}
+                details={"asset": asset, "timeframe": timeframe_min, "duration": duration_s},
             )
             return error_response.dict()
 
-        # SUCCESS PATH: Extract candles and return in-memory response
-        data = out.get("data", {})
+        data = out.get("data", {}) or {}
         candles = data.get("candles") or []
-        
-        # Fallback: If candles not in response but filepath is, read from CSV
-        if not candles and data.get("filepath"):
-            try:
-                df = pd.read_csv(data["filepath"])
-                candles = df.to_dict("records")
-                logger.info(f"Bootstrap: Read {len(candles)} candles from saved CSV file")
-            except Exception as e:
-                logger.error(f"Failed to read newly saved history file: {e}")
-                error_response = create_error_response(
-                    error_code=HistoryErrorCode.FILE_WRITE_FAILED,
-                    error_message=f"Candles were collected but failed to read from CSV: {str(e)}",
-                    details={"asset": asset, "filepath": data.get("filepath")}
-                )
-                return error_response.dict()
+        if not isinstance(candles, list):
+            candles = []
 
-        logger.info(f"Bootstrap SUCCESS: Returning {len(candles)} candles for {asset} @ {timeframe_min}m")
-        
-        # Return structured success response (matches HistorySuccessResponse model)
         return {
             "ok": True,
             "asset": asset,
             "timeframe": timeframe_min,
             "candles": candles,
             "file_path": data.get("filepath"),
-            "collection_time_ms": None  # Could calculate this if needed
+            "collection_time_ms": None,
         }
-    except HTTPException:
-        raise
-    except Exception as e:
-        # CORE PRINCIPLE #8: Zero Silent Failures - log full details
-        import traceback
-        error_details = {
-            "exception_type": type(e).__name__,
-            "exception_message": str(e),
-            "traceback": traceback.format_exc()
-        }
-        logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
-        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         
-        # Return structured error instead of generic HTTPException
+    except Exception as e:
+        logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
         error_response = create_error_response(
-            error_code=HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
-            error_message=f"Failed to spawn history collection subprocess: {type(e).__name__}: {str(e)}",
-            details={"asset": asset, "error_type": type(e).__name__}
+            error_code=HistoryErrorCode.UNKNOWN_ERROR,
+            error_message=f"Bootstrap failed: {type(e).__name__}: {str(e)}",
+            details={"asset": asset, "timeframe": timeframe_min},
         )
-        raise HTTPException(status_code=500, detail=error_response.dict())
+        return error_response.dict()
+
+@router.post("/append-candle")
+async def append_candle(payload: Dict[str, Any] = Body(...)):
+    """
+    Append a newly formed candle to the most recent history CSV.
+    Used for live streaming data persistence.
+    """
+    asset = payload.get("asset")
+    timeframe = payload.get("timeframe", 1)
+    candle = payload.get("candle")
+
+    if not asset or not candle:
+        raise HTTPException(status_code=400, detail="asset and candle required")
+
+    # Handle timeframe string if needed
+    timeframe_min = 1
+    if isinstance(timeframe, str):
+        tf = timeframe.strip().lower()
+        if tf.endswith("m"):
+            try:
+                timeframe_min = max(1, int(tf[:-1]))
+            except Exception:
+                timeframe_min = 1
+        elif tf.isdigit():
+            timeframe_min = max(1, int(tf))
+    else:
+        timeframe_min = int(timeframe)
+
+    success = append_candle_to_history(asset, timeframe_min, candle)
+    
+    if not success:
+        # If no history file found, maybe we should persist it as a new one?
+        # For now, just return 404
+        raise HTTPException(status_code=404, detail=f"No recent history file found for {asset} @ {timeframe_min}m to append to.")
+
+    return {"status": "success", "asset": asset, "timeframe": timeframe_min}
 
 @router.post("/collect-history")
 async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):

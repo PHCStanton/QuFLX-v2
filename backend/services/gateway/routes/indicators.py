@@ -26,6 +26,7 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
     timeframe = payload.get("timeframe", "1m")
     indicators = payload.get("indicators", [])
     params = payload.get("params", {})
+    current_candle = payload.get("current_candle")
     
     timeframe_min = 1
     if isinstance(timeframe, str):
@@ -60,7 +61,8 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
             "asset": asset,
             "timeframe": timeframe_min,
             "indicators": indicators,
-            "params": params
+            "params": params,
+            "current_candle": current_candle
         }
 
         args = [
