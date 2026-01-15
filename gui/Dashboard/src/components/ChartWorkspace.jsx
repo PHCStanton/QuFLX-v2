@@ -1,17 +1,19 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { LineSeries, LineStyle } from 'lightweight-charts';
-import html2canvas from 'html2canvas';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import Card from './Card';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import ChartContainer from './ChartContainer';
 import ChartHeader from './ChartHeader';
 import useTickAggregation from '../hooks/useTickAggregation';
+import useOverlayIndicators from '../hooks/useOverlayIndicators';
+import useScreenshotCapture from '../hooks/useScreenshotCapture';
+import useAIChat from '../hooks/useAIChat';
+import useCrosshairSync from '../hooks/useCrosshairSync';
 import { useStreamHealth } from '../hooks/useStreamHealth';
 import { askAI } from '../api/aiClient';
 import { saveChartScreenshot } from '../api/screenshotClient';
 import ScreenshotModal from './ScreenshotModal';
-import OscillatorChart from './OscillatorChart';
+import OscillatorPanel from './OscillatorPanel';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -32,6 +34,7 @@ const ChartWorkspace = () => {
     loadIndicators,
     appendCandle,
     lastError, clearError,
+    setError,
     syncTimeframeUi,
   } = useMarketStore();
 
@@ -40,44 +43,39 @@ const ChartWorkspace = () => {
   const enableStreaming = dataSourceMode !== 'history_only';
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
-  const [isAsking, setIsAsking] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [isScreenshotOpen, setIsScreenshotOpen] = useState(false);
-  const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
+  const {
+    isCapturing,
+    isScreenshotOpen,
+    screenshotDataUrl,
+    setIsScreenshotOpen,
+    captureCompositeChart,
+    openScreenshot
+  } = useScreenshotCapture({ onError: setError });
+
+  const { isAsking, handleAskAi } = useAIChat({
+    askAI,
+    captureImage: captureCompositeChart,
+    marketData,
+    selectedAssetKey,
+    indicatorSeries,
+    activeIndicators,
+    selectedAsset,
+    selectedTimeframe,
+    onError: setError
+  });
   const [settingsIndicator, setSettingsIndicator] = useState(null);
-  const [oscillatorHeight, setOscillatorHeight] = useState(200);
-  const [isDraggingOsc, setIsDraggingOsc] = useState(false);
-  const oscDragStateRef = useRef(null);
   const [isSyncingTimeframe, setIsSyncingTimeframe] = useState(false);
-  const lastMainCrosshairTimeRef = useRef(null);
 
   const handleChartReady = useCallback(({ chart, series }) => {
     setCandleSeries(series);
     setMainChart(chart);
   }, []);
 
-  const handleCrosshairTimeFromOscillator = useCallback((time) => {
-    if (!mainChart || !candleSeries || !time) {
-      return;
-    }
-
-    const lastTime = lastMainCrosshairTimeRef.current;
-    const numericLast = lastTime != null ? Number(lastTime) : null;
-    const numericNext = Number(time);
-
-    if (numericLast != null && !Number.isNaN(numericLast) && !Number.isNaN(numericNext) && numericLast === numericNext) {
-      return;
-    }
-
-    lastMainCrosshairTimeRef.current = time;
-
-    const defaultPrice = 0;
-    try {
-      mainChart.setCrosshairPosition(defaultPrice, time, candleSeries);
-    } catch (err) {
-      console.error('Failed to set main chart crosshair from oscillator', err);
-    }
-  }, [mainChart, candleSeries]);
+  const { handleCrosshairTimeFromOscillator } = useCrosshairSync({
+    mainChart,
+    candleSeries,
+    onError: setError
+  });
 
   const oscillatorIndicators = useMemo(
     () => (Array.isArray(activeIndicators)
@@ -86,129 +84,14 @@ const ChartWorkspace = () => {
     [activeIndicators]
   );
 
-  const overlayIndicators = useMemo(
-    () => (Array.isArray(activeIndicators)
-      ? activeIndicators.filter((ind) => ind.kind === 'overlay')
-      : []),
-    [activeIndicators]
-  );
-
-  const overlaySeriesRef = useRef({});
-
-  useEffect(() => {
-    if (!mainChart) return;
-
-    // Clean up old series that are no longer active
-    const activeIds = new Set(overlayIndicators.map(ind => ind.id));
-    Object.keys(overlaySeriesRef.current).forEach(id => {
-      if (!activeIds.has(id)) {
-        try {
-          mainChart.removeSeries(overlaySeriesRef.current[id].series);
-          // If it's Bollinger Bands, remove upper/lower too
-          if (overlaySeriesRef.current[id].upper) mainChart.removeSeries(overlaySeriesRef.current[id].upper);
-          if (overlaySeriesRef.current[id].lower) mainChart.removeSeries(overlaySeriesRef.current[id].lower);
-        } catch (e) {
-          console.warn('Failed to remove series:', e);
-        }
-        delete overlaySeriesRef.current[id];
-      }
-    });
-
-    // Add or update series for active overlay indicators
-    overlayIndicators.forEach(ind => {
-      const key = `${selectedAsset}|${selectedTimeframe}`;
-      const seriesForKey = indicatorSeries && indicatorSeries[key];
-      if (!seriesForKey) return;
-
-      if (!overlaySeriesRef.current[ind.id]) {
-        let series;
-        let upper;
-        let lower;
-
-        const type = ind.type || ind.value;
-
-        if (type === 'bollinger_bands') {
-          // Purple for Bollinger Bands
-          series = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 2, title: 'BB Middle' });
-          upper = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB Upper' });
-          lower = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB Lower' });
-        } else if (type === 'supertrend') {
-          // Pink for SuperTrend
-          series = mainChart.addSeries(LineSeries, { color: '#ec4899', lineWidth: 2, title: 'SuperTrend' });
-        } else if (type === 'ema') {
-          // Amber for EMA
-          series = mainChart.addSeries(LineSeries, { color: '#fbbf24', lineWidth: 2, title: `EMA ${ind.params?.period || 16}` });
-        } else {
-          // Default blue
-          series = mainChart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2, title: ind.label });
-        }
-
-        overlaySeriesRef.current[ind.id] = { series, upper, lower, lastDataHash: '', lastParamsHash: JSON.stringify(ind.params) };
-      }
-
-      const seriesObj = overlaySeriesRef.current[ind.id];
-      const data = seriesForKey[ind.key] || [];
-      
-      // Update title/options if parameters changed
-      const currentParamsHash = JSON.stringify(ind.params);
-      const type = ind.type || ind.value;
-
-      if (seriesObj.lastParamsHash !== currentParamsHash) {
-        if (type === 'ema') {
-          seriesObj.series.applyOptions({ title: `EMA ${ind.params?.period || 16}` });
-        } else if (type === 'bollinger_bands') {
-          seriesObj.series.applyOptions({ title: 'BB Middle' });
-          if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper' });
-          if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower' });
-        } else if (type === 'supertrend') {
-          seriesObj.series.applyOptions({ title: 'SuperTrend' });
-        }
-        seriesObj.lastParamsHash = currentParamsHash;
-      }
-
-      // Special handling for multi-line indicators
-      if (type === 'bollinger_bands') {
-        const upperData = seriesForKey['bb_upper'] || [];
-        const lowerData = seriesForKey['bb_lower'] || [];
-        
-        const dataHash = JSON.stringify([data.slice(-1), upperData.slice(-1), lowerData.slice(-1)]);
-        if (seriesObj.lastDataHash !== dataHash) {
-          seriesObj.series.setData(data);
-          if (seriesObj.upper) seriesObj.upper.setData(upperData);
-          if (seriesObj.lower) seriesObj.lower.setData(lowerData);
-          seriesObj.lastDataHash = dataHash;
-        }
-      } else if (type === 'supertrend') {
-        const dataHash = JSON.stringify(data.slice(-1));
-        if (seriesObj.lastDataHash !== dataHash) {
-          seriesObj.series.setData(data);
-          
-          // Color coding for SuperTrend if direction is available
-          const directionData = seriesForKey['supertrend_direction'] || [];
-          if (directionData.length > 0) {
-            // Find direction for each point
-            // For simplicity, we just use the last direction for the whole line if it changes
-            // or we can set markers. But Lightweight Charts LineSeries is single color.
-            // If we want multi-color, we'd need multiple series or markers.
-            const lastDir = directionData[directionData.length - 1]?.value;
-            if (lastDir === 'up') {
-              seriesObj.series.applyOptions({ color: '#22c55e' }); // Green
-            } else if (lastDir === 'down') {
-              seriesObj.series.applyOptions({ color: '#ef4444' }); // Red
-            }
-          }
-          
-          seriesObj.lastDataHash = dataHash;
-        }
-      } else {
-        const dataHash = JSON.stringify(data.slice(-1));
-        if (seriesObj.lastDataHash !== dataHash) {
-          seriesObj.series.setData(data);
-          seriesObj.lastDataHash = dataHash;
-        }
-      }
-    });
-  }, [mainChart, overlayIndicators, indicatorSeries, selectedAsset, selectedTimeframe]);
+  useOverlayIndicators({
+    mainChart,
+    activeIndicators,
+    indicatorSeries,
+    selectedAsset,
+    selectedTimeframe,
+    onError: setError
+  });
 
   const { isLoading } = useTickAggregation({
     marketData,
@@ -218,6 +101,7 @@ const ChartWorkspace = () => {
     historyCandles,
     historyStatus,
     selectedAsset,
+    onError: setError,
     onNewCandle: useCallback(async (candle) => {
       // Logic for new candle formed
       if (health !== 'streaming') {
@@ -285,52 +169,10 @@ const ChartWorkspace = () => {
       indicators,
       params: Object.keys(paramsByKey).length > 0 ? paramsByKey : undefined
     });
-  }, [selectedAsset, selectedTimeframe, activeIndicators, loadIndicators]); // Removed 'health' to avoid unnecessary reloads, but kept others for reactivity
+  }, [health, selectedAsset, selectedTimeframe, activeIndicators, loadIndicators]);
 
   const handleIndicatorClick = (indicator) => {
     setSettingsIndicator(indicator);
-  };
-
-  const handleOscillatorDragStart = (event) => {
-    if (!oscillatorIndicators.length) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const startY = event.clientY;
-    const startHeight = oscillatorHeight;
-    const minHeight = 80;
-    const maxHeight = 600;
-
-    setIsDraggingOsc(true);
-
-    const handleMouseMove = (e) => {
-      const delta = e.clientY - startY;
-      let next = startHeight - delta;
-      if (next < minHeight) {
-        next = minHeight;
-      }
-      if (next > maxHeight) {
-        next = maxHeight;
-      }
-      setOscillatorHeight(next);
-    };
-
-    const handleMouseUp = () => {
-      setIsDraggingOsc(false);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      oscDragStateRef.current = null;
-    };
-
-    oscDragStateRef.current = {
-      handleMouseMove,
-      handleMouseUp
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
   };
 
   useEffect(() => {
@@ -695,6 +537,10 @@ const ChartWorkspace = () => {
     // but for now we keep the UI optimistic update logic here or in the handler
     setSelectedTimeframe(val).catch((err) => {
       console.error("Timeframe change failed:", err);
+      if (setError) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`Timeframe change failed: ${msg}`);
+      }
     });
   };
 
@@ -705,100 +551,16 @@ const ChartWorkspace = () => {
       await syncTimeframeUi();
     } catch (err) {
       console.error('Timeframe UI sync failed:', err);
+      if (setError) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`Timeframe UI sync failed: ${msg}`);
+      }
     } finally {
       setIsSyncingTimeframe(false);
     }
   };
 
-  const captureCompositeChart = async () => {
-    const container = document.getElementById('quflx-chart-screenshot-root');
-    if (!container) return null;
-
-    try {
-      const canvas = await html2canvas(container, {
-        backgroundColor: '#020617',
-        useCORS: true,
-        logging: false,
-        scale: window.devicePixelRatio || 1
-      });
-      return canvas.toDataURL('image/png');
-    } catch (err) {
-      console.error('Composite chart capture failed:', err);
-      return null;
-    }
-  };
-
-  const handleOpenScreenshot = async () => {
-    if (isCapturing) {
-      return;
-    }
-    try {
-      setIsCapturing(true);
-      const dataUrl = await captureCompositeChart();
-      if (!dataUrl) {
-        window.alert('Chart not available for screenshot.');
-        return;
-      }
-      setScreenshotDataUrl(dataUrl);
-      setIsScreenshotOpen(true);
-    } catch (err) {
-      console.error('Failed to capture screenshot:', err);
-      window.alert('Failed to capture screenshot.');
-    } finally {
-      setIsCapturing(false);
-    }
-  };
-
-  const handleAskAi = async () => {
-    if (isAsking) return;
-
-    const image = await captureCompositeChart();
-    const recentTicks = marketData[selectedAssetKey]?.slice(-20) || [];
-    const indicatorKey = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
-    const seriesForKey = indicatorKey && indicatorSeries ? indicatorSeries[indicatorKey] : null;
-    const indicatorSnapshots = {};
-
-    if (seriesForKey && Array.isArray(activeIndicators)) {
-      activeIndicators.forEach((ind) => {
-        if (!ind || !ind.key) {
-          return;
-        }
-        const series = seriesForKey[ind.key];
-        if (!Array.isArray(series) || series.length === 0) {
-          return;
-        }
-        const tail = series.slice(-50);
-        const name = ind.name || ind.key;
-        indicatorSnapshots[name] = tail;
-      });
-    }
-
-    const context = {
-      asset: selectedAsset,
-      timeframe: selectedTimeframe,
-      currentPrice: recentTicks[recentTicks.length - 1]?.price,
-      activeIndicators: activeIndicators.map((i) => i.name),
-      recentTicks,
-      indicatorSnapshots
-    };
-
-    const prompt = window.prompt('Ask AI about the current market context:');
-    if (!prompt) return;
-    try {
-      setIsAsking(true);
-      const response = await askAI({ prompt, context, image });
-      if (response && response.answer) {
-        window.alert(response.answer);
-      } else {
-        window.alert('AI did not return an answer.');
-      }
-    } catch (err) {
-      console.error('Ask AI failed:', err);
-      window.alert(`Ask AI failed: ${err.message}`);
-    } finally {
-      setIsAsking(false);
-    }
-  };
+  const handleOpenScreenshot = openScreenshot;
 
   return (
     <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-2xl quflx-section-light border border-gray-800 shadow-xl relative">
@@ -894,66 +656,21 @@ const ChartWorkspace = () => {
         <div className="flex-1 min-h-[220px] relative">
           <div className="w-full h-full">
             <ErrorBoundary>
-              <ChartContainer onChartReady={handleChartReady} />
+              <ChartContainer onChartReady={handleChartReady} onError={setError} />
             </ErrorBoundary>
           </div>
         </div>
 
-        {oscillatorIndicators.length > 0 && (
-          <>
-            {/* Enhanced Resize Handle */}
-            <div
-              className={`h-2 cursor-row-resize flex items-center justify-center transition-colors duration-200 ${
-                isDraggingOsc ? 'bg-accent-primary/40' : 'bg-gray-800/80 hover:bg-gray-700'
-              } border-y border-gray-700/50`}
-              onMouseDown={handleOscillatorDragStart}
-            >
-              <div className="flex gap-1">
-                <div className="w-1 h-1 rounded-full bg-gray-500"></div>
-                <div className="w-1 h-1 rounded-full bg-gray-500"></div>
-                <div className="w-1 h-1 rounded-full bg-gray-500"></div>
-              </div>
-            </div>
-            <div className="mt-1 flex flex-col" style={{ height: oscillatorHeight }}>
-              <div className="flex-1 flex flex-col gap-2 overflow-y-auto p-1">
-                {oscillatorIndicators.map((ind) => {
-                  const key = `${selectedAsset}|${selectedTimeframe}`;
-                  const seriesForKey = indicatorSeries && indicatorSeries[key];
-                  const data =
-                    seriesForKey && seriesForKey[ind.key] ? seriesForKey[ind.key] : [];
-                  const statusKey = indicatorStatus && indicatorStatus[key];
-
-                  const type =
-                    ind.key === 'macd_histogram' || ind.value === 'MACD' ? 'histogram' : 'line';
-
-                  return (
-                    <div
-                      key={ind.id}
-                      className="h-48 bg-gray-900/60 border border-gray-800 rounded relative"
-                    >
-                      <ErrorBoundary>
-                        <OscillatorChart
-                          mainChart={mainChart}
-                          data={data}
-                          type={type}
-                          title={ind.name}
-                          params={ind.params}
-                          indicatorValue={ind.value}
-                          onCrosshairTimeFromOscillator={handleCrosshairTimeFromOscillator}
-                        />
-                      </ErrorBoundary>
-                      {statusKey === 'loading' && (
-                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-[10px] text-gray-300">
-                          Loading {ind.name}...
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
+        <OscillatorPanel
+          mainChart={mainChart}
+          selectedAsset={selectedAsset}
+          selectedTimeframe={selectedTimeframe}
+          oscillatorIndicators={oscillatorIndicators}
+          indicatorSeries={indicatorSeries}
+          indicatorStatus={indicatorStatus}
+          onCrosshairTimeFromOscillator={handleCrosshairTimeFromOscillator}
+          onError={setError}
+        />
       </div>
     </Card>
   );

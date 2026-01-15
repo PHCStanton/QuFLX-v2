@@ -1,12 +1,15 @@
 import os
 import csv
 import re
+import logging
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 import re
 import csv
+
+logger = logging.getLogger(__name__)
 
 def persist_history_csv(asset: str, timeframe_min: int, candles: List[Dict[str, Any]]) -> None:
     """Persist candles to CSV so indicator endpoint can reuse the same history.
@@ -47,18 +50,19 @@ def persist_history_csv(asset: str, timeframe_min: int, candles: List[Dict[str, 
     # Always write to a NEW file as requested by user
     with filepath.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["timestamp", "open", "close", "high", "low"])
+        writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
         for c in candles:
             try:
                 ts = float(c.get("timestamp"))
                 # Use float timestamp for unified format consistency
                 open_ = float(c.get("open"))
-                close = float(c.get("close"))
                 high = float(c.get("high"))
                 low = float(c.get("low"))
+                close = float(c.get("close"))
+                volume = float(c.get("volume", 0.0))
             except Exception:
                 continue
-            writer.writerow([ts, open_, close, high, low])
+            writer.writerow([ts, open_, high, low, close, volume])
 
 def get_recent_history_file(asset: str, timeframe_min: int) -> Optional[Path]:
     """
@@ -115,6 +119,15 @@ def append_candle_to_history(asset: str, timeframe_min: int, candle: Dict[str, A
         # Check if timestamp already exists to avoid duplicates
         df = pd.read_csv(csv_path)
         new_ts = float(candle.get("timestamp") or candle.get("time"))
+
+        row = {
+            "timestamp": new_ts,
+            "open": float(candle.get("open")),
+            "high": float(candle.get("high")),
+            "low": float(candle.get("low")),
+            "close": float(candle.get("close")),
+            "volume": float(candle.get("volume", 0.0)),
+        }
         
         # If timestamp is exactly the same as last row, update it (it's the current candle)
         # But for 'registering new candles', we usually append a closed candle.
@@ -122,10 +135,9 @@ def append_candle_to_history(asset: str, timeframe_min: int, candle: Dict[str, A
             last_ts = float(df.iloc[-1]["timestamp"])
             if last_ts == new_ts:
                 # Update last row
-                df.loc[df.index[-1], "open"] = float(candle.get("open"))
-                df.loc[df.index[-1], "close"] = float(candle.get("close"))
-                df.loc[df.index[-1], "high"] = float(candle.get("high"))
-                df.loc[df.index[-1], "low"] = float(candle.get("low"))
+                for col, val in row.items():
+                    if col in df.columns:
+                        df.loc[df.index[-1], col] = val
                 df.to_csv(csv_path, index=False)
                 return True
             elif new_ts < last_ts:
@@ -133,16 +145,18 @@ def append_candle_to_history(asset: str, timeframe_min: int, candle: Dict[str, A
                 return False
 
         # Append new row
+        columns = list(df.columns) if not df.empty else [
+            "timestamp",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ]
         with csv_path.open("a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                new_ts,
-                float(candle.get("open")),
-                float(candle.get("close")),
-                float(candle.get("high")),
-                float(candle.get("low"))
-            ])
+            writer.writerow([row.get(col) for col in columns])
         return True
     except Exception as e:
-        print(f"Error appending candle to {csv_path}: {e}")
+        logger.error(f"Error appending candle to {csv_path}: {e}")
         return False

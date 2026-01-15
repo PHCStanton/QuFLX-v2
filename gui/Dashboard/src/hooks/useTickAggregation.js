@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
+const normalizeEpochSeconds = (value) => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const seconds = numeric > 10000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+  return Number.isFinite(seconds) ? seconds : null;
+};
+
 const useTickAggregation = ({
   marketData,
   selectedAssetKey,
@@ -9,6 +16,7 @@ const useTickAggregation = ({
   historyStatus,
   selectedAsset,
   onNewCandle,
+  onError,
   enableStreaming = true
 }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -28,8 +36,8 @@ const useTickAggregation = ({
   useEffect(() => {
     if (!candleSeries || !selectedAsset) return;
 
-    const status = historyStatus?.[selectedAsset];
-    const candles = historyCandles?.[selectedAsset];
+    const status = historyStatus && selectedAsset ? historyStatus[selectedAsset] : undefined;
+    const candles = historyCandles && selectedAsset ? historyCandles[selectedAsset] : undefined;
     
     // If no candles yet, check status
     if (!Array.isArray(candles)) return;
@@ -43,23 +51,26 @@ const useTickAggregation = ({
 
     const mapped = candles
       .map((c) => {
+        if (!c) return null;
         const ts = c.time !== undefined ? c.time : c.timestamp;
-        const time = ts > 10000000000 ? Math.floor(ts / 1000) : Math.floor(ts);
+        const time = normalizeEpochSeconds(ts);
+        if (time == null || time <= 0) return null;
+        const open = Number(c.open);
+        const high = Number(c.high);
+        const low = Number(c.low);
+        const close = Number(c.close);
+        if (!Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) {
+          return null;
+        }
         return {
           time,
-          open: Number(c.open),
-          high: Number(c.high),
-          low: Number(c.low),
-          close: Number(c.close),
+          open,
+          high,
+          low,
+          close
         };
       })
-      .filter((c) => 
-        Number.isFinite(c.time) && 
-        Number.isFinite(c.open) && 
-        Number.isFinite(c.high) && 
-        Number.isFinite(c.low) && 
-        Number.isFinite(c.close)
-      )
+      .filter(Boolean)
       .sort((a, b) => a.time - b.time);
 
     if (mapped.length === 0) {
@@ -92,9 +103,11 @@ const useTickAggregation = ({
     try {
       // If it's a tick-shaped payload (our live market_data path)
       if (latestData && latestData.price !== undefined && latestData.open === undefined) {
-        const price = latestData.price;
-        const timestamp = latestData.timestamp;
-        const time = timestamp > 10000000000 ? Math.floor(timestamp / 1000) : Math.floor(timestamp);
+        const price = Number(latestData.price);
+        const time = normalizeEpochSeconds(latestData.timestamp);
+        if (time == null || !Number.isFinite(price)) {
+          return;
+        }
         
         // Map selectedTimeframe to seconds
         const timeframeMap = {
@@ -133,7 +146,7 @@ const useTickAggregation = ({
             open: price,
             high: price,
             low: price,
-            close: price,
+            close: price
           };
         } else {
           // Update existing candle
@@ -160,17 +173,31 @@ const useTickAggregation = ({
              }
          }
          
-         candleSeries.update(candleData);
-         currentCandleRef.current = candleData;
+         if (candleData.time != null) {
+           candleSeries.update(candleData);
+           currentCandleRef.current = candleData;
+         }
       }
     } catch (err) {
       console.error("Error updating chart data:", err);
+      if (onError) {
+        const msg = err instanceof Error ? err.message : String(err);
+        onError(`Chart update error: ${msg}`);
+      }
     }
 
     // Hide loading state once we receive first data for this asset
     // We do this AFTER processing to ensure data is actually updating
     setIsLoading(false);
-  }, [marketData, selectedAssetKey, selectedTimeframe, candleSeries, enableStreaming]);
+  }, [
+    marketData,
+    selectedAssetKey,
+    selectedTimeframe,
+    candleSeries,
+    enableStreaming,
+    onNewCandle,
+    onError
+  ]);
 
   return { isLoading, setIsLoading, currentCandleRef };
 };

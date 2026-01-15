@@ -15,11 +15,14 @@ const formatPriceValue = (price) => {
   return value.replace(/\.0+$/, '').replace(/\.$/, '');
 };
 
-const ChartContainer = ({ onChartReady }) => {
+const ChartContainer = ({ onChartReady, onError }) => {
   const chartContainerRef = useRef(null);
+  const isDisposedRef = useRef(false);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
+
+    isDisposedRef.current = false;
 
     let chart;
     let series;
@@ -65,21 +68,41 @@ const ChartContainer = ({ onChartReady }) => {
       }
 
       const resizeObserver = new ResizeObserver((entries) => {
+        if (isDisposedRef.current || !chart) return;
         if (entries.length === 0 || !entries[0].contentRect) return;
         const { width, height } = entries[0].contentRect;
-        chart.applyOptions({ width, height });
+        try {
+          chart.applyOptions({ width, height });
+        } catch (err) {
+          if (!isDisposedRef.current) {
+            console.error('Chart resize failed', err);
+            if (onError) {
+              const msg = err instanceof Error ? err.message : String(err);
+              onError(`Chart resize failed: ${msg}`);
+            }
+          }
+        }
       });
 
       resizeObserver.observe(chartContainerRef.current);
 
       return () => {
+        isDisposedRef.current = true;
         resizeObserver.disconnect();
-        chart.remove();
+        try {
+          chart.remove();
+        } catch (err) {
+          console.error('Chart dispose failed', err);
+        }
       };
     } catch (err) {
       console.error("Critical error initializing chart:", err);
+      if (onError) {
+        const msg = err instanceof Error ? err.message : String(err);
+        onError(`Chart failed to initialize: ${msg}`);
+      }
     }
-  }, [onChartReady]);
+  }, [onChartReady, onError]);
 
   return <div ref={chartContainerRef} className="w-full h-full" />;
 };

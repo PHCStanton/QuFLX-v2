@@ -9,6 +9,7 @@ const OscillatorChart = ({
   params,
   indicatorValue,
   onCrosshairTimeFromOscillator,
+  onError,
 }) => {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -17,9 +18,12 @@ const OscillatorChart = ({
   const crosshairSubscriptionRef = useRef(null);
   const priceLinesRef = useRef([]);
   const dataRef = useRef([]);
+  const isDisposedRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    isDisposedRef.current = false;
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -83,17 +87,33 @@ const OscillatorChart = ({
     seriesRef.current = series;
 
     const resizeObserver = new ResizeObserver((entries) => {
+      if (isDisposedRef.current || !chartRef.current) return;
       if (entries.length === 0 || !entries[0].contentRect) return;
       const { width, height } = entries[0].contentRect;
-      chart.applyOptions({ width, height });
+      try {
+        chartRef.current.applyOptions({ width, height });
+      } catch (err) {
+        if (!isDisposedRef.current) {
+          console.error('Oscillator resize failed', err);
+          if (onError) {
+            const msg = err instanceof Error ? err.message : String(err);
+            onError(`Oscillator resize failed: ${msg}`);
+          }
+        }
+      }
     });
 
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      isDisposedRef.current = true;
       resizeObserver.disconnect();
       if (chartRef.current) {
-        chartRef.current.remove();
+        try {
+          chartRef.current.remove();
+        } catch (err) {
+          console.error('Oscillator chart dispose failed', err);
+        }
       }
       chartRef.current = null;
       seriesRef.current = null;
@@ -101,7 +121,7 @@ const OscillatorChart = ({
       crosshairSubscriptionRef.current = null;
       priceLinesRef.current = [];
     };
-  }, [type, params, indicatorValue, title]);
+  }, [type, params, indicatorValue, title, onError]);
 
   useEffect(() => {
     if (!mainChart || !chartRef.current || !mainChart.timeScale) {
@@ -109,16 +129,25 @@ const OscillatorChart = ({
     }
 
     const mainTimeScale = mainChart.timeScale();
-    const oscTimeScale = chartRef.current.timeScale();
-
     const sync = (range) => {
-      if (!range || range.from == null || range.to == null) {
+      if (isDisposedRef.current || !chartRef.current) {
+        return;
+      }
+      if (!range || typeof range.from !== 'number' || typeof range.to !== 'number') {
+        return;
+      }
+      if (!Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from >= range.to) {
         return;
       }
       try {
+        const oscTimeScale = chartRef.current.timeScale();
         oscTimeScale.setVisibleRange(range);
       } catch (err) {
         console.error('Failed to sync oscillator time scale', err);
+        if (onError) {
+          const msg = err instanceof Error ? err.message : String(err);
+          onError(`Oscillator chart sync failed: ${msg}`);
+        }
       }
     };
 
@@ -126,7 +155,11 @@ const OscillatorChart = ({
     
     // Trigger initial sync after a short delay to ensure both charts are ready
     const timeoutId = setTimeout(() => {
-      sync(mainTimeScale.getVisibleRange());
+      if (isDisposedRef.current) return;
+      const range = mainTimeScale.getVisibleRange();
+      if (range) {
+        sync(range);
+      }
     }, 100);
 
     syncSubscriptionRef.current = { mainTimeScale, sync };
@@ -141,7 +174,7 @@ const OscillatorChart = ({
       }
       syncSubscriptionRef.current = null;
     };
-  }, [mainChart, type, params, indicatorValue, title]);
+  }, [mainChart, type, params, indicatorValue, title, onError]);
 
   useEffect(() => {
     if (!seriesRef.current) return;

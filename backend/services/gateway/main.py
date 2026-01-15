@@ -113,7 +113,7 @@ sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 socket_app = socketio.ASGIApp(sio, app)
 
 # API Routers
-print(f"DEBUG: Registering assets router: {assets.router}")
+logger.debug(f"Registering assets router: {assets.router}")
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
 app.include_router(timeframe.router, prefix="/api/v1/timeframe", tags=["Timeframe"])
 app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
@@ -170,7 +170,7 @@ async def redis_listener():
 # Core Endpoints
 @app.get("/health")
 async def health_check():
-    print("DEBUG: Health check hit")
+    logger.debug("Health check hit")
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 @app.get("/api/v1/status")

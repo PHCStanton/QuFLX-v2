@@ -9,12 +9,18 @@ const normalizeAsset = (asset) => {
 
 const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
 
+const getErrorMessage = (err) => {
+  if (err instanceof Error) return err.message;
+  return String(err);
+};
+
 const createUiSlice = (set) => ({
   isSidebarOpen: false,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
   lastError: null,
+  setError: (message) => set({ lastError: message }),
   clearError: () => set({ lastError: null }),
   activeIndicators: [],
   addIndicator: (indicator) =>
@@ -91,9 +97,11 @@ const createMarketSlice = (set, get) => ({
         });
         if (!res.ok) {
           console.warn('[AutoSelect] Automation failed, falling back to manual mode');
+          set({ lastError: 'Auto-select failed. Falling back to manual mode.' });
         }
       } catch (err) {
         console.error('[AutoSelect] Network error during automation:', err);
+        set({ lastError: `Auto-select failed: ${getErrorMessage(err)}. Using manual mode.` });
       }
     }
 
@@ -102,6 +110,7 @@ const createMarketSlice = (set, get) => ({
         await get().loadHistory(asset);
       } catch (err) {
         console.error('Failed to load history:', err);
+        set({ lastError: `Failed to load history: ${getErrorMessage(err)}` });
       }
     } else {
       set((state) => ({
@@ -119,6 +128,9 @@ const createMarketSlice = (set, get) => ({
         await get().awaitStreamingForSelectedAsset(5000, 200);
       } catch (err) {
         console.error('Streaming readiness check failed in manual select:', err);
+        set({
+          lastError: `Streaming did not become ready: ${getErrorMessage(err)}. Check backend status.`
+        });
       }
     }
   },
@@ -139,6 +151,7 @@ const createMarketSlice = (set, get) => ({
         await selectAssetWithSync(asset);
       } catch (err) {
         console.error('Asset Run failed for', asset, err);
+        set({ lastError: `Asset Run failed for ${asset}: ${getErrorMessage(err)}` });
       }
     }
   },
@@ -169,6 +182,7 @@ const createMarketSlice = (set, get) => ({
       socket.emit('star_asset', asset);
     } else {
       console.error('Cannot star asset: socket not connected');
+      set({ lastError: 'Cannot star asset: not connected to backend.' });
     }
   },
   selectedTimeframe: '1m',
@@ -329,10 +343,13 @@ const createMarketSlice = (set, get) => ({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        console.error('Failed to append candle:', errorData.detail || 'Unknown error');
+        const detail = errorData.detail || 'Unknown error';
+        console.error('Failed to append candle:', detail);
+        set({ lastError: `Failed to append candle: ${detail}` });
       }
     } catch (err) {
       console.error('Network error appending candle:', err);
+      set({ lastError: `Network error appending candle: ${getErrorMessage(err)}` });
     }
   },
   historyCandles: {},
@@ -541,6 +558,7 @@ const createMarketSlice = (set, get) => ({
       }
     } catch (err) {
       console.error('Failed to refresh assets:', err);
+      set({ lastError: `Failed to refresh assets: ${getErrorMessage(err)}` });
     }
   },
   collectHistory: async () => {
@@ -609,7 +627,10 @@ const createConnectionSlice = (set, get) => ({
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      set({ wsStatus: 'error' });
+      set({
+        wsStatus: 'error',
+        lastError: `Connection failed: ${getErrorMessage(err)}. Check if backend is running.`
+      });
     });
 
   socket.on('market_data', (data) => {

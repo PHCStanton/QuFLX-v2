@@ -405,7 +405,8 @@ class TechnicalIndicatorsPipeline:
             pf_max = pf.rolling(window=d_pf).max()
 
             pf_range = pf_max - pf_min
-            stc = 100 * (pf - pf_min) / pf_range.replace(0, np.nan)
+            stc = 100 * (pf - pf_min) / pf_range.replace(0, 1e-12)
+            stc = stc.clip(lower=0, upper=100)
 
             df['schaff_tc'] = stc.ewm(span=d_pf, adjust=False).mean()
             

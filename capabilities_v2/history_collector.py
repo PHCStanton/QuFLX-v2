@@ -41,7 +41,7 @@ class Candle:
         # Platforms usually use ISO or unix timestamp.
         # main.py uses c.get("timestamp") directly.
         # I'll stick to what main.py does for row consistency.
-        return [self.timestamp, self.open, self.close, self.high, self.low]
+        return [self.timestamp, self.open, self.high, self.low, self.close, self.volume]
 
     def to_ohlc(self, asset: str, timeframe: Any) -> Dict[str, Any]:
         tf_str = str(timeframe).lower().strip()
@@ -509,11 +509,11 @@ class HistoryCollector(Capability):
         save_dir.mkdir(parents=True, exist_ok=True)
         filepath = save_dir / filename
 
-        # Unified format: timestamp,open,close,high,low (no volume)
+        # Unified format: timestamp,open,high,low,close,volume
         # Always write to a NEW file (no appending) as requested
         with filepath.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["timestamp", "open", "close", "high", "low"])
+            writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
             for c in candles:
                 writer.writerow(c.to_csv_row())
 
