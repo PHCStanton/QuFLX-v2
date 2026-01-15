@@ -79,6 +79,7 @@ const createMarketSlice = (set, get) => ({
     // Check if Auto-Select is enabled in Settings
     const { settings } = (await import('./settingsStore')).default.getState();
     const autoSelect = settings.automation.autoSelectAssets;
+    const dataSourceMode = settings.analysis?.dataSourceMode || 'history_and_streaming';
 
     if (autoSelect) {
       console.log(`[AutoSelect] Triggering automation for ${asset}...`);
@@ -96,22 +97,29 @@ const createMarketSlice = (set, get) => ({
       }
     }
 
-    // 1. Load History (This will now wait for the user to click in Pocket Option if auto-select failed/disabled)
-    try {
-      await get().loadHistory(asset);
-    } catch (err) {
-      console.error('Failed to load history:', err);
+    if (dataSourceMode !== 'streaming_only') {
+      try {
+        await get().loadHistory(asset);
+      } catch (err) {
+        console.error('Failed to load history:', err);
+      }
+    } else {
+      set((state) => ({
+        historyCandles: { ...state.historyCandles, [asset]: [] },
+        historyStatus: { ...state.historyStatus, [asset]: 'skipped' }
+      }));
     }
 
     set({ selectedAssetLoading: false });
 
-    // 2. Start live stream only after history is ready (or failed)
-    get().syncSubscriptions(nextAssetKey);
+    if (dataSourceMode !== 'history_only') {
+      get().syncSubscriptions(nextAssetKey);
 
-    try {
-      await get().awaitStreamingForSelectedAsset(5000, 200);
-    } catch (err) {
-      console.error('Streaming readiness check failed in manual select:', err);
+      try {
+        await get().awaitStreamingForSelectedAsset(5000, 200);
+      } catch (err) {
+        console.error('Streaming readiness check failed in manual select:', err);
+      }
     }
   },
   selectAssetWithSync: async (asset) => {
@@ -218,7 +226,7 @@ const createMarketSlice = (set, get) => ({
   },
   indicatorSeries: {},
   indicatorStatus: {},
-  loadIndicators: async ({ asset, timeframe, indicators, params }) => {
+  loadIndicators: async ({ asset, timeframe, indicators, params, currentCandle }) => {
     if (!asset || !timeframe || !Array.isArray(indicators) || indicators.length === 0) {
       return;
     }
@@ -255,7 +263,8 @@ const createMarketSlice = (set, get) => ({
       const payload = {
         asset,
         timeframe,
-        indicators
+        indicators,
+        current_candle: currentCandle
       };
 
       if (params && typeof params === 'object' && !Array.isArray(params)) {
@@ -306,6 +315,24 @@ const createMarketSlice = (set, get) => ({
         },
         lastError: `Network error loading indicators: ${err.message}`
       }));
+    }
+  },
+  appendCandle: async ({ asset, timeframe, candle }) => {
+    if (!asset || !candle) return;
+
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/history/append-candle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset, timeframe, candle })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Failed to append candle:', errorData.detail || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Network error appending candle:', err);
     }
   },
   historyCandles: {},

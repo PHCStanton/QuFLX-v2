@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSettingsStore from '../store/settingsStore';
 import { 
   SettingsSection, 
@@ -12,6 +12,12 @@ import { Save, RotateCcw, Download } from 'lucide-react';
 
 const SettingsPanel = () => {
   const { settings, updateSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
+  const sidebarSkinFileInputRef = useRef(null);
+  const [sidebarSkinError, setSidebarSkinError] = useState('');
+
+  const sidebarSkinPreviewUrl = useMemo(() => {
+    return settings.global.sidebarSkinDataUrl || '';
+  }, [settings.global.sidebarSkinDataUrl]);
 
   useEffect(() => {
     fetchSettings();
@@ -22,6 +28,46 @@ const SettingsPanel = () => {
     if (success) {
       // Could add a toast notification here
       console.log('Settings saved successfully');
+    }
+  };
+
+  const handleSidebarSkinUpload = (file) => {
+    if (!file) return;
+
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(file.type)) {
+      setSidebarSkinError('Please upload a JPG, PNG, or WebP image.');
+      return;
+    }
+
+    const maxBytes = 2 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setSidebarSkinError('Image is too large. Please use an image under 2MB.');
+      return;
+    }
+
+    setSidebarSkinError('');
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) {
+        setSidebarSkinError('Could not read that image.');
+        return;
+      }
+      updateSection('global', { sidebarSkinDataUrl: result });
+    };
+    reader.onerror = () => {
+      setSidebarSkinError('Could not read that image.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSidebarSkinClear = () => {
+    updateSection('global', { sidebarSkinDataUrl: null });
+    setSidebarSkinError('');
+    if (sidebarSkinFileInputRef.current) {
+      sidebarSkinFileInputRef.current.value = '';
     }
   };
 
@@ -62,6 +108,42 @@ const SettingsPanel = () => {
               ]}
               onChange={(val) => updateSection('global', { theme: val })}
             />
+          </SettingRow>
+          <SettingRow label="Add Skin" description="Upload a 16:9 image for the sidebar background">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <input
+                  ref={sidebarSkinFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => handleSidebarSkinUpload(e.target.files?.[0] || null)}
+                  className="text-xs text-text-secondary"
+                />
+                <button
+                  type="button"
+                  onClick={handleSidebarSkinClear}
+                  disabled={!settings.global.sidebarSkinDataUrl}
+                  className="px-3 py-2 rounded bg-section-bg hover:bg-section-bg/80 text-text-primary text-xs font-medium border border-border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Remove
+                </button>
+              </div>
+              {sidebarSkinError && (
+                <div className="text-xs text-red-400">{sidebarSkinError}</div>
+              )}
+              {sidebarSkinPreviewUrl && (
+                <div className="flex items-center gap-3">
+                  <img
+                    src={sidebarSkinPreviewUrl}
+                    alt="Sidebar skin preview"
+                    className="w-28 h-16 rounded border border-border-primary object-cover"
+                  />
+                  <div className="text-xs text-text-secondary">
+                    Applied to the left sidebar background.
+                  </div>
+                </div>
+              )}
+            </div>
           </SettingRow>
           <SettingRow label="Language" description="Interface language">
             <DropdownInput 
@@ -127,6 +209,17 @@ const SettingsPanel = () => {
 
         {/* Analysis & Charting */}
         <SettingsSection title="Analysis & Charting">
+          <SettingRow label="Data Source Mode" description="Controls how chart data is populated">
+            <DropdownInput
+              value={settings.analysis.dataSourceMode}
+              options={[
+                { label: 'History + Streaming', value: 'history_and_streaming' },
+                { label: 'History Only', value: 'history_only' },
+                { label: 'Streaming Only', value: 'streaming_only' }
+              ]}
+              onChange={(val) => updateSection('analysis', { dataSourceMode: val })}
+            />
+          </SettingRow>
           <SettingRow label="Default Timeframe" description="Starting timeframe when switching assets">
             <DropdownInput 
               value={settings.analysis.defaultTimeframe}

@@ -11,6 +11,7 @@ const defaultSettings = {
     autoStartCollector: true,
     autoStartGateway: true,
     debugLevel: 'info',
+    sidebarSkinDataUrl: null,
   },
   automation: {
     historyWaitTime: 15,
@@ -22,6 +23,7 @@ const defaultSettings = {
     defaultTimeframe: '1m',
     chartPrecision: 5,
     autoLoadIndicators: false,
+    dataSourceMode: 'history_and_streaming',
   },
   ai: {
     responseVerbosity: 'balanced',
@@ -42,6 +44,15 @@ const defaultSettings = {
   strategyLab: {}
 };
 
+const sanitizeSettingsForBackend = (settings) => {
+  const next = { ...settings };
+  if (next.global) {
+    next.global = { ...next.global };
+    delete next.global.sidebarSkinDataUrl;
+  }
+  return next;
+};
+
 const useSettingsStore = create(
   persist(
     (set, get) => ({
@@ -50,10 +61,51 @@ const useSettingsStore = create(
       // Initialize settings from backend if possible
       fetchSettings: async () => {
         try {
+          const current = get().settings;
+          const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
           const response = await fetch('/api/v1/settings');
           if (response.ok) {
             const backendSettings = await response.json();
-            set({ settings: { ...get().settings, ...backendSettings } });
+
+            const merged = {
+              ...current,
+              ...backendSettings,
+              global: {
+                ...(current.global || {}),
+                ...(backendSettings.global || {}),
+                sidebarSkinDataUrl: localSidebarSkinDataUrl,
+              },
+              automation: {
+                ...(current.automation || {}),
+                ...(backendSettings.automation || {}),
+              },
+              analysis: {
+                ...(current.analysis || {}),
+                ...(backendSettings.analysis || {}),
+              },
+              ai: {
+                ...(current.ai || {}),
+                ...(backendSettings.ai || {}),
+              },
+              userProfile: {
+                ...(current.userProfile || {}),
+                ...(backendSettings.userProfile || {}),
+              },
+              riskManager: {
+                ...(current.riskManager || {}),
+                ...(backendSettings.riskManager || {}),
+              },
+              calendarJournal: {
+                ...(current.calendarJournal || {}),
+                ...(backendSettings.calendarJournal || {}),
+              },
+              strategyLab: {
+                ...(current.strategyLab || {}),
+                ...(backendSettings.strategyLab || {}),
+              },
+            };
+
+            set({ settings: merged });
           }
         } catch (error) {
           console.error('Failed to fetch settings from backend:', error);
@@ -63,14 +115,57 @@ const useSettingsStore = create(
       // Save settings to backend
       saveSettings: async (newSettings) => {
         try {
+          const current = get().settings;
+          const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
+
+          const payload = sanitizeSettingsForBackend(newSettings || current);
           const response = await fetch('/api/v1/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newSettings || get().settings),
+            body: JSON.stringify(payload),
           });
           if (response.ok) {
             const saved = await response.json();
-            set({ settings: saved });
+
+            const merged = {
+              ...current,
+              ...saved,
+              global: {
+                ...(current.global || {}),
+                ...(saved.global || {}),
+                sidebarSkinDataUrl: localSidebarSkinDataUrl,
+              },
+              automation: {
+                ...(current.automation || {}),
+                ...(saved.automation || {}),
+              },
+              analysis: {
+                ...(current.analysis || {}),
+                ...(saved.analysis || {}),
+              },
+              ai: {
+                ...(current.ai || {}),
+                ...(saved.ai || {}),
+              },
+              userProfile: {
+                ...(current.userProfile || {}),
+                ...(saved.userProfile || {}),
+              },
+              riskManager: {
+                ...(current.riskManager || {}),
+                ...(saved.riskManager || {}),
+              },
+              calendarJournal: {
+                ...(current.calendarJournal || {}),
+                ...(saved.calendarJournal || {}),
+              },
+              strategyLab: {
+                ...(current.strategyLab || {}),
+                ...(saved.strategyLab || {}),
+              },
+            };
+
+            set({ settings: merged });
             return true;
           }
         } catch (error) {

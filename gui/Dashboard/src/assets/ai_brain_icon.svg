@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Hexagonal brain outline -->
+  <path d="M24 4 L40 12 L40 28 L32 36 L24 44 L16 36 L8 28 L8 12 Z" fill="none"/>
+  
+  <!-- Brain internal structure - left hemisphere -->
+  <path d="M16 16 C14 18 14 22 16 24 C14 26 14 30 16 32"/>
+  <path d="M20 14 C18 16 18 20 20 22 C18 24 18 28 20 30"/>
+  
+  <!-- Brain internal structure - right hemisphere -->
+  <path d="M32 16 C34 18 34 22 32 24 C34 26 34 30 32 32"/>
+  <path d="M28 14 C30 16 30 20 28 22 C30 24 30 28 28 30"/>
+  
+  <!-- Center connection -->
+  <path d="M24 12 L24 36"/>
+  <path d="M20 22 L28 22"/>
+  <path d="M20 26 L28 26"/>
+  
+  <!-- Neural network nodes -->
+  <circle cx="12" cy="12" r="2"/>
+  <circle cx="36" cy="12" r="2"/>
+  <circle cx="12" cy="36" r="2"/>
+  <circle cx="36" cy="36" r="2"/>
+  
+  <!-- Connection lines to nodes -->
+  <line x1="14" y1="13" x2="16" y2="16"/>
+  <line x1="34" y1="13" x2="32" y2="16"/>
+  <line x1="14" y1="35" x2="16" y2="32"/>
+  <line x1="34" y1="35" x2="32" y2="32"/>
+</svg>

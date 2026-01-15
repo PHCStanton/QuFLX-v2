@@ -8,7 +8,8 @@ const useTickAggregation = ({
   historyCandles,
   historyStatus,
   selectedAsset,
-  onNewCandle
+  onNewCandle,
+  enableStreaming = true
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const currentCandleRef = useRef(null);
@@ -82,6 +83,7 @@ const useTickAggregation = ({
 
   // Handle Tick Aggregation
   useEffect(() => {
+    if (!enableStreaming) return;
     const seriesTicks = marketData[selectedAssetKey];
     if (!Array.isArray(seriesTicks) || seriesTicks.length === 0 || !candleSeries) return;
 
@@ -122,7 +124,7 @@ const useTickAggregation = ({
         if (!candle || candle.time !== candleTime) {
           // If it's a new bucket and we had a previous candle, it means the previous one just finished
           if (candle && onNewCandle) {
-            onNewCandle();
+            onNewCandle(candle); // Pass the finished candle
           }
 
           // Start new candle
@@ -168,9 +170,9 @@ const useTickAggregation = ({
     // Hide loading state once we receive first data for this asset
     // We do this AFTER processing to ensure data is actually updating
     setIsLoading(false);
-  }, [marketData, selectedAssetKey, selectedTimeframe, candleSeries]);
+  }, [marketData, selectedAssetKey, selectedTimeframe, candleSeries, enableStreaming]);
 
-  return { isLoading, setIsLoading };
+  return { isLoading, setIsLoading, currentCandleRef };
 };
 
 export default useTickAggregation;

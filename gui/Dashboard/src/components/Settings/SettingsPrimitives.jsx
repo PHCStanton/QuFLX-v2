@@ -5,7 +5,7 @@ export const SettingsSection = ({ title, children, defaultOpen = true }) => {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
   return (
-    <div className="mb-4 rounded-lg border border-border-primary quflx-section-light overflow-hidden shadow-sm dark:shadow-none">
+    <div className="mb-4 rounded-lg border border-border-primary quflx-section-light overflow-hidden quflx-settings-card">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center justify-between p-3 text-left hover:bg-white/5 transition-colors"

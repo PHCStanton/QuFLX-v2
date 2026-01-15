@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Neomorphic Sync Buttons with Click Animation</title>
+
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(to bottom right, #e5e7eb, #d1d5db);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 100px;
+      font-family: system-ui, sans-serif;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 90px;
+    }
+
+    .sync-btn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.35s ease;
+      position: relative;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    .sync-icon {
+      width: 52px;
+      height: 52px;
+      color: currentColor;
+      transition: transform 0.9s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    /* Light version */
+    .light {
+      background: linear-gradient(145deg, #ffffff, #e0e0e0);
+      box-shadow: 
+        12px 12px 24px rgba(0,0,0,0.12),
+        -12px -12px 24px rgba(255,255,255,0.9),
+        inset 0 0 12px rgba(255,255,255,0.6);
+    }
+
+    .light:hover {
+      box-shadow: 
+        8px 8px 16px rgba(0,0,0,0.14),
+        -8px -8px 16px rgba(255,255,255,1),
+        0 0 30px rgba(100,200,255,0.35);
+      transform: translateY(-4px);
+    }
+
+    .light:active {
+      box-shadow: 
+        inset 10px 10px 20px rgba(0,0,0,0.08),
+        inset -10px -10px 20px rgba(255,255,255,0.7);
+      transform: translateY(2px);
+    }
+
+    .light .sync-icon {
+      color: #1f2937;
+    }
+
+    /* Dark version */
+    .dark {
+      background: linear-gradient(145deg, #2d3748, #1a202c);
+      box-shadow: 
+        12px 12px 24px rgba(0,0,0,0.55),
+        -8px -8px 16px rgba(60,70,90,0.35),
+        inset 0 0 10px rgba(0,0,0,0.4);
+    }
+
+    .dark:hover {
+      box-shadow: 
+        8px 8px 20px rgba(0,0,0,0.65),
+        -6px -6px 14px rgba(70,80,100,0.4),
+        0 0 40px rgba(100,200,255,0.3);
+      transform: translateY(-4px);
+    }
+
+    .dark:active {
+      box-shadow: 
+        inset 12px 12px 24px rgba(0,0,0,0.7),
+        inset -12px -12px 24px rgba(40,50,70,0.25);
+      transform: translateY(2px);
+    }
+
+    .dark .sync-icon {
+      color: #e2e8f0;
+    }
+
+    /* Click animation: one full rotation with overshoot */
+    .sync-btn.clicked .sync-icon {
+      animation: sync-rotate 0.9s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+    }
+
+    @keyframes sync-rotate {
+      0%   { transform: rotate(0deg); }
+      60%  { transform: rotate(360deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="buttons">
+    <!-- Light mode -->
+    <div class="sync-btn light" onclick="this.classList.add('clicked'); setTimeout(() => this.classList.remove('clicked'), 1000)">
+      <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+      </svg>
+    </div>
+
+    <!-- Dark mode -->
+    <div class="sync-btn dark" onclick="this.classList.add('clicked'); setTimeout(() => this.classList.remove('clicked'), 1000)">
+      <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+      </svg>
+    </div>
+  </div>
+
+  <script>
+    // Optional: reset animation class after it finishes (already handled by timeout)
+  </script>
+
+</body>
+</html>

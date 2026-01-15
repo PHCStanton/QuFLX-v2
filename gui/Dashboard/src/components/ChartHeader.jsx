@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Combobox from './Combobox';
 import { X, Layers, Clock, FileText, Plus, RefreshCcw } from 'lucide-react';
 import ChartActions from './ChartActions';
@@ -24,6 +25,15 @@ const ChartHeader = ({
   onSyncTimeframe,
   isSyncingTimeframe
 }) => {
+  const [syncClicked, setSyncClicked] = useState(false);
+
+  const handleSyncClick = async () => {
+    if (!onSyncTimeframe || isSyncingTimeframe) return;
+    setSyncClicked(true);
+    window.setTimeout(() => setSyncClicked(false), 1000);
+    await onSyncTimeframe();
+  };
+
   return (
     <div className="p-1.5 border-b border-border-primary bg-card-bg/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
       <div className="flex items-center gap-2">
@@ -47,12 +57,13 @@ const ChartHeader = ({
         {onSyncTimeframe && (
           <button
             type="button"
-            onClick={onSyncTimeframe}
+            onClick={handleSyncClick}
             disabled={isSyncingTimeframe}
-            className="inline-flex items-center px-2 py-1 text-[11px] rounded-md bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-60"
+            title="Sync TimeFrame with Platform"
+            aria-label="Sync TimeFrame with Platform"
+            className={`quflx-neo-icon-btn disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''}`}
           >
-            <RefreshCcw className="w-3 h-3 mr-1" />
-            {isSyncingTimeframe ? 'Syncing TF' : 'Sync TF UI'}
+            <RefreshCcw className="w-4 h-4 quflx-neo-btn__icon" />
           </button>
         )}
 
@@ -84,6 +95,7 @@ const ChartHeader = ({
                 id,
                 name: meta.label,
                 value,
+                type: val, // Unique indicator type (e.g., 'bollinger_bands', 'rsi')
                 key: meta.key,
                 kind: meta.kind,
                 source: meta.source || 'backend',

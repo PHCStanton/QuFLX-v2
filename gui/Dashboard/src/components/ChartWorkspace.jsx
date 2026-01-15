@@ -3,6 +3,7 @@ import { LineSeries, LineStyle } from 'lightweight-charts';
 import html2canvas from 'html2canvas';
 import Card from './Card';
 import useMarketStore from '../store/marketStore';
+import useSettingsStore from '../store/settingsStore';
 import ChartContainer from './ChartContainer';
 import ChartHeader from './ChartHeader';
 import useTickAggregation from '../hooks/useTickAggregation';
@@ -12,8 +13,10 @@ import { saveChartScreenshot } from '../api/screenshotClient';
 import ScreenshotModal from './ScreenshotModal';
 import OscillatorChart from './OscillatorChart';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
+import ErrorBoundary from './ErrorBoundary';
 
 const ChartWorkspace = () => {
+  const { settings } = useSettingsStore();
   const { 
     selectedAsset, setSelectedAsset,
     selectedAssetKey,
@@ -27,11 +30,14 @@ const ChartWorkspace = () => {
     indicatorSeries,
     indicatorStatus,
     loadIndicators,
+    appendCandle,
     lastError, clearError,
     syncTimeframeUi,
   } = useMarketStore();
 
   const health = useStreamHealth();
+  const dataSourceMode = settings?.analysis?.dataSourceMode || 'history_and_streaming';
+  const enableStreaming = dataSourceMode !== 'history_only';
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
   const [isAsking, setIsAsking] = useState(false);
@@ -119,15 +125,17 @@ const ChartWorkspace = () => {
         let upper;
         let lower;
 
-        if (ind.value === 'bollinger_bands') {
+        const type = ind.type || ind.value;
+
+        if (type === 'bollinger_bands') {
           // Purple for Bollinger Bands
           series = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 2, title: 'BB Middle' });
           upper = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB Upper' });
           lower = mainChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB Lower' });
-        } else if (ind.value === 'supertrend') {
+        } else if (type === 'supertrend') {
           // Pink for SuperTrend
           series = mainChart.addSeries(LineSeries, { color: '#ec4899', lineWidth: 2, title: 'SuperTrend' });
-        } else if (ind.value === 'ema') {
+        } else if (type === 'ema') {
           // Amber for EMA
           series = mainChart.addSeries(LineSeries, { color: '#fbbf24', lineWidth: 2, title: `EMA ${ind.params?.period || 16}` });
         } else {
@@ -143,21 +151,23 @@ const ChartWorkspace = () => {
       
       // Update title/options if parameters changed
       const currentParamsHash = JSON.stringify(ind.params);
+      const type = ind.type || ind.value;
+
       if (seriesObj.lastParamsHash !== currentParamsHash) {
-        if (ind.value === 'ema') {
+        if (type === 'ema') {
           seriesObj.series.applyOptions({ title: `EMA ${ind.params?.period || 16}` });
-        } else if (ind.value === 'bollinger_bands') {
+        } else if (type === 'bollinger_bands') {
           seriesObj.series.applyOptions({ title: 'BB Middle' });
           if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper' });
           if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower' });
-        } else if (ind.value === 'supertrend') {
+        } else if (type === 'supertrend') {
           seriesObj.series.applyOptions({ title: 'SuperTrend' });
         }
         seriesObj.lastParamsHash = currentParamsHash;
       }
 
       // Special handling for multi-line indicators
-      if (ind.value === 'bollinger_bands') {
+      if (type === 'bollinger_bands') {
         const upperData = seriesForKey['bb_upper'] || [];
         const lowerData = seriesForKey['bb_lower'] || [];
         
@@ -168,7 +178,7 @@ const ChartWorkspace = () => {
           if (seriesObj.lower) seriesObj.lower.setData(lowerData);
           seriesObj.lastDataHash = dataHash;
         }
-      } else if (ind.value === 'supertrend') {
+      } else if (type === 'supertrend') {
         const dataHash = JSON.stringify(data.slice(-1));
         if (seriesObj.lastDataHash !== dataHash) {
           seriesObj.series.setData(data);
@@ -208,11 +218,23 @@ const ChartWorkspace = () => {
     historyCandles,
     historyStatus,
     selectedAsset,
-    onNewCandle: useCallback(() => {
+    onNewCandle: useCallback(async (candle) => {
       // Logic for new candle formed
-      if (health !== 'streaming' || activeIndicators.length === 0) {
+      if (health !== 'streaming') {
         return;
       }
+
+      // 1. Persist the closed candle to history CSV
+      if (candle) {
+        await appendCandle({
+          asset: selectedAsset,
+          timeframe: selectedTimeframe,
+          candle
+        });
+      }
+
+      // 2. Refresh indicators if any are active
+      if (activeIndicators.length === 0) return;
 
       const indicators = [];
       const paramsByKey = {};
@@ -233,7 +255,9 @@ const ChartWorkspace = () => {
         indicators,
         params: Object.keys(paramsByKey).length > 0 ? paramsByKey : undefined
       });
-    }, [health, selectedAsset, selectedTimeframe, activeIndicators, loadIndicators])
+    }, [health, selectedAsset, selectedTimeframe, activeIndicators, loadIndicators, appendCandle])
+    ,
+    enableStreaming
   });
 
   // Effect to load indicators when asset, timeframe or activeIndicators change
@@ -869,7 +893,9 @@ const ChartWorkspace = () => {
         )}
         <div className="flex-1 min-h-[220px] relative">
           <div className="w-full h-full">
-            <ChartContainer onChartReady={handleChartReady} />
+            <ErrorBoundary>
+              <ChartContainer onChartReady={handleChartReady} />
+            </ErrorBoundary>
           </div>
         </div>
 
@@ -905,15 +931,17 @@ const ChartWorkspace = () => {
                       key={ind.id}
                       className="h-48 bg-gray-900/60 border border-gray-800 rounded relative"
                     >
-                      <OscillatorChart
-                        mainChart={mainChart}
-                        data={data}
-                        type={type}
-                        title={ind.name}
-                        params={ind.params}
-                        indicatorValue={ind.value}
-                        onCrosshairTimeFromOscillator={handleCrosshairTimeFromOscillator}
-                      />
+                      <ErrorBoundary>
+                        <OscillatorChart
+                          mainChart={mainChart}
+                          data={data}
+                          type={type}
+                          title={ind.name}
+                          params={ind.params}
+                          indicatorValue={ind.value}
+                          onCrosshairTimeFromOscillator={handleCrosshairTimeFromOscillator}
+                        />
+                      </ErrorBoundary>
                       {statusKey === 'loading' && (
                         <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-[10px] text-gray-300">
                           Loading {ind.name}...

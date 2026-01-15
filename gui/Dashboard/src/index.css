@@ -102,7 +102,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url('./assets/textures/Blue_Dark_BG8.jpg');
+  background-image: var(--quflx-sidebar-bg-image, url('./assets/textures/Blue_Dark_BG8.jpg'));
   background-size: cover;
   background-position: center;
   opacity: 0.50;
@@ -110,7 +110,7 @@
 }
 
 .theme-light .quflx-sidebar::before {
-  background-image: url('./assets/textures/Anime_Girl_BG1.jpg');
+  background-image: var(--quflx-sidebar-bg-image, url('./assets/textures/Anime_Girl_BG1.jpg'));
   opacity: 0.3;
   filter: brightness(1.1) contrast(1.1);
 }
@@ -210,12 +210,20 @@
     0 0 20px rgba(255, 255, 255, 0.3);
 }
 
+.quflx-screenshot-btn:hover {
+  color: #fc7171;
+}
+
 .theme-light .quflx-screenshot-btn:hover,
 .theme-light .quflx-ai-btn:hover {
   box-shadow: 
     6px 6px 12px rgba(0, 0, 0, 0.15),
     -3px -3px 8px rgba(255, 255, 255, 1),
     0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.theme-light .quflx-screenshot-btn:hover {
+  color: #fc7171;
 }
 
 .quflx-screenshot-btn:active,
@@ -242,9 +250,185 @@
   z-index: 2;
 }
 
-.quflx-screenshot-btn:hover svg,
 .quflx-ai-btn:hover svg {
-  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
+  filter: drop-shadow(0 0 5px rgba(195, 0, 255, 0.85));
+}
+
+.quflx-screenshot-btn:hover svg {
+  filter: drop-shadow(0 0 4px rgba(252, 113, 113, 0.65));
+}
+
+.quflx-neo-icon-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.35s ease;
+  background: linear-gradient(145deg, #2d3748, #1a202c);
+  box-shadow:
+    10px 10px 20px rgba(0, 0, 0, 0.55),
+    -6px -6px 14px rgba(60, 70, 90, 0.35),
+    inset 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.theme-light .quflx-neo-icon-btn {
+  background: linear-gradient(145deg, #ffffff, #e0e0e0);
+  box-shadow:
+    10px 10px 20px rgba(0, 0, 0, 0.12),
+    -8px -8px 14px rgba(255, 255, 255, 0.85),
+    inset 0 0 12px rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(233, 211, 5, 0.25) !important;
+}
+
+.quflx-neo-icon-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    8px 8px 20px rgba(0, 0, 0, 0.65),
+    -5px -5px 10px rgba(70, 80, 100, 0.35),
+    0 0 18px rgba(100, 200, 255, 0.22);
+}
+
+.theme-light .quflx-neo-icon-btn:hover {
+  box-shadow:
+    8px 8px 16px rgba(0, 0, 0, 0.14),
+    -6px -6px 1px rgba(255, 255, 255, 0.9),
+    0 0 16px rgba(100, 200, 255, 0.22);
+}
+
+.quflx-neo-icon-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 12px 12px 24px rgba(0, 0, 0, 0.7),
+    inset -12px -12px 24px rgba(40, 50, 70, 0.25);
+}
+
+.theme-light .quflx-neo-icon-btn:active {
+  box-shadow:
+    inset 10px 10px 20px rgba(0, 0, 0, 0.08),
+    inset -8px -8px 14px rgba(255, 255, 255, 0.6);
+}
+
+.quflx-neo-square-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.35s ease;
+  background: linear-gradient(145deg, #2d3748, #1a202c);
+  box-shadow:
+    10px 10px 20px rgba(0, 0, 0, 0.55),
+    -6px -6px 14px rgba(60, 70, 90, 0.35),
+    inset 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.theme-light .quflx-neo-square-btn {
+  background: linear-gradient(145deg, #ffffff, #e0e0e0);
+  box-shadow:
+    10px 10px 20px rgba(0, 0, 0, 0.12),
+    -8px -8px 14px rgba(255, 255, 255, 0.85),
+    inset 0 0 12px rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(233, 211, 5, 0.25) !important;
+}
+
+.quflx-neo-square-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    8px 8px 20px rgba(0, 0, 0, 0.65),
+    -5px -5px 10px rgba(70, 80, 100, 0.35),
+    0 0 18px rgba(100, 200, 255, 0.22);
+}
+
+.theme-light .quflx-neo-square-btn:hover {
+  box-shadow:
+    8px 8px 16px rgba(0, 0, 0, 0.14),
+    -6px -6px 10px rgba(255, 255, 255, 0.9),
+    0 0 16px rgba(100, 200, 255, 0.22);
+}
+
+.quflx-neo-square-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 12px 12px 24px rgba(0, 0, 0, 0.7),
+    inset -12px -12px 24px rgba(40, 50, 70, 0.25);
+}
+
+.theme-light .quflx-neo-square-btn:active {
+  box-shadow:
+    inset 10px 10px 20px rgba(0, 0, 0, 0.08),
+    inset -8px -8px 14px rgba(255, 255, 255, 0.6);
+}
+
+.quflx-neo-pill-btn {
+  border-radius: 9999px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.35s ease;
+  background: linear-gradient(145deg, #2d3748, #1a202c);
+  box-shadow:
+    10px 10px 20px rgba(0, 0, 0, 0.55),
+    -6px -6px 14px rgba(60, 70, 90, 0.35),
+    inset 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.theme-light .quflx-neo-pill-btn {
+  background: linear-gradient(145deg, #ffffff, #e0e0e0);
+  box-shadow:
+    10px 10px 20px rgba(0, 0, 0, 0.12),
+    -8px -8px 14px rgba(255, 255, 255, 0.85),
+    inset 0 0 12px rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(233, 211, 5, 0.25) !important;
+}
+
+.quflx-neo-pill-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    8px 8px 20px rgba(0, 0, 0, 0.65),
+    -5px -5px 10px rgba(70, 80, 100, 0.35),
+    0 0 18px rgba(100, 200, 255, 0.22);
+}
+
+.theme-light .quflx-neo-pill-btn:hover {
+  box-shadow:
+    8px 8px 16px rgba(0, 0, 0, 0.14),
+    -6px -6px 10px rgba(255, 255, 255, 0.9),
+    0 0 16px rgba(100, 200, 255, 0.22);
+}
+
+.quflx-neo-pill-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 12px 12px 24px rgba(0, 0, 0, 0.7),
+    inset -12px -12px 24px rgba(40, 50, 70, 0.25);
+}
+
+.theme-light .quflx-neo-pill-btn:active {
+  box-shadow:
+    inset 10px 10px 20px rgba(0, 0, 0, 0.08),
+    inset -8px -8px 14px rgba(255, 255, 255, 0.6);
+}
+
+.quflx-neo-btn-clicked .quflx-neo-btn__icon {
+  animation: quflx-neo-sync-rotate 0.9s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes quflx-neo-sync-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  60% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- Section Styles --- */
@@ -258,11 +442,33 @@
     0 18px 36px -18px rgba(0, 0, 0, 0.75);
 }
 
+.quflx-settings-card {
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.theme-light .quflx-settings-card {
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.12),
+    0 6px 14px rgba(0, 0, 0, 0.08);
+}
+
 .theme-light .quflx-section-light {
   background-color: #ffffff;
   background-image: linear-gradient(135deg, #ffffff 0%, #fcedcf 100%);
   border: 1px solid rgba(233, 211, 5, 0.3);
   box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.05);
+}
+
+.theme-orange-dark .quflx-section-light {
+  background-color: #0a0c10;
+  background-image:
+    linear-gradient(165deg, rgba(255, 140, 0, 0.38) 0%, rgba(139, 69, 19, 0.28) 25%, rgba(2, 4, 8, 0.98) 70%);
+  border: 1px solid rgba(255, 140, 0, 0.25);
+  box-shadow:
+    0 28px 56px -14px rgba(0, 0, 0, 0.92),
+    0 16px 32px -18px rgba(0, 0, 0, 0.75);
 }
 
 /* --- UI Elements (Buttons, Inputs, etc.) --- */
@@ -289,6 +495,10 @@
 .theme-light span,
 .theme-light p {
   color: rgb(66, 56, 0) !important;
+}
+
+.quflx-logo-text-version {
+  color: #ffffff !important;
 }
 
 /* --- Logo Styles --- */
