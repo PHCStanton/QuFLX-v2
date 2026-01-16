@@ -1,0 +1,4 @@
+# Default theme Blue
+
+rgb(42, 84, 121)
+#2a5479

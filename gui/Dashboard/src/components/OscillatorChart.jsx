@@ -139,6 +139,31 @@ const OscillatorChart = ({
       if (!Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from >= range.to) {
         return;
       }
+
+      const points = dataRef.current;
+      if (!Array.isArray(points) || points.length < 2) {
+        return;
+      }
+
+      const toNumericTime = (time) => {
+        if (typeof time === 'number') return time;
+        if (typeof time === 'string') {
+          const n = Number(time);
+          return Number.isFinite(n) ? n : null;
+        }
+        return null;
+      };
+
+      const firstTime = toNumericTime(points[0]?.time);
+      const lastTime = toNumericTime(points[points.length - 1]?.time);
+      if (firstTime == null || lastTime == null) {
+        return;
+      }
+
+      if (range.to < firstTime || range.from > lastTime) {
+        return;
+      }
+
       try {
         const oscTimeScale = chartRef.current.timeScale();
         oscTimeScale.setVisibleRange(range);
@@ -200,6 +225,14 @@ const OscillatorChart = ({
 
     seriesRef.current.setData(sorted);
     dataRef.current = sorted;
+
+    if (syncSubscriptionRef.current) {
+      const { mainTimeScale, sync } = syncSubscriptionRef.current;
+      const range = mainTimeScale?.getVisibleRange ? mainTimeScale.getVisibleRange() : null;
+      if (range) {
+        sync(range);
+      }
+    }
   }, [data]);
 
   useEffect(() => {
@@ -237,19 +270,49 @@ const OscillatorChart = ({
     }
 
     const handleCrosshairMove = (param) => {
-      if (!chartRef.current || !seriesRef.current) {
+      if (isDisposedRef.current || !chartRef.current || !seriesRef.current) {
         return;
       }
 
       if (!param || !param.time) {
-        chartRef.current.clearCrosshairPosition();
+        try {
+          chartRef.current.clearCrosshairPosition();
+        } catch (err) {
+          if (!isDisposedRef.current) {
+            console.error('Failed to clear oscillator crosshair', err);
+          }
+        }
+        return;
+      }
+
+      const toNumericTime = (time) => {
+        if (typeof time === 'number') return time;
+        if (typeof time === 'string') {
+          const n = Number(time);
+          return Number.isFinite(n) ? n : null;
+        }
+        return null;
+      };
+
+      const points = dataRef.current;
+      if (!Array.isArray(points) || points.length < 2) {
+        return;
+      }
+
+      const firstTime = toNumericTime(points[0]?.time);
+      const lastTime = toNumericTime(points[points.length - 1]?.time);
+      const currentTime = toNumericTime(param.time);
+      if (firstTime == null || lastTime == null || currentTime == null) {
+        return;
+      }
+
+      if (currentTime < firstTime || currentTime > lastTime) {
         return;
       }
 
       let value = 0;
-      const points = dataRef.current;
 
-      if (Array.isArray(points) && points.length > 0) {
+      if (points.length > 0) {
         const time = param.time;
         const match = points.find((point) => {
           if (!point || point.time == null) {
@@ -276,7 +339,17 @@ const OscillatorChart = ({
         }
       }
 
-      chartRef.current.setCrosshairPosition(value, param.time, seriesRef.current);
+      try {
+        chartRef.current.setCrosshairPosition(value, param.time, seriesRef.current);
+      } catch (err) {
+        if (!isDisposedRef.current) {
+          console.error('Failed to set oscillator crosshair from main chart', err);
+          if (onError) {
+            const msg = err instanceof Error ? err.message : String(err);
+            onError(`Oscillator crosshair sync failed: ${msg}`);
+          }
+        }
+      }
     };
 
     mainChart.subscribeCrosshairMove(handleCrosshairMove);
@@ -291,7 +364,7 @@ const OscillatorChart = ({
       }
       crosshairSubscriptionRef.current = null;
     };
-  }, [mainChart, type, params, indicatorValue, title]);
+  }, [mainChart, type, params, indicatorValue, title, onError]);
 
   return (
     <div className="w-full h-full flex flex-col">

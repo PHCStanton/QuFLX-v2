@@ -37,18 +37,19 @@ Resolve the assessment’s CORE_PRINCIPLES violations (primarily #8, #6, #9) wit
 - [~] Phase 5 — Verification
   - [x] Run Dashboard lint
   - [x] Run Dashboard build
-  - [~] Run frontend tests (no test script in Dashboard)
+  - [x] Run frontend QA smoke tests (Playwright)
   - [x] Run backend syntax check (py_compile)
   - [x] Run backend tests (pytest)
-  - [ ] Pass manual QA scenarios "git Check Point"
+  - [~] Pass manual QA scenarios (automated smoke complete)
 
 ### Manual QA Checklist
-- [ ] Backend down → shows connection failed guidance
-- [ ] Empty/bad market data → charts stable, actionable message
-- [ ] Oscillator sync edge cases → no crashes, message visible
-- [ ] Add/remove indicators → no regressions
-- [ ] Screenshot capture → works
-- [ ] Asset/timeframe switching → works
+- [x] Backend down → shows connection failed guidance
+- [~] Empty/bad market data → empty validated, bad payload pending
+- [x] Oscillator sync edge cases → no crashes, message visible
+- [x] Add/remove indicators → no regressions
+- [x] Screenshot capture → works
+- [ ] Asset switching → works
+- [x] Timeframe switching → works
 
 ## Priority Workstreams
 

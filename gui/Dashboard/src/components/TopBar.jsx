@@ -30,17 +30,17 @@ const TopBar = () => {
 const StatusBadge = ({ label, status }) => {
   const getStatusColor = (s) => {
     switch(s) {
-      case 'connected': return 'bg-accent-green';
-      case 'streaming': return 'bg-accent-green animate-pulse';
-      case 'error': return 'bg-accent-red';
-      default: return 'bg-yellow-500';
+      case 'connected': return 'bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.6)]';
+      case 'streaming': return 'bg-accent-green animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.8)]';
+      case 'error': return 'bg-accent-red shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+      default: return 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]';
     }
   };
   
   return (
-    <div className="flex items-center gap-2 px-3 py-1 bg-section-bg/30 backdrop-blur-sm rounded border border-border-primary shadow-inner">
+      <div className="flex items-center gap-2 px-3 py-1 bg-section-bg/30 backdrop-blur-sm rounded border border-border-primary shadow-inner">
       <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">{label}</span>
-      <div className={`w-2 h-2 rounded-full shadow-[0_0_8px_currentColor] ${getStatusColor(status)}`}></div>
+      <div className={`w-2 h-2 rounded-full ${getStatusColor(status)}`}></div>
     </div>
   );
 };

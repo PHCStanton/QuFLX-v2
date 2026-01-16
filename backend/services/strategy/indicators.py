@@ -342,11 +342,10 @@ class TechnicalIndicatorsPipeline:
                     df['supertrend_direction'] = supertrend_data[f"SUPERTd_{self.params['supertrend_period']}_{self.params['supertrend_multiplier']}"].map({1: 'up', -1: 'down'})
             else:
                 hl2 = (df['high'] + df['low']) / 2
-                
-                # Use a period-specific ATR for SuperTrend
                 st_period = self.params.get('supertrend_period', 7)
+                multiplier = self.params.get('supertrend_multiplier', 3.0)
+                
                 if 'true_range' not in df.columns:
-                    # Calculate TR if missing
                     high_low = df['high'] - df['low']
                     high_close_prev = np.abs(df['high'] - df['close'].shift(1))
                     low_close_prev = np.abs(df['low'] - df['close'].shift(1))
@@ -356,23 +355,50 @@ class TechnicalIndicatorsPipeline:
                 
                 atr = tr.rolling(window=st_period).mean()
                 
-                multiplier = self.params.get('supertrend_multiplier', 3.0)
-                upper_band = hl2 + (multiplier * atr)
-                lower_band = hl2 - (multiplier * atr)
+                basic_ub = hl2 + (multiplier * atr)
+                basic_lb = hl2 - (multiplier * atr)
                 
+                final_ub = pd.Series(index=df.index, dtype=float)
+                final_lb = pd.Series(index=df.index, dtype=float)
                 supertrend = pd.Series(index=df.index, dtype=float)
                 direction = pd.Series(index=df.index, dtype=str)
                 
-                for i in range(1, len(df)):
-                    if df['close'].iloc[i] <= lower_band.iloc[i]:
-                        supertrend.iloc[i] = lower_band.iloc[i]
-                        direction.iloc[i] = 'down'
-                    elif df['close'].iloc[i] >= upper_band.iloc[i]:
-                        supertrend.iloc[i] = upper_band.iloc[i]
-                        direction.iloc[i] = 'up'
-                    else:
-                        supertrend.iloc[i] = supertrend.iloc[i-1] if not pd.isna(supertrend.iloc[i-1]) else lower_band.iloc[i]
-                        direction.iloc[i] = direction.iloc[i-1] if not pd.isna(direction.iloc[i-1]) else 'up'
+                # First candle initialization
+                start_idx = st_period
+                if len(df) > start_idx:
+                    final_ub.iloc[start_idx] = basic_ub.iloc[start_idx]
+                    final_lb.iloc[start_idx] = basic_lb.iloc[start_idx]
+                    direction.iloc[start_idx] = 'up'
+                    supertrend.iloc[start_idx] = final_lb.iloc[start_idx]
+                    
+                    for i in range(start_idx + 1, len(df)):
+                        # Final Upper Band
+                        if basic_ub.iloc[i] < final_ub.iloc[i-1] or df['close'].iloc[i-1] > final_ub.iloc[i-1]:
+                            final_ub.iloc[i] = basic_ub.iloc[i]
+                        else:
+                            final_ub.iloc[i] = final_ub.iloc[i-1]
+                            
+                        # Final Lower Band
+                        if basic_lb.iloc[i] > final_lb.iloc[i-1] or df['close'].iloc[i-1] < final_lb.iloc[i-1]:
+                            final_lb.iloc[i] = basic_lb.iloc[i]
+                        else:
+                            final_lb.iloc[i] = final_lb.iloc[i-1]
+                            
+                        # Trend and SuperTrend value
+                        if direction.iloc[i-1] == 'up':
+                            if df['close'].iloc[i] < final_lb.iloc[i]:
+                                direction.iloc[i] = 'down'
+                                supertrend.iloc[i] = final_ub.iloc[i]
+                            else:
+                                direction.iloc[i] = 'up'
+                                supertrend.iloc[i] = final_lb.iloc[i]
+                        else: # previous direction was 'down'
+                            if df['close'].iloc[i] > final_ub.iloc[i]:
+                                direction.iloc[i] = 'up'
+                                supertrend.iloc[i] = final_lb.iloc[i]
+                            else:
+                                direction.iloc[i] = 'down'
+                                supertrend.iloc[i] = final_ub.iloc[i]
                 
                 df['supertrend'] = supertrend
                 df['supertrend_direction'] = direction

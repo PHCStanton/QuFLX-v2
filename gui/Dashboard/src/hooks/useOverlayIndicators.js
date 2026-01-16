@@ -21,6 +21,33 @@ const useOverlayIndicators = ({
 
   const overlaySeriesRef = useRef({});
 
+  const normalizeTime = (time) => {
+    if (typeof time === 'number') return time;
+    if (typeof time === 'string') {
+      const n = Number(time);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+
+  const normalizeDirection = (value) => {
+    if (typeof value === 'string') {
+      const v = value.toLowerCase();
+      if (v === 'up' || v === 'long' || v === 'bull' || v === 'buy') return 'up';
+      if (v === 'down' || v === 'short' || v === 'bear' || v === 'sell') return 'down';
+      return null;
+    }
+    if (typeof value === 'number') {
+      if (value > 0) return 'up';
+      if (value < 0) return 'down';
+      return null;
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'up' : 'down';
+    }
+    return null;
+  };
+
   useEffect(() => {
     if (!mainChart) return;
 
@@ -30,6 +57,8 @@ const useOverlayIndicators = ({
       const entry = overlaySeriesRef.current[id];
       try {
         if (entry?.series) mainChart.removeSeries(entry.series);
+        if (entry?.upSeries) mainChart.removeSeries(entry.upSeries);
+        if (entry?.downSeries) mainChart.removeSeries(entry.downSeries);
         if (entry?.upper) mainChart.removeSeries(entry.upper);
         if (entry?.lower) mainChart.removeSeries(entry.lower);
       } catch (err) {
@@ -45,6 +74,8 @@ const useOverlayIndicators = ({
 
       if (!overlaySeriesRef.current[ind.id]) {
         let series;
+        let upSeries;
+        let downSeries;
         let upper;
         let lower;
 
@@ -69,10 +100,15 @@ const useOverlayIndicators = ({
             title: 'BB Lower'
           });
         } else if (type === 'supertrend') {
-          series = mainChart.addSeries(LineSeries, {
-            color: '#ec4899',
+          upSeries = mainChart.addSeries(LineSeries, {
+            color: '#22c55e',
             lineWidth: 2,
-            title: 'SuperTrend'
+            title: 'SuperTrend Up'
+          });
+          downSeries = mainChart.addSeries(LineSeries, {
+            color: '#ef4444',
+            lineWidth: 2,
+            title: 'SuperTrend Down'
           });
         } else if (type === 'ema') {
           series = mainChart.addSeries(LineSeries, {
@@ -90,6 +126,8 @@ const useOverlayIndicators = ({
 
         overlaySeriesRef.current[ind.id] = {
           series,
+          upSeries,
+          downSeries,
           upper,
           lower,
           lastDataHash: '',
@@ -112,7 +150,11 @@ const useOverlayIndicators = ({
             if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper' });
             if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower' });
           } else if (type === 'supertrend') {
-            seriesObj.series.applyOptions({ title: 'SuperTrend' });
+            if (seriesObj.series && !seriesObj.upSeries && !seriesObj.downSeries) {
+              seriesObj.series.applyOptions({ title: 'SuperTrend' });
+            }
+            if (seriesObj.upSeries) seriesObj.upSeries.applyOptions({ title: 'SuperTrend Up' });
+            if (seriesObj.downSeries) seriesObj.downSeries.applyOptions({ title: 'SuperTrend Down' });
           }
         } catch (err) {
           if (onError) onError(`Overlay options update failed: ${getErrorMessage(err)}`);
@@ -135,18 +177,72 @@ const useOverlayIndicators = ({
         }
 
         if (type === 'supertrend') {
+          if (seriesObj.series && !seriesObj.upSeries && !seriesObj.downSeries) {
+            try {
+              mainChart.removeSeries(seriesObj.series);
+            } catch (err) {
+              if (onError) onError(`Overlay cleanup failed: ${getErrorMessage(err)}`);
+            }
+            seriesObj.series = null;
+            seriesObj.upSeries = mainChart.addSeries(LineSeries, {
+              color: '#22c55e',
+              lineWidth: 2,
+              title: 'SuperTrend Up'
+            });
+            seriesObj.downSeries = mainChart.addSeries(LineSeries, {
+              color: '#ef4444',
+              lineWidth: 2,
+              title: 'SuperTrend Down'
+            });
+          }
+
           const dataHash = JSON.stringify(data.slice(-1));
           if (seriesObj.lastDataHash !== dataHash) {
-            seriesObj.series.setData(data);
-            const directionData = seriesForKey['supertrend_direction'] || [];
-            if (directionData.length > 0) {
-              const lastDir = directionData[directionData.length - 1]?.value;
-              if (lastDir === 'up') {
-                seriesObj.series.applyOptions({ color: '#22c55e' });
-              } else if (lastDir === 'down') {
-                seriesObj.series.applyOptions({ color: '#ef4444' });
-              }
+            const directionData =
+              seriesForKey['supertrend_direction'] ||
+              seriesForKey['supertrend_dir'] ||
+              seriesForKey['supertrend_trend'] ||
+              [];
+
+            const directionByTime = new Map();
+            if (Array.isArray(directionData)) {
+              directionData.forEach((pt) => {
+                const t = normalizeTime(pt?.time);
+                const d = normalizeDirection(pt?.value);
+                if (t != null && d) directionByTime.set(t, d);
+              });
             }
+
+            const upData = [];
+            const downData = [];
+
+            if (Array.isArray(data)) {
+              data.forEach((pt) => {
+                const t = pt?.time;
+                const tn = normalizeTime(t);
+                if (tn == null) return;
+                const v = pt?.value;
+                const dir = directionByTime.get(tn);
+
+                if (dir === 'up') {
+                  upData.push({ time: t, value: v });
+                  downData.push({ time: t });
+                  return;
+                }
+
+                if (dir === 'down') {
+                  upData.push({ time: t });
+                  downData.push({ time: t, value: v });
+                  return;
+                }
+
+                upData.push({ time: t, value: v });
+                downData.push({ time: t });
+              });
+            }
+
+            if (seriesObj.upSeries) seriesObj.upSeries.setData(upData);
+            if (seriesObj.downSeries) seriesObj.downSeries.setData(downData);
             seriesObj.lastDataHash = dataHash;
           }
           return;

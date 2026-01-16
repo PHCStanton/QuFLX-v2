@@ -9,12 +9,12 @@ const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel }) => {
           onChange={onChange}
         />
         {/* Track */}
-        <div className={`absolute inset-0 rounded-[15px] transition-all duration-400 shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9)] group-hover:shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9),0_0_12px_rgba(22,8,241,0.4)] ${checked ? 'shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9),0_0_20px_rgba(22,8,241,0.6)]' : ''}`}
+        <div className={`absolute inset-0 rounded-[15px] transition-all duration-400 shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9)] group-hover:shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9),0_0_12px_rgba(var(--accent-glow),0.4)] ${checked ? 'shadow-[inset_2px_2px_8px_rgba(0,0,0,0.9),0_0_20px_rgba(var(--accent-glow),0.6)]' : ''}`}
              style={{ 
                background: checked 
-                 ? `linear-gradient(135deg, rgb(22, 8, 241) 0%, rgba(22, 8, 241, 0.7) 100%)` 
-                 : 'rgba(22, 8, 241, 0.1)',
-               border: `1px solid rgba(22, 8, 241, ${checked ? '0.6' : '0.2'})`
+                 ? `linear-gradient(135deg, rgb(var(--accent-primary)) 0%, rgba(var(--accent-glow), 0.7) 100%)` 
+                 : 'rgba(var(--accent-glow), 0.1)',
+               border: `1px solid rgba(var(--accent-glow), ${checked ? '0.6' : '0.2'})`
              }}>
         </div>
         

@@ -1,10 +1,17 @@
 const ToggleSwitch = ({ checked, onChange }) => (
-  <div 
+  <button
+    type="button"
     onClick={onChange}
-    className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${checked ? 'bg-accent-green' : 'bg-gray-700'}`}
+    className={`w-9 h-5 flex items-center rounded-full border transition-colors focus:outline-none ${
+      checked ? 'bg-accent-green border-accent-green' : 'bg-section-bg border-border-primary'
+    }`}
   >
-    <div className={`w-3 h-3 bg-white rounded-full absolute top-1 transition-all ${checked ? 'left-6' : 'left-1'}`}></div>
-  </div>
+    <span
+      className={`w-4 h-4 bg-text-primary rounded-full transform transition-transform ${
+        checked ? 'translate-x-4' : 'translate-x-1'
+      }`}
+    />
+  </button>
 );
 
 export default ToggleSwitch;

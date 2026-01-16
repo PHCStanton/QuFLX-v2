@@ -181,19 +181,10 @@ const AssetPanel = () => {
 
             <div className="mt-2 flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary">
               <span className="text-[10px] uppercase font-bold text-text-secondary">OTC Only</span>
-              <button
-                type="button"
-                onClick={() => setOtcOnly((prev) => !prev)}
-                className={`w-9 h-5 flex items-center rounded-full border transition-colors ${
-                  otcOnly ? 'bg-accent-green border-accent-green' : 'bg-section-bg border-border-primary'
-                }`}
-              >
-                <span
-                  className={`w-4 h-4 bg-text-primary rounded-full transform transition-transform ${
-                    otcOnly ? 'translate-x-4' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch 
+                checked={otcOnly} 
+                onChange={() => setOtcOnly((prev) => !prev)} 
+              />
             </div>
             
             {/* NEW: Asset Limit & Payout Controls */}
