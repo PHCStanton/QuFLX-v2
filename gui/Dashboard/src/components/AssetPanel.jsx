@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import Card from './Card';
 import { Upload, Activity, Search, RefreshCw, History, HelpCircle, X, ChevronUp, ChevronDown } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
@@ -35,18 +35,79 @@ const AssetPanel = () => {
   const [topHeight, setTopHeight] = useState(220);
   const [isTopCollapsed, setIsTopCollapsed] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
+  const containerRef = useRef(null);
+  const resizeHandleRef = useRef(null);
+  const hasUserResizedRef = useRef(false);
   const dragStartYRef = useRef(0);
-  const dragStartHeightRef = useRef(220);
+  const dragStartHeightRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const minPanelHeight = 140;
+    const bottomMinHeight = 140;
+    const gapTotalPx = 16;
+    const fallbackHandleHeightPx = 8;
+
+    const applyHalfSplit = () => {
+      if (hasUserResizedRef.current) return;
+      if (isTopCollapsed || isBottomCollapsed) return;
+
+      const containerHeight = container.getBoundingClientRect().height;
+      if (!Number.isFinite(containerHeight) || containerHeight <= 0) return;
+
+      const handleHeight =
+        resizeHandleRef.current?.getBoundingClientRect().height ??
+        fallbackHandleHeightPx;
+
+      const availableHeight = containerHeight - handleHeight - gapTotalPx;
+      const maxTopHeight = Math.max(minPanelHeight, availableHeight - bottomMinHeight);
+      const nextTopHeight = Math.max(
+        minPanelHeight,
+        Math.min(maxTopHeight, Math.round(availableHeight / 2))
+      );
+
+      setTopHeight(nextTopHeight);
+    };
+
+    applyHalfSplit();
+
+    const observer = new ResizeObserver(() => {
+      applyHalfSplit();
+    });
+
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isTopCollapsed, isBottomCollapsed]);
 
   const handleResizeStart = (event) => {
+    hasUserResizedRef.current = true;
     dragStartYRef.current = event.clientY;
     dragStartHeightRef.current = topHeight;
+
+    const minHeight = 140;
+    const bottomMinHeight = 140;
+    const gapTotalPx = 16;
+    const fallbackHandleHeightPx = 8;
+    const containerHeight = containerRef.current?.getBoundingClientRect().height;
+    const handleHeight =
+      resizeHandleRef.current?.getBoundingClientRect().height ?? fallbackHandleHeightPx;
+    const availableHeight =
+      typeof containerHeight === 'number'
+        ? containerHeight - handleHeight - gapTotalPx
+        : null;
+    const maxHeight =
+      typeof availableHeight === 'number'
+        ? Math.max(minHeight, availableHeight - bottomMinHeight)
+        : 600;
 
     const onMouseMove = (e) => {
       const delta = e.clientY - dragStartYRef.current;
       let next = dragStartHeightRef.current + delta;
-      const minHeight = 140;
-      const maxHeight = 400;
       if (next < minHeight) next = minHeight;
       if (next > maxHeight) next = maxHeight;
       setTopHeight(next);
@@ -80,7 +141,7 @@ const AssetPanel = () => {
   }, [payoutAssets, assetSearchQuery]);
 
   return (
-    <div className="col-span-3 flex flex-col gap-2 h-full min-h-0 justify-between">
+    <div ref={containerRef} className="col-span-3 flex flex-col gap-2 h-full min-h-0 justify-between">
       
       {/* Data Source Controls */}
       <div
@@ -252,6 +313,7 @@ const AssetPanel = () => {
 
       {!isTopCollapsed && !isBottomCollapsed && (
         <div
+          ref={resizeHandleRef}
           onMouseDown={handleResizeStart}
           className="h-2 cursor-row-resize bg-section-bg/50 hover:bg-accent-green/60 transition-colors rounded flex items-center justify-center border-y border-border-primary shrink-0"
         >
