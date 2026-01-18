@@ -21,7 +21,7 @@ class GlobalSettings(BaseModel):
     debugLevel: str = "info"
 
 class AutomationSettings(BaseModel):
-    historyWaitTime: int = Field(8, ge=3, le=30)
+    historyWaitTime: int = Field(8, ge=1, le=8)
     autoSelectAssets: bool = True
     retryAttempts: int = Field(2, ge=0, le=5)
     retryDelay: int = Field(500, ge=0, le=5000)

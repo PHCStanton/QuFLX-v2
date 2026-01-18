@@ -28,7 +28,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
 from backend.services.ai.service import AIService
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, asset_control
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, asset_control, ops
 from backend.services.gateway.socket_events import register_socket_events
 
 # Configure logging
@@ -122,6 +122,7 @@ app.include_router(indicators.router, prefix="/api/v1/indicators", tags=["Indica
 app.include_router(settings.router, prefix="/api/v1/settings", tags=["Settings"])
 app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
 app.include_router(asset_control.router, prefix="/api/v1/asset-control", tags=["Asset Control"])
+app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops"])
 
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""

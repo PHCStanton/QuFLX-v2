@@ -27,6 +27,33 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
 5. **Visualize**: Frontend Store receives update -> Mutates State -> Chart components re-render (price, overlays, planned oscillators).
 6. (Planned) **Advise**: AI Gateway builds `TradingContext` from Strategy data + optional chart image -> Calls xAI -> Returns advisory output to Gateway -> Exposed to UI via `/api/v1/ai/ask` and voice.
 
+## History API Contract Patterns
+
+- **Bootstrap is explicit (no silent failures)**
+  - `POST /api/v1/history/bootstrap-history` returns non-200 HTTP status codes on failure.
+  - Error body uses a structured shape (`HistoryErrorResponse`) so the frontend can display actionable messages.
+
+- **History response shape is unified**
+  - `GET /api/v1/history/{asset}` returns `candles` (and keeps legacy `data` for compatibility).
+  - Frontend should prefer `candles` and only fall back to `data` during the transition.
+
+## Local Ops Controls (Chrome + Stream)
+
+- **Problem**: The browser UI cannot start OS processes directly.
+- **Solution**: Gateway exposes local-only, dev-gated endpoints to start Chrome and start/pause the Collector.
+- **Endpoints**:
+  - `POST /api/v1/ops/chrome/start`
+  - `POST /api/v1/ops/stream/start`
+  - `POST /api/v1/ops/stream/pause`
+  - `GET /api/v1/ops/stream/status`
+- **Guards**:
+  - Disabled by default; requires `QFLX_ENABLE_OPS=1`.
+  - Local-only client enforcement (`127.0.0.1` / `::1`).
+  - Optional token gate via `QFLX_OPS_TOKEN` and `X-QFLX-OPS-TOKEN` header.
+- **Semantics**:
+  - Start endpoints are idempotent (`already_running`).
+  - Pause is implemented as stopping the Collector process (terminate → kill fallback).
+
 ## Sidebar & Layout Patterns
 - Sidebar tabs follow the set: `Dashboard`, `Analysis`, `AI Insights`, `Live Trading`, `Risk Manager`, `Strategy Lab`, `Calendar & Journal`, `Settings`.
 - `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last.
@@ -63,6 +90,7 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
     - Older ticks → `slow` / `stale`.
     - No ticks → `idle` / `offline`.
   - Chrome badge in the UI should reflect `chromeDebuggingAvailable` (debug port health) rather than generic collector state.
+  - Stream control toggles should use tick-driven health for pause/restart correctness.
 
 - **Status polling & effects**
   - `useEffect` hooks that call store setters or network functions must always:
@@ -74,6 +102,7 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
   - After changing any Gateway–Capability integration:
     - Run the capability directly (e.g. `python capabilities_v2/runner.py refresh_assets`) and confirm its stdout format.
     - Hit the corresponding REST endpoint and verify the JSON shape matches what the Dashboard expects.
+  - PowerShell note: avoid chaining commands with `&&`; run commands as separate invocations.
 
 ## AI & Voice Integration Patterns
 

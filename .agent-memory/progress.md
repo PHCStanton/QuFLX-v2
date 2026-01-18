@@ -20,6 +20,7 @@
 - [x] FastAPI Setup
 - [x] Socket.IO Integration
 - [x] Historical Data API (Bootstrap + Fallback)
+- [x] Local Ops Endpoints for Chrome + Stream start/pause (dev-gated)
 
 ## Phase 4.1: Pocket Option Timeframe Sync (Completed)
 - [x] Wire timeframe sync endpoint in Gateway and Selenium capability (`capabilities_v2/timeframe_menu.py`) to the Dashboard Sync button.
@@ -38,8 +39,10 @@
 - [x] Lint/Build Health (`npm run lint` and `npm run build` passing)
 - [x] Stream status semantics aligned with tick recency and backend `backend_status` event
 - [x] OTC asset refresh flow hardened (OTC-only filter, tooltip UX, status polling simplification)
-- [ ] Data Contracts & Validation (frontend + gateway)
-- [ ] Refactor `ChartWorkspace.jsx` into smaller components/hooks
+- [x] Data Contracts & Validation (history bootstrap status codes + unified candles shape)
+- [x] Refactor `ChartWorkspace.jsx` into smaller components/hooks
+- [x] TopBar Chrome + Stream controls wired to Gateway ops endpoints
+- [x] Stream toggle uses tick-driven health for correct restart after pause
 
 ## Phase 5.1: Indicators & Market Regimes (Design Completed, Implementation Pending)
 - [x] Backend indicator pipeline validated (`backend/services/strategy/indicators.py`).
@@ -53,8 +56,9 @@
 - [x] High-level design for AI Gateway, TradingContext, and Ask-AI endpoint.
 - [ ] Implement AI Gateway module wrapping xAI chat/vision APIs.
 - [ ] Implement TradingContext builder using existing strategy/indicator data.
-- [ ] Add `/api/v1/ai/ask` endpoint in Gateway.
-- [ ] Implement Ask-AI UI panel and `useChartCapture` hook in Dashboard.
+- [x] Add `/api/v1/ai/ask` endpoint in Gateway.
+- [x] Implement minimal Ask-AI UI (prompt + in-app answer modal).
+- [ ] Replace `window.prompt()` with an in-app Ask-AI panel (with toggles for screenshot/context).
 
 ## Phase 5.3: Voice Agent (xAI Voice API) (Planning)
 - [ ] Design backend voice gateway (WebSocket proxy to xAI Voice Agent API).
@@ -69,6 +73,7 @@
 - [x] Add `gui/Dashboard/src/api/settingsClient.js` to communicate with the new settings endpoints.
 - [x] Provision Recommended Platform Settings Scaffolding in `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`.
 - [x] Align sidebar tab ordering so `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last.
+- [x] Normalize History Wait Time setting to 1–8 seconds (UI + backend validation)
 
 ## Phase 6: Integration & Polish (Pending)
 - [ ] System Orchestration and resilience testing (restart tolerance, degraded modes).
@@ -80,11 +85,17 @@
 - [x] Fixed subprocess runner path resolution in Gateway.
 - [x] Compiled `report_history_rewrite_implementation_26-01-06.md`.
 - [x] Updated `History_data_Payload_Aggregation.md` with latest workflow.
+- [x] Implemented explicit HTTP status codes for history bootstrap failures.
+- [x] Unified history API response shape around `candles`.
+- [x] Removed oscillator → main crosshair feedback path.
+- [x] Removed all `window.alert()` calls in Dashboard.
+- [x] Reduced `ChartWorkspace.jsx` to < 250 lines.
+- [x] Eliminated Vite chunk-size warning via manual chunking.
 
 ### In Progress
-- [ ] Debugging indicator loading error (red toast banner).
-- [ ] Fixing initial positioning of indicators on asset selection.
-- [ ] Implementing dynamic synchronized resizing for Chart and Indicators.
+- [ ] Implement overlay indicators on main chart (EMA, BBands, SuperTrend).
+- [ ] Implement oscillator panes (RSI, MACD histogram) synchronized with main time scale.
+- [ ] Replace Ask-AI prompt with in-app UI panel.
 
 
 ## Phase 4.2: Pocket Option Topdown v2 (Timeframe + Data Collection Foundation)

@@ -5,7 +5,7 @@
 - **FastAPI**: API Gateway framework.
 - **Redis**: Message broker and in-memory database.
 - **React + Vite**: Frontend framework.
-- **TypeScript**: Frontend language for type safety.
+- **JavaScript (JS/JSX)**: Dashboard codebase is currently JS/JSX (TypeScript not adopted in `src/`).
 - **Zustand**: Frontend state management.
 - **Lightweight Charts**: Financial charting library (price chart + planned oscillator panes).
 - **Pydantic**: Data validation and settings management.
@@ -21,9 +21,20 @@
 2. **Frontend**:
    - `npm install`
    - `npm run dev`
+   - PowerShell note: prefer running commands on separate lines (avoid `&&`).
 3. **Infrastructure**:
    - Redis running on default port 6379.
    - Chrome with DevTools Protocol enabled for the Collector.
+
+## Local Ops Controls (Gateway)
+
+- Gateway supports local-only ops endpoints for starting Chrome and starting/pausing the Collector.
+- Config via environment variables:
+  - `QFLX_ENABLE_OPS=1` to enable ops (disabled by default).
+  - Optional `QFLX_OPS_TOKEN` to require `X-QFLX-OPS-TOKEN` header.
+  - Optional `QFLX_CHROME_PATH` to override Chrome executable detection.
+  - Optional `QFLX_CHROME_URL` to control the startup URL.
+- Chrome profile directory used by the ops launcher is `Chrome_profile/` at project root.
 
 ## Dependencies
 - `fastapi`, `uvicorn`, `python-socketio`: Gateway.
@@ -37,6 +48,7 @@
 - Gateway exposes `GET /api/v1/settings` and `PUT /api/v1/settings` as the central API for platform settings, backed by a versioned JSON file in `data/settings/settings.json`.
 - Dashboard uses a dedicated Zustand `useSettingsStore` (separate from `useMarketStore`) to manage Global, User Profile, AI Assistant, and per-tab settings in a single, structured object.
 - A small `settingsClient` module in the Dashboard handles HTTP communication with the settings endpoints.
+ - `automation.historyWaitTime` is now standardized to 1–8 seconds across UI and backend validation.
 
 ## Technical Constraints
 - **Latency**: Must process ticks and update charts within ~100ms for a responsive UI.
@@ -65,8 +77,18 @@
 
 ## Testing Requirements
 - **Unit Tests**: For core logic (parsers, indicators, regime detection, AI Gateway request shaping).
-- **Integration Tests**: Verify Redis pub/sub flow and Gateway endpoints (including `/api/v1/ai/ask` once implemented).
+- **Integration Tests**: Verify Redis pub/sub flow and Gateway endpoints (including `/api/v1/ai/ask`).
 - **End-to-End Tests**: Verify full pipeline from Chrome to Chart; later, add flows that include Ask-AI interactions to ensure context injection wiring is correct.
+
+## Current Build/QA Commands
+- Backend tests: `python -m pytest -q`
+- Dashboard lint: `npm run lint`
+- Dashboard build: `npm run build`
+- Dashboard E2E smoke: `npm run test:qa`
+
+## Known Warnings / Follow-ups
+- Pydantic v2 deprecation warnings are present (class-based `Config`); migrate incrementally to `ConfigDict`.
+- Vite may warn that `settingsStore.js` is both statically and dynamically imported; this is informational and not a build failure.
 
 
 ## Selenium Capabilities for PocketOption Topdown v2

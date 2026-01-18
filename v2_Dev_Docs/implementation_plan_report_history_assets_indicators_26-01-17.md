@@ -88,7 +88,7 @@ The current state has "functional success" but "structural fragility." Specifica
 
 ## 5. Success Criteria (Definition of Done)
 - [x] All failure paths in history bootstrap return 4xx/5xx status codes.
-- [ ] `ChartWorkspace.jsx` is under 250 lines.
+- [x] `ChartWorkspace.jsx` is under 250 lines.
 - [x] No `window.alert` calls remain in the Dashboard source code.
 - [x] Vite build completes with zero chunk size warnings.
 - [x] Crosshair sync is unidirectional (Main -> Oscillator).
@@ -96,7 +96,7 @@ The current state has "functional success" but "structural fragility." Specifica
 
 Notes:
 
-- `ChartWorkspace.jsx` was reduced by extracting static configs; remaining size reduction is a follow-on refactor.
+- `ChartWorkspace.jsx` is now ~240 lines after refactor and extraction.
 
 ---
 **Approval Signature:**  

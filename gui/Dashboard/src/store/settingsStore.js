@@ -14,7 +14,7 @@ const defaultSettings = {
     sidebarSkinDataUrl: null,
   },
   automation: {
-    historyWaitTime: 15,
+    historyWaitTime: 8,
     autoSelectAssets: true,
     retryAttempts: 2,
     retryDelay: 500,
@@ -42,6 +42,14 @@ const defaultSettings = {
   },
   calendarJournal: {},
   strategyLab: {}
+};
+
+const clampNumber = (value, { min, max, fallback }) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  if (n < min) return min;
+  if (n > max) return max;
+  return n;
 };
 
 const sanitizeSettingsForBackend = (settings) => {
@@ -103,6 +111,15 @@ const useSettingsStore = create(
                 ...(current.strategyLab || {}),
                 ...(backendSettings.strategyLab || {}),
               },
+            };
+
+            merged.automation = {
+              ...(merged.automation || {}),
+              historyWaitTime: clampNumber(merged.automation?.historyWaitTime, {
+                min: 1,
+                max: 8,
+                fallback: defaultSettings.automation.historyWaitTime,
+              }),
             };
 
             set({ settings: merged });

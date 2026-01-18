@@ -9,6 +9,12 @@ The Generic Coding Agent Memory System helps maintain context across sessions, e
 1. **Agent Instructions**: Global guidelines that define your coding assistant's baseline behavior
 2. **Project Memory System**: Project-specific documentation that maintains context and guides development
 
+## Project-Specific Notes (QuFLX v2)
+
+- Keep `.agent-memory/activeContext.md` aligned with the latest validated state (tests passing, key contracts stable).
+- Record contract-level decisions (HTTP status semantics, response shapes like `candles`) in `systemPatterns.md` to prevent regressions.
+- When documenting verification commands, prefer listing separate commands (PowerShell does not reliably support `&&`).
+
 ## Folder Structure Setup
 
 Create the following folder structure in your project:

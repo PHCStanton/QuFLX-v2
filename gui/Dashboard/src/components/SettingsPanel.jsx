@@ -175,8 +175,9 @@ const SettingsPanel = () => {
           <SettingRow label="History Wait Time" description="How long to wait for manual asset click (seconds)">
             <SliderInput 
               value={settings.automation.historyWaitTime}
-              min={3}
-              max={30}
+              min={1}
+              max={8}
+              step={1}
               unit="s"
               onChange={(val) => updateSection('automation', { historyWaitTime: val })}
             />

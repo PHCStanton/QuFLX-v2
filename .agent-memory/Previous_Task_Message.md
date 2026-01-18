@@ -1,26 +1,31 @@
-I have completed several architecture and documentation tasks to prepare QuFLX v2 for indicator integration and AI-assisted trading.
+I have completed the History + Assets + Indicators alignment hardening work and refactored the Dashboard ChartWorkspace for long-term maintainability.
 
-**Recent Major Tasks:**
-- Generated `reports/report_25-12-22.md` and `reports/implementation_report_25-12-22.md` covering:
-  - Stream health semantics (tick-driven).
-  - Status polling consolidation.
-  - OTC-only asset filter and AssetPanel UX improvements.
-- Created `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md` mapping indicators to market regimes (trending with pullbacks, strong momentum, ranging, breakout, reversal).
-- Produced `Research/research_lightweight-charts-indicators_2025-12-23.md` detailing how to implement overlay and oscillator indicators with TradingView Lightweight Charts in a way that respects streaming and timeframe semantics.
-- Produced `Research/research_ai_integration_vision_files_2025-12-20.md` outlining the xAI integration strategy (context injection, data + vision, future file tools).
+**Recent Major Tasks (2026-01-18):**
+- Backend history bootstrap now returns correct HTTP status codes (4xx/5xx) with structured error bodies (no semantic 200 failures).
+- History API response shape unified around `candles` (GET includes `candles` and keeps legacy `data` for compatibility).
+- Crosshair sync is now unidirectional (Main → Oscillators); removed oscillator → main feedback path.
+- Dashboard UI messaging standardized (removed all `window.alert()` calls); AI answers display via an in-app modal.
+- `ChartWorkspace.jsx` refactored into smaller hooks/components and reduced to ~240 LOC (<250 target met).
+- Vite build chunk-size warning eliminated via manual chunking.
+- Verification run and passing:
+  - Backend: `python -m pytest -q`
+  - Dashboard: `npm run lint`, `npm run build`, `npm run test:qa`
 
 **Summary of Current Direction:**
-- Indicators will be computed canonically in the backend (`TechnicalIndicatorsPipeline`) and mapped to regimes per `Indicators_vs_Market_Structures.md`.
-- The frontend will visualize indicators using Lightweight Charts (overlays on the main pane, oscillators in a secondary pane) and will not re-implement heavy math.
-- An AI Gateway module will centralize all xAI calls and use a `TradingContext` object built from existing strategy and indicator data, plus optional chart screenshots, to power:
-  - A text+vision trading assistant (Ask-AI panel in the Dashboard).
-  - A voice agent using the xAI Voice Agent API via a backend WebSocket bridge.
+- Keep backend as the canonical source of indicator series and regimes.
+- Keep frontend as a visualization layer (overlays + oscillator panes) and avoid re-implementing heavy indicator math.
+- Maintain strict API semantics:
+  - Non-200 for failures.
+  - Stable, unified response shapes (`candles`).
+- Continue AI integration incrementally:
+  - `/api/v1/ai/ask` is usable today.
+  - AI Gateway + TradingContext builder remain the intended end-state.
 
 **Next Steps (high level):**
-1. Implement AI Gateway skeleton (text + vision) and `TradingContext` builder.
-2. Refine `/api/v1/ai/ask` behavior and integrate it with the future AI Gateway and TradingContext, ensuring consistent contracts between backend and Dashboard Ask-AI flows.
-3. Implement indicator visualization (overlays + oscillator pane) following the research paper patterns.
-4. Design and implement the voice gateway and frontend voice assistant UI, reusing the same TradingContext and tool layer.
+1. Implement overlay indicators on main chart (EMA, Bollinger Bands, SuperTrend).
+2. Implement oscillator panes (RSI, MACD histogram) synchronized with main time scale.
+3. Replace `window.prompt()` with an in-app Ask-AI panel (include context/screenshot toggles).
+4. Build AI Gateway skeleton + TradingContext builder so `/api/v1/ai/ask` becomes a thin adapter.
 
 **Additional Task Completed – Settings Architecture Foundation:**
 - Introduced a dedicated settings architecture aligned with `v2_Dev_Docs/Settings_Architecture_Endpoints.md`, including:

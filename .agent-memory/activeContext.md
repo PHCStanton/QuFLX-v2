@@ -1,14 +1,27 @@
 # Active Context
 
 ## Current Focus
-- **Dashboard UI Refinement:** Enhancing the Chart and Indicators workspace with synchronized resizing and improved loading states.
-- **History Data Reliability:** Ensuring "Manual Mode" history collection is stable and well-documented.
+- **Indicators & Regimes (Next Implementation Wave):** Implement overlays + oscillators on Lightweight Charts using backend-calculated series.
+- **AI Assistant (Incremental Integration):** Keep `/api/v1/ai/ask` usable now while building towards an AI Gateway + TradingContext.
+- **Protocol Robustness:** Maintain explicit HTTP error semantics and consistent API shapes (`candles`) to prevent silent failures.
 
 ## Recent Changes
-- Added `ResizeObserver` to `ChartContainer` and `OscillatorChart` for real-time synchronized resizing.
-- Fixed indicator loading logic in `marketStore.js` to prevent premature error banners.
-- Implemented `lastError` clearing on asset selection to ensure a clean UI state.
-- Compiled comprehensive history rewrite report for future development.
+- **History bootstrap now returns correct HTTP status codes** (4xx/5xx) with structured error bodies; removed semantic 200/ok:false failures.
+- **History API shape unified around `candles`** (GET includes `candles` and keeps legacy `data` for compatibility).
+- **Crosshair sync is unidirectional** (Main → Oscillators); removed oscillator → main pathway.
+- **ChartWorkspace refactor completed**:
+  - Static options extracted to `gui/Dashboard/src/config/chartOptions.js`.
+  - Orchestration moved into focused hooks and small UI components.
+  - `ChartWorkspace.jsx` reduced to ~240 LOC (<250 target met).
+- **UI messaging standardized**: removed all `window.alert()`; AI answers display via modal; screenshot save errors display inline.
+- **Bundle optimization**: Vite manual chunking added; build no longer emits the >500kB chunk-size warning.
+- **Local Ops controls added (Chrome + Stream)**:
+  - Gateway exposes dev-gated endpoints under `/api/v1/ops/*` to start Chrome and start/pause the Collector.
+  - Dashboard TopBar **Chrome** and **Stream** badges are now safe, idempotent buttons.
+  - Stream toggle uses tick-driven health state for correct restart behavior after pause.
+- **Settings: History Wait Time normalized**:
+  - Frontend default reduced and UI slider bounds changed to 1–8 seconds.
+  - Backend validation now enforces 1–8 seconds to match the UI.
 
 ## Recent Accomplishments
 - **Streaming & UI Foundation** (Phase 5 baseline):
@@ -47,54 +60,50 @@
 ## Current State
 - **Backend**:
   - Collector/Strategy/Gateway are functioning as described in `systemPatterns.md`.
+  - History endpoints are now explicit and reliable:
+    - `POST /api/v1/history/bootstrap-history` returns non-200 on failure with `HistoryErrorResponse`.
+    - `GET /api/v1/history/{asset}` returns `candles` (and legacy `data`) for a single frontend parsing path.
   - Indicator pipeline is implemented and documented; regime mapping doc exists but regime detection logic is not yet wired into runtime.
-  - AI integration is at the research/specification stage (no production `ai_gateway` module yet).
+  - AI integration is partially wired:
+    - `/api/v1/ai/ask` exists and is consumed by the Dashboard.
+    - AI Gateway + TradingContext builder are still pending.
   - Settings architecture foundation implemented:
     - Versioned settings schema with persisted JSON in `data/settings/settings.json`.
     - `GET /api/v1/settings` and `PUT /api/v1/settings` endpoints in the Gateway for centralized configuration.
     - **Recommended Platform Settings Scaffolding** provisioned in `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`, detailing modular sections for Global, Automation, Analysis, AI Behavioral, and Risk management settings.
+  - Local Ops endpoints implemented (local-only, disabled by default):
+    - `POST /api/v1/ops/chrome/start`
+    - `POST /api/v1/ops/stream/start`
+    - `POST /api/v1/ops/stream/pause`
+    - `GET /api/v1/ops/stream/status`
   - Pocket Option timeframe sync path is now **stable** and verified.
 
 - **Frontend**:
   - Core Dashboard is stable for streaming and basic visualization.
-  - Indicator visualization (overlays + oscillator panes) is designed on paper but not implemented.
-  - Ask-AI UI and voice UI are not implemented yet; architecture and UX expectations are documented.
+  - ChartWorkspace is now modular and smaller (<250 LOC) to reduce regression risk.
+  - Indicator visualization (overlays + oscillator panes) is still the next major feature implementation.
+  - Ask-AI is minimally implemented:
+    - Prompt capture still uses `window.prompt()`.
+    - Responses display in an in-app modal.
   - A dedicated `useSettingsStore` (Zustand) and `settingsClient` are in place to manage Global/User/AI + per-tab settings separately from `useMarketStore`.
   - Sidebar ordering updated so `Calendar & Journal` and `Settings` are the final two sidebar items; `Settings` can host global and profile configuration views.
+  - TopBar **Chrome** and **Stream** badges are now clickable controls backed by Gateway ops endpoints.
 
 ## Next Steps
-1. **Implement Settings modular layout (Frontend)**
-   - Create the modular settings UI based on `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`.
-   - Wire Global, Risk Manager, AI Assistant, and per-tab settings to `useSettingsStore` and `/api/v1/settings`, starting with High Priority items.
+1. **Indicator Visualization Implementation (Frontend + Gateway)**
+   - Implement overlay indicators on the main chart (start with EMA + Bollinger + SuperTrend).
+   - Keep oscillators in separate panes (RSI, MACD histogram) synchronized with main time scale.
 
-2. **Implement AI Gateway Skeleton (Backend)**
-   - Create an `ai_gateway` service/module responsible for xAI requests (text + vision), including:
-     - `ask_text(TradingContext, prompt)` and `ask_vision(TradingContext, prompt, image_base64)`.
-     - Model selection, error handling, and usage logging.
+2. **AI Assistant UI Hardening (Frontend)**
+   - Replace `window.prompt()` with an in-app input panel/modal.
+   - Add "include screenshot" + "include context" toggles using existing `captureCompositeChart`.
 
-3. **Trading Context Builder + Regime Detection**
-   - Add a `context_builder` in `backend/services/strategy` that constructs a `TradingContext` from:
-     - Recent candles and indicators.
-     - Current market regime (using the logic outlined in `Indicators_vs_Market_Structures.md`).
-     - Open positions / risk parameters when available.
+3. **AI Gateway + TradingContext (Backend)**
+   - Introduce a dedicated AI Gateway module and a TradingContext builder.
+   - Keep Gateway `/api/v1/ai/ask` as a thin adapter.
 
-4. **API Contract for Ask-AI**
-   - Consolidate and refine the existing `/api/v1/ai/ask` behavior in the Gateway so it works seamlessly with the future `ai_gateway` and `TradingContext` builder.
-
-5. **Frontend Ask-AI Panel + Chart Capture Hook**
-   - Implement `useChartCapture()` to grab the current chart canvas and produce base64 PNG.
-   - Build an Ask-AI panel in the Dashboard that:
-     - Lets the user enter a prompt.
-     - Toggles “include chart screenshot” and “include market context”.
-     - Displays AI responses (and, later, structured outputs).
-
-6. **Indicator Visualization Implementation**
-   - Implement overlay indicators on the main chart (starting with moving averages, Bollinger Bands) using helper functions.
-   - Implement a secondary oscillator chart pane for RSI/Stoch/MACD/Schaff etc., synchronized with the main time scale.
-
-7. **Voice Agent Planning**
-   - Design a small backend voice gateway that proxies browser WebSocket audio to xAI’s Voice Agent API.
-   - Define how voice sessions share the same `TradingContext` and session history as the text assistant.
+4. **Settings modular layout (Frontend)**
+   - Implement modular settings UI per `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`.
 
 ## Active Files
 - Frontend:
@@ -102,11 +111,21 @@
   - `gui/Dashboard/src/store/settingsStore.js`
   - `gui/Dashboard/src/components/Dashboard.jsx`
   - `gui/Dashboard/src/components/AssetPanel.jsx`
+  - `gui/Dashboard/src/components/TopBar.jsx`
+  - `gui/Dashboard/src/components/SettingsPanel.jsx`
   - `gui/Dashboard/src/components/ChartWorkspace.jsx`
+  - `gui/Dashboard/src/components/ChartWorkspaceOverlays.jsx`
+  - `gui/Dashboard/src/hooks/useChartWorkspaceIndicators.js`
+  - `gui/Dashboard/src/hooks/useChartWorkspaceHeaderControls.js`
+  - `gui/Dashboard/src/config/chartOptions.js`
   - (Planned) Settings UI components.
 
 - Backend:
   - `backend/services/gateway/main.py`
+  - `backend/services/gateway/routes/ops.py`
+  - `backend/services/gateway/routes/history.py`
+  - `backend/services/gateway/routes/settings.py`
+  - `backend/models/errors.py`
   - `local_selenium_utils/selenium_ui_controls.py`
   - `capabilities_v2/timeframe_menu.py`
   - `backend/services/strategy/indicators.py`

@@ -593,6 +593,74 @@ const createConnectionSlice = (set, get) => ({
   setChromeStatus: (status) => set({ chromeStatus: status }),
   streamStatus: 'idle',
   setStreamStatus: (status) => set({ streamStatus: status }),
+  opsChromeBusy: false,
+  opsStreamBusy: false,
+  startChrome: async () => {
+    if (get().opsChromeBusy) return;
+    set({ opsChromeBusy: true });
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/ops/chrome/start', {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = data.user_message || data.detail || `Failed to start Chrome (HTTP ${res.status})`;
+        set({ lastError: msg });
+        return;
+      }
+
+      get().checkBackendStatus();
+    } catch (err) {
+      set({ lastError: `Network error starting Chrome: ${getErrorMessage(err)}` });
+    } finally {
+      set({ opsChromeBusy: false });
+    }
+  },
+  startStream: async () => {
+    if (get().opsStreamBusy) return;
+    set({ opsStreamBusy: true });
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/ops/stream/start', {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = data.user_message || data.detail || `Failed to start Stream (HTTP ${res.status})`;
+        set({ lastError: msg });
+        return;
+      }
+
+      get().checkBackendStatus();
+    } catch (err) {
+      set({ lastError: `Network error starting Stream: ${getErrorMessage(err)}` });
+    } finally {
+      set({ opsStreamBusy: false });
+    }
+  },
+  pauseStream: async () => {
+    if (get().opsStreamBusy) return;
+    set({ opsStreamBusy: true });
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/ops/stream/pause', {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = data.user_message || data.detail || `Failed to pause Stream (HTTP ${res.status})`;
+        set({ lastError: msg });
+        return;
+      }
+
+      get().checkBackendStatus();
+    } catch (err) {
+      set({ lastError: `Network error pausing Stream: ${getErrorMessage(err)}` });
+    } finally {
+      set({ opsStreamBusy: false });
+    }
+  },
   backendStatus: {
     redisConnected: false,
     socketIoReady: false,
