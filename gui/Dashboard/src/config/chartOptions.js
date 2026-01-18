@@ -1,0 +1,147 @@
+export const timeframeOptions = [
+  { label: 'Ticks', value: 'ticks' },
+  { label: '15 Second', value: '15s' },
+  { label: '1 Minute', value: '1m' },
+  { label: '5 Minutes', value: '5m' },
+  { label: '15 Minutes', value: '15m' },
+  { label: '30 Minutes', value: '30m' },
+  { label: '1 Hour', value: '1h' },
+];
+
+export const csvOptions = [
+  { label: 'Upload New...', value: 'upload' },
+  { label: 'AUDNZD_2023.csv', value: 'file1' },
+];
+
+export const indicatorOptions = [
+  {
+    label: 'RSI',
+    value: 'rsi',
+    key: 'rsi_14',
+    kind: 'oscillator',
+    displayValue: '14',
+    source: 'backend',
+    params: { period: 14, overbought: 75, oversold: 25 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
+      { name: 'overbought', label: 'Overbought', type: 'number', min: 50, max: 100, default: 75 },
+      { name: 'oversold', label: 'Oversold', type: 'number', min: 0, max: 50, default: 25 },
+    ],
+  },
+  {
+    label: 'CCI',
+    value: 'cci',
+    key: 'cci',
+    kind: 'oscillator',
+    displayValue: '14',
+    source: 'backend',
+    params: { period: 14, overbought: 100, oversold: -100 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
+      { name: 'overbought', label: 'Overbought', type: 'number', min: 0, max: 300, default: 100 },
+      { name: 'oversold', label: 'Oversold', type: 'number', min: -300, max: 0, default: -100 },
+    ],
+  },
+  {
+    label: 'MACD Histogram',
+    value: 'macd_histogram',
+    key: 'macd_histogram',
+    kind: 'oscillator',
+    displayValue: '12,26,9',
+    source: 'backend',
+    params: { fast: 12, slow: 26, signal: 9 },
+    paramConfig: [
+      { name: 'fast', label: 'Fast Period', type: 'number', min: 1, max: 100, default: 12 },
+      { name: 'slow', label: 'Slow Period', type: 'number', min: 1, max: 200, default: 26 },
+      { name: 'signal', label: 'Signal Period', type: 'number', min: 1, max: 50, default: 9 },
+    ],
+  },
+  {
+    label: 'DeMarker',
+    value: 'demarker',
+    key: 'demarker',
+    kind: 'oscillator',
+    displayValue: '10',
+    source: 'backend',
+    params: { period: 10, overbought: 0.7, oversold: 0.3 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 10 },
+      { name: 'overbought', label: 'Overbought', type: 'number', min: 0.5, max: 1.0, step: 0.1, default: 0.7 },
+      { name: 'oversold', label: 'Oversold', type: 'number', min: 0.0, max: 0.5, step: 0.1, default: 0.3 },
+    ],
+  },
+  {
+    label: 'ADX',
+    value: 'adx',
+    key: 'adx',
+    kind: 'oscillator',
+    displayValue: '14',
+    source: 'backend',
+    params: { period: 14, overbought: 30 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
+      { name: 'overbought', label: 'Strong Trend Level', type: 'number', min: 10, max: 90, default: 30 },
+    ],
+  },
+  {
+    label: 'Schaff Trend Cycle',
+    value: 'stc',
+    key: 'schaff_tc',
+    kind: 'oscillator',
+    displayValue: '10,20,3',
+    source: 'backend',
+    params: { fast: 10, slow: 20, period: 3, overbought: 75, oversold: 25 },
+    paramConfig: [
+      { name: 'fast', label: 'Fast Period', type: 'number', min: 1, max: 100, default: 10 },
+      { name: 'slow', label: 'Slow Period', type: 'number', min: 1, max: 200, default: 20 },
+      { name: 'period', label: 'Cycle Period', type: 'number', min: 1, max: 50, default: 3 },
+      { name: 'overbought', label: 'Overbought', type: 'number', min: 50, max: 100, default: 75 },
+      { name: 'oversold', label: 'Oversold', type: 'number', min: 0, max: 50, default: 25 },
+    ],
+  },
+  {
+    label: 'SuperTrend',
+    value: 'supertrend',
+    key: 'supertrend',
+    kind: 'overlay',
+    displayValue: '7,3.0',
+    source: 'backend',
+    params: { period: 7, multiplier: 3.0 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 1, max: 50, default: 7 },
+      { name: 'multiplier', label: 'Multiplier', type: 'number', min: 0.1, max: 10, step: 0.1, default: 3.0 },
+    ],
+  },
+  {
+    label: 'EMA',
+    value: 'ema',
+    key: 'ema_16',
+    kind: 'overlay',
+    displayValue: '16',
+    source: 'backend',
+    params: { period: 16 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 1, max: 500, default: 16 },
+    ],
+  },
+  {
+    label: 'Bollinger Bands',
+    value: 'bollinger_bands',
+    key: 'bb_middle',
+    kind: 'overlay',
+    displayValue: '20,2.0',
+    source: 'backend',
+    params: { period: 20, stdDev: 2.0 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 1, max: 100, default: 20 },
+      { name: 'stdDev', label: 'Std Dev', type: 'number', min: 0.1, max: 5.0, step: 0.1, default: 2.0 },
+    ],
+  },
+];
+
+export const addObjectOptions = [
+  { label: 'Horizontal Line', value: 'horizontal_line' },
+  { label: 'Zone', value: 'zone' },
+  { label: 'Label', value: 'label' },
+];
+

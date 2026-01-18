@@ -9,7 +9,6 @@ const OscillatorPanel = ({
   oscillatorIndicators,
   indicatorSeries,
   indicatorStatus,
-  onCrosshairTimeFromOscillator,
   onError
 }) => {
   const [oscillatorHeight, setOscillatorHeight] = useState(200);
@@ -102,7 +101,6 @@ const OscillatorPanel = ({
                     title={ind.name}
                     params={ind.params}
                     indicatorValue={ind.value}
-                    onCrosshairTimeFromOscillator={onCrosshairTimeFromOscillator}
                     onError={onError}
                   />
                 </ErrorBoundary>

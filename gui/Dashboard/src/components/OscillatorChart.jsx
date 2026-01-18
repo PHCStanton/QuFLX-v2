@@ -8,7 +8,6 @@ const OscillatorChart = ({
   title,
   params,
   indicatorValue,
-  onCrosshairTimeFromOscillator,
   onError,
 }) => {
   const containerRef = useRef(null);
@@ -234,32 +233,6 @@ const OscillatorChart = ({
       }
     }
   }, [data]);
-
-  useEffect(() => {
-    if (!chartRef.current || !chartRef.current.subscribeCrosshairMove) {
-      return;
-    }
-
-    if (!onCrosshairTimeFromOscillator) {
-      return;
-    }
-
-    const handleOscillatorCrosshairMove = (param) => {
-      if (!param || !param.time) {
-        return;
-      }
-      onCrosshairTimeFromOscillator(param.time);
-    };
-
-    const chart = chartRef.current;
-    chart.subscribeCrosshairMove(handleOscillatorCrosshairMove);
-
-    return () => {
-      if (chart && chart.unsubscribeCrosshairMove) {
-        chart.unsubscribeCrosshairMove(handleOscillatorCrosshairMove);
-      }
-    };
-  }, [onCrosshairTimeFromOscillator, type, params, indicatorValue, title]);
 
   useEffect(() => {
     if (!mainChart || !chartRef.current || !seriesRef.current) {

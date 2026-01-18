@@ -35,14 +35,13 @@ const useScreenshotCapture = ({ rootElementId = 'quflx-chart-screenshot-root', o
       setIsCapturing(true);
       const dataUrl = await captureCompositeChart();
       if (!dataUrl) {
-        window.alert('Chart not available for screenshot.');
+        if (onError) onError('Chart not available for screenshot.');
         return;
       }
       setScreenshotDataUrl(dataUrl);
       setIsScreenshotOpen(true);
     } catch (err) {
       if (onError) onError(`Screenshot capture failed: ${getErrorMessage(err)}`);
-      window.alert('Failed to capture screenshot.');
     } finally {
       setIsCapturing(false);
     }

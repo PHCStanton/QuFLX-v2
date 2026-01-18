@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
+from fastapi.responses import JSONResponse
 from .common import parse_script_json
 from backend.utils.history_utils import persist_history_csv, get_recent_history_file, append_candle_to_history
 from backend.utils.asset_utils import normalize_asset
@@ -23,6 +24,23 @@ from backend.models.errors import (
 
 router = APIRouter()
 logger = logging.getLogger("gateway.history")
+
+
+def _error_status_for_code(code: HistoryErrorCode) -> int:
+    if code in {HistoryErrorCode.INVALID_ASSET, HistoryErrorCode.INVALID_TIMEFRAME, HistoryErrorCode.INVALID_DURATION, HistoryErrorCode.UNSUPPORTED_TIMEFRAME}:
+        return 400
+    if code in {HistoryErrorCode.CHROME_NOT_CONNECTED, HistoryErrorCode.COLLECTOR_NOT_RUNNING}:
+        return 503
+    if code in {HistoryErrorCode.MANUAL_CLICK_TIMEOUT, HistoryErrorCode.MANUAL_CLICK_NOT_DETECTED, HistoryErrorCode.CAPABILITY_TIMEOUT}:
+        return 504
+    if code in {HistoryErrorCode.SUBPROCESS_SPAWN_FAILED, HistoryErrorCode.FILE_WRITE_FAILED}:
+        return 500
+    return 500
+
+
+def _json_error(code: HistoryErrorCode, message: str, details: Dict[str, Any] | None = None) -> JSONResponse:
+    resp = create_error_response(error_code=code, error_message=message, details=details)
+    return JSONResponse(status_code=_error_status_for_code(code), content=resp.model_dump())
 
 @router.get("/{asset}")
 async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
@@ -42,7 +60,16 @@ async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
     try:
         df = pd.read_csv(csv_path)
         if df.empty:
-            return {"asset": asset, "timeframe": int(timeframe), "data": [], "file": csv_path.name}
+            return {
+                "ok": True,
+                "asset": asset,
+                "timeframe": int(timeframe),
+                "count": 0,
+                "candles": [],
+                "data": [],
+                "file_path": csv_path.name,
+                "file": csv_path.name,
+            }
 
         # Take last N rows
         rows = df.tail(limit).to_dict("records")
@@ -52,11 +79,14 @@ async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
                 r["timeframe"] = target_tf_str
 
         return {
-            "asset": asset, 
-            "timeframe": int(timeframe), 
-            "count": len(rows), 
+            "ok": True,
+            "asset": asset,
+            "timeframe": int(timeframe),
+            "count": len(rows),
+            "candles": list(rows),
             "data": list(rows),
-            "file": csv_path.name
+            "file_path": csv_path.name,
+            "file": csv_path.name,
         }
     except Exception as e:
         logger.error(f"Error reading history CSV {csv_path}: {e}")
@@ -69,24 +99,37 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     In Manual Mode, this waits for the user to click the asset in Pocket Option.
     """
     asset = payload.get("asset")
-    if not asset:
-        raise HTTPException(status_code=400, detail="asset required")
+    if not isinstance(asset, str) or not asset.strip():
+        return _json_error(HistoryErrorCode.INVALID_ASSET, "asset required")
 
     timeframe = payload.get("timeframe", "1m")
     timeframe_min = 1
     if isinstance(timeframe, str):
         tf = timeframe.strip().lower()
         if tf.endswith("m"):
-            try:
-                timeframe_min = max(1, int(tf[:-1]))
-            except Exception:
-                timeframe_min = 1
+            raw = tf[:-1]
+            if not raw.isdigit():
+                return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
+            timeframe_min = max(1, int(raw))
         elif tf.isdigit():
             timeframe_min = max(1, int(tf))
+        else:
+            return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
+    elif isinstance(timeframe, int):
+        timeframe_min = max(1, int(timeframe))
+    else:
+        return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
 
     # In Manual Mode, we increase the duration to give the user time to click
     # We'll wait up to 3 seconds for the payload to appear
-    duration_s = int(payload.get("duration", 3))
+    duration_raw = payload.get("duration", 3)
+    try:
+        duration_s = int(duration_raw)
+    except Exception:
+        return _json_error(HistoryErrorCode.INVALID_DURATION, f"invalid duration: {duration_raw}")
+
+    if duration_s < 1:
+        return _json_error(HistoryErrorCode.INVALID_DURATION, f"invalid duration: {duration_s}")
 
     try:
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))
@@ -131,12 +174,11 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
         if process.returncode != 0:
             err_msg = (stderr.decode(errors="replace") or "").strip()
             logger.error(f"Bootstrap history subprocess failed: {err_msg}")
-            error_response = create_error_response(
-                error_code=HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
-                error_message=f"History collection subprocess failed: {err_msg}",
+            return _json_error(
+                HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
+                f"History collection subprocess failed: {err_msg}",
                 details={"asset": asset, "returncode": process.returncode},
             )
-            return error_response.dict()
 
         output_str = (stdout.decode(errors="replace") or "").strip()
         out = parse_script_json(output_str)
@@ -150,12 +192,11 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
                 error_code = HistoryErrorCode.UNKNOWN_ERROR
 
             logger.error(f"Bootstrap history failed: {error_msg} (code: {error_code_str})")
-            error_response = create_error_response(
-                error_code=error_code,
-                error_message=error_msg,
+            return _json_error(
+                error_code,
+                error_msg,
                 details={"asset": asset, "timeframe": timeframe_min, "duration": duration_s},
             )
-            return error_response.dict()
 
         data = out.get("data", {}) or {}
         candles = data.get("candles") or []
@@ -171,14 +212,20 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
             "collection_time_ms": None,
         }
         
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Bootstrap history timed out: {type(e).__name__}: {e}")
+        return _json_error(
+            HistoryErrorCode.CAPABILITY_TIMEOUT,
+            f"Bootstrap timed out: {type(e).__name__}: {str(e)}",
+            details={"asset": asset, "timeframe": timeframe_min, "duration": duration_s},
+        )
     except Exception as e:
         logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
-        error_response = create_error_response(
-            error_code=HistoryErrorCode.UNKNOWN_ERROR,
-            error_message=f"Bootstrap failed: {type(e).__name__}: {str(e)}",
+        return _json_error(
+            HistoryErrorCode.UNKNOWN_ERROR,
+            f"Bootstrap failed: {type(e).__name__}: {str(e)}",
             details={"asset": asset, "timeframe": timeframe_min},
         )
-        return error_response.dict()
 
 @router.post("/append-candle")
 async def append_candle(payload: Dict[str, Any] = Body(...)):

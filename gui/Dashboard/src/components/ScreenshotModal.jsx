@@ -13,6 +13,7 @@ const ScreenshotModal = ({ isOpen, imageDataUrl, onClose, onSave, asset, timefra
   const [isDrawing, setIsDrawing] = useState(false);
   const [activeTool, setActiveTool] = useState(TOOL_ARROW);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (!isOpen || !imageDataUrl) {
@@ -129,6 +130,7 @@ const ScreenshotModal = ({ isOpen, imageDataUrl, onClose, onSave, asset, timefra
       return;
     }
     try {
+      setSaveError('');
       setIsSaving(true);
       const dataUrl = canvas.toDataURL('image/png');
       if (onSave) {
@@ -140,7 +142,7 @@ const ScreenshotModal = ({ isOpen, imageDataUrl, onClose, onSave, asset, timefra
       onClose();
     } catch (err) {
       setIsSaving(false);
-      window.alert(err && err.message ? err.message : 'Failed to save screenshot');
+      setSaveError(err && err.message ? err.message : 'Failed to save screenshot');
     }
   };
 
@@ -158,6 +160,9 @@ const ScreenshotModal = ({ isOpen, imageDataUrl, onClose, onSave, asset, timefra
               {asset ? asset : 'No asset'}
               {timeframe ? ` · ${timeframe}` : ''}
             </span>
+            {saveError ? (
+              <span className="text-[11px] text-red-300 mt-1">{saveError}</span>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <ToolButton label="Line" active={activeTool === TOOL_LINE} onClick={() => setActiveTool(TOOL_LINE)} />

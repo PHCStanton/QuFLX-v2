@@ -381,10 +381,14 @@ const createMarketSlice = (set, get) => ({
 
       if (checkRes.ok) {
         const hist = await checkRes.json();
-        if (Array.isArray(hist.data) && hist.data.length > 0) {
-          console.log(`[LoadHistory] ✓ Found existing history: ${hist.data.length} candles`);
+        const existingCandles = Array.isArray(hist.candles)
+          ? hist.candles
+          : (Array.isArray(hist.data) ? hist.data : []);
+
+        if (existingCandles.length > 0) {
+          console.log(`[LoadHistory] ✓ Found existing history: ${existingCandles.length} candles`);
           set((state) => ({
-            historyCandles: { ...state.historyCandles, [asset]: hist.data },
+            historyCandles: { ...state.historyCandles, [asset]: existingCandles },
             historyStatus: { ...state.historyStatus, [asset]: 'loaded' }
           }));
           return;

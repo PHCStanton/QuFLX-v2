@@ -26,6 +26,7 @@ class HistoryErrorCode(str, Enum):
     # Data validation errors
     INVALID_ASSET = "invalid_asset"
     INVALID_TIMEFRAME = "invalid_timeframe"
+    INVALID_DURATION = "invalid_duration"
     UNSUPPORTED_TIMEFRAME = "unsupported_timeframe"
     
     # Data collection errors
@@ -121,6 +122,9 @@ ERROR_USER_MESSAGES = {
     
     HistoryErrorCode.INVALID_TIMEFRAME: 
         "Invalid timeframe specified. Supported timeframes: 1, 5, 15, 30, 60 minutes.",
+
+    HistoryErrorCode.INVALID_DURATION:
+        "Invalid history duration specified. Please use a positive number of seconds.",
     
     HistoryErrorCode.UNSUPPORTED_TIMEFRAME: 
         "This timeframe is not supported for history collection.",

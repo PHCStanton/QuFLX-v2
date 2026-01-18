@@ -17,6 +17,8 @@ const useAIChat = ({
   onError
 }) => {
   const [isAsking, setIsAsking] = useState(false);
+  const [answer, setAnswer] = useState(null);
+  const [isAnswerOpen, setIsAnswerOpen] = useState(false);
 
   const handleAskAi = useCallback(async () => {
     if (isAsking) return;
@@ -57,13 +59,14 @@ const useAIChat = ({
       setIsAsking(true);
       const response = await askAI({ prompt, context, image });
       if (response && response.answer) {
-        window.alert(response.answer);
+        setAnswer(String(response.answer));
+        setIsAnswerOpen(true);
       } else {
-        window.alert('AI did not return an answer.');
+        const msg = 'AI did not return an answer.';
+        if (onError) onError(msg);
       }
     } catch (err) {
       if (onError) onError(`Ask AI failed: ${getErrorMessage(err)}`);
-      window.alert(`Ask AI failed: ${getErrorMessage(err)}`);
     } finally {
       setIsAsking(false);
     }
@@ -80,7 +83,11 @@ const useAIChat = ({
     onError
   ]);
 
-  return { isAsking, handleAskAi };
+  const closeAnswer = useCallback(() => {
+    setIsAnswerOpen(false);
+  }, []);
+
+  return { isAsking, handleAskAi, answer, isAnswerOpen, closeAnswer };
 };
 
 export default useAIChat;
