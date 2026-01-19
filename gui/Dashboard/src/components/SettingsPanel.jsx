@@ -103,7 +103,6 @@ const SettingsPanel = () => {
               options={[
                 { label: 'System Default', value: 'system' },
                 { label: 'Dark Mode', value: 'dark' },
-                { label: 'Light Mode', value: 'light' },
                 { label: 'Orange Dark', value: 'orange-dark' }
               ]}
               onChange={(val) => updateSection('global', { theme: val })}

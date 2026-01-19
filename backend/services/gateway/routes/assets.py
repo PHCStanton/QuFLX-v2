@@ -22,8 +22,11 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
     """
     logger.info(f"DEBUG: Entered refresh_assets with payload: {payload}")
     try:
-        min_pct = int(payload.get("min_pct", 92))
+        # Validate and bound input parameters (Fail Fast - CORE_PRINCIPLES #9)
+        min_pct = max(1, min(100, int(payload.get("min_pct", 92))))
         max_assets = payload.get("max_assets")
+        if max_assets is not None:
+            max_assets = max(1, min(50, int(max_assets)))
         target_assets = payload.get("target_assets")
         target_assets_mode = payload.get("target_assets_mode", "ignore")
         sweep_all = bool(payload.get("sweep_all", True))
@@ -70,10 +73,10 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
             try:
                 err_json = parse_script_json(stdout_str)
                 err_msg = err_json.get("error") or stderr_str or "Unknown error"
-            except:
+            except Exception:
                 err_msg = stderr_str or stdout_str or "Unknown error"
                 
-            logger.error(f"Error refreshing assets (code {process.returncode}): {err_msg}")
+            logger.error(f"Error refreshing assets (code {process_result.returncode}): {err_msg}")
             raise HTTPException(status_code=500, detail=f"Script execution failed: {err_msg}")
             
         try:
@@ -102,7 +105,7 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
             }
 
         except Exception as e:
-            logger.error(f"Invalid JSON output from refresh_assets: {e} | raw={stdout.decode()}")
+            logger.error(f"Invalid JSON output from refresh_assets: {e} | raw={stdout_str}")
             raise HTTPException(status_code=500, detail="Invalid script output")
             
     except Exception as e:
@@ -155,9 +158,10 @@ async def sync_asset_ui(payload: Dict[str, Any] = Body(...)):
 
     min_pct = payload.get("min_pct", 92)
     try:
-        min_pct_int = int(min_pct)
+        # Validate and bound min_pct parameter (Fail Fast - CORE_PRINCIPLES #9)
+        min_pct_int = max(1, min(100, int(min_pct)))
     except Exception:
-        raise HTTPException(status_code=400, detail="min_pct must be an integer")
+        raise HTTPException(status_code=400, detail="min_pct must be an integer between 1-100")
 
     try:
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))

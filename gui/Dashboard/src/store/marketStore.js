@@ -9,6 +9,22 @@ const normalizeAsset = (asset) => {
 
 const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
 
+const parseTargetAssets = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+
+  let parts = [];
+  if (/[\n,;]+/.test(raw)) {
+    parts = raw.split(/[\n,;]+/);
+  } else if (raw.includes('/')) {
+    parts = [raw];
+  } else {
+    parts = raw.split(/\s+/);
+  }
+
+  return uniq(parts.map((a) => normalizeAsset(String(a).trim())).filter(Boolean));
+};
+
 const getErrorMessage = (err) => {
   if (err instanceof Error) return err.message;
   return String(err);
@@ -48,7 +64,6 @@ const createUiSlice = (set) => ({
         [key]: !state.automations[key]
       }
     })),
-  // Deprecated: autoSyncAssetOnSelect and selectionWorkflowConfig are no longer used
 });
 
 const createTickerSlice = () => ({
@@ -63,6 +78,7 @@ const createTickerSlice = () => ({
 const createMarketSlice = (set, get) => ({
   assetFilterState: {
     maxAssets: 5,
+    minPayout: 92,
     targetAssets: '',
     targetAssetsMode: 'ignore',
     filterMode: null
@@ -134,27 +150,6 @@ const createMarketSlice = (set, get) => ({
       }
     }
   },
-  selectAssetWithSync: async (asset) => {
-    // Redirect to standard manual selection
-    return get().setSelectedAsset(asset);
-  },
-  runAssetBatch: async () => {
-    const { payoutAssets, selectAssetWithSync } = get();
-    const assets = Array.isArray(payoutAssets) ? payoutAssets : [];
-    if (!assets.length) {
-      set({ lastError: 'No 92% payout assets available for Asset Run' });
-      return;
-    }
-
-    for (const asset of assets) {
-      try {
-        await selectAssetWithSync(asset);
-      } catch (err) {
-        console.error('Asset Run failed for', asset, err);
-        set({ lastError: `Asset Run failed for ${asset}: ${getErrorMessage(err)}` });
-      }
-    }
-  },
   hasRecentTicksForSelectedAsset: (windowMs = 5000) => {
     const { selectedAssetKey, marketData } = get();
     if (!selectedAssetKey) return false;
@@ -188,7 +183,7 @@ const createMarketSlice = (set, get) => ({
   selectedTimeframe: '1m',
   setSelectedTimeframe: async (timeframe) => {
     const prev = get().selectedTimeframe;
-    set({ selectedTimeframe: timeframe, marketData: {} });
+    set({ selectedTimeframe: timeframe, marketData: {}, lastError: null });
 
     try {
       const response = await fetch('http://localhost:8000/api/v1/timeframe/select-timeframe', {
@@ -204,6 +199,8 @@ const createMarketSlice = (set, get) => ({
           selectedTimeframe: prev === undefined ? '1m' : prev,
           lastError: errorData.detail || `Failed to select timeframe: ${timeframe}`
         });
+      } else {
+        set({ lastError: null });
       }
     } catch (err) {
       console.error('Failed to select timeframe in backend:', err);
@@ -213,12 +210,14 @@ const createMarketSlice = (set, get) => ({
       });
     }
   },
-  syncAssetUi: async () => {
-    console.log('syncAssetUi is deprecated. Please use Manual Mode.');
-  },
   syncTimeframeUi: async () => {
     const timeframe = get().selectedTimeframe;
     if (!timeframe) return;
+
+    if (timeframe === 'ticks') {
+      set({ lastError: "UI sync for 'ticks' timeframe is not supported" });
+      return;
+    }
 
     try {
       const response = await fetch('http://localhost:8000/api/v1/timeframe/sync-timeframe-ui', {
@@ -228,10 +227,44 @@ const createMarketSlice = (set, get) => ({
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const detail = errorData.detail || `Failed to sync timeframe UI for: ${timeframe}`;
+        const responseClone = response.clone();
+        let detail = `Failed to sync timeframe UI for: ${timeframe}`;
+
+        const extractDetail = (payload) => {
+          if (!payload || typeof payload !== 'object') return null;
+          const d = payload.detail;
+          if (typeof d === 'string' && d.trim()) return d;
+          if (d && typeof d === 'object') {
+            if (typeof d.user_message === 'string' && d.user_message.trim()) return d.user_message;
+            if (typeof d.detail === 'string' && d.detail.trim()) return d.detail;
+            try {
+              return JSON.stringify(d);
+            } catch {
+              return String(d);
+            }
+          }
+          if (typeof payload.error === 'string' && payload.error.trim()) return payload.error;
+          if (typeof payload.message === 'string' && payload.message.trim()) return payload.message;
+          return null;
+        };
+
+        try {
+          const errorData = await response.json();
+          detail = extractDetail(errorData) || detail;
+        } catch {
+          try {
+            const text = await responseClone.text();
+            if (typeof text === 'string' && text.trim()) {
+              detail = text.trim();
+            }
+          } catch {
+            void 0;
+          }
+        }
         console.error('Sync timeframe UI failed:', detail);
         set({ lastError: detail });
+      } else {
+        set({ lastError: null });
       }
     } catch (err) {
       console.error('Sync timeframe UI request failed:', err);
@@ -524,10 +557,7 @@ const createMarketSlice = (set, get) => ({
       const filterState = get().assetFilterState;
       const filterOptions = passedOptions || {
         max_assets: filterState.maxAssets,
-        target_assets: (filterState.targetAssets || '')
-          .split(/[,\s;]+/)
-          .map((a) => a.trim())
-          .filter(Boolean),
+        target_assets: parseTargetAssets(filterState.targetAssets),
         target_assets_mode: filterState.targetAssetsMode,
         filter_mode: filterState.filterMode
       };
@@ -545,7 +575,13 @@ const createMarketSlice = (set, get) => ({
         body: JSON.stringify(payload)
       });
       
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail || data?.error || `Asset refresh failed (HTTP ${res.status})`;
+        set({ lastError: detail });
+        return;
+      }
+
       if (data.assets) {
         set({ payoutAssets: data.assets });
         get().syncSubscriptions();

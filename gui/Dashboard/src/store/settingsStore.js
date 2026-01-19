@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-const SETTINGS_VERSION = 1;
+const SETTINGS_VERSION = 2;
+
+const normalizeTheme = (value) => {
+  if (value === 'orange-dark') return 'orange-dark';
+  if (value === 'system') return 'system';
+  return 'dark';
+};
 
 const defaultSettings = {
   version: SETTINGS_VERSION,
@@ -58,6 +64,14 @@ const sanitizeSettingsForBackend = (settings) => {
     next.global = { ...next.global };
     delete next.global.sidebarSkinDataUrl;
   }
+  return next;
+};
+
+const normalizeSettings = (settings) => {
+  const next = { ...settings };
+  const global = next.global ? { ...next.global } : {};
+  global.theme = normalizeTheme(global.theme);
+  next.global = global;
   return next;
 };
 
@@ -122,7 +136,7 @@ const useSettingsStore = create(
               }),
             };
 
-            set({ settings: merged });
+            set({ settings: normalizeSettings(merged) });
           }
         } catch (error) {
           console.error('Failed to fetch settings from backend:', error);
@@ -135,7 +149,7 @@ const useSettingsStore = create(
           const current = get().settings;
           const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
 
-          const payload = sanitizeSettingsForBackend(newSettings || current);
+          const payload = sanitizeSettingsForBackend(normalizeSettings(newSettings || current));
           const response = await fetch('/api/v1/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -182,7 +196,7 @@ const useSettingsStore = create(
               },
             };
 
-            set({ settings: merged });
+            set({ settings: normalizeSettings(merged) });
             return true;
           }
         } catch (error) {
@@ -203,7 +217,7 @@ const useSettingsStore = create(
             ...partial
           }
         };
-        set({ settings: nextSettings });
+        set({ settings: section === 'global' ? normalizeSettings(nextSettings) : nextSettings });
         // Optionally auto-save to backend
         // get().saveSettings(nextSettings);
       },
@@ -227,7 +241,14 @@ const useSettingsStore = create(
     {
       name: 'quflx-settings',
       version: SETTINGS_VERSION,
-      storage: createJSONStorage(() => localStorage)
+      storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState) => {
+        const next = { ...persistedState };
+        if (next?.settings) {
+          next.settings = normalizeSettings(next.settings);
+        }
+        return next;
+      }
     }
   )
 );

@@ -138,10 +138,3 @@ export const indicatorOptions = [
     ],
   },
 ];
-
-export const addObjectOptions = [
-  { label: 'Horizontal Line', value: 'horizontal_line' },
-  { label: 'Zone', value: 'zone' },
-  { label: 'Label', value: 'label' },
-];
-

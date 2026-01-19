@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText, Plus, RefreshCcw } from 'lucide-react';
+import { X, Layers, Clock, FileText, RefreshCcw } from 'lucide-react';
 import ChartActions from './ChartActions';
 
 const ChartHeader = ({
@@ -15,8 +15,6 @@ const ChartHeader = ({
   addIndicator,
   activeIndicators,
   removeIndicator,
-  addObjectOptions,
-  onAddObjectSelect,
   onOpenScreenshot,
   onAskAi,
   isAsking,
@@ -31,7 +29,11 @@ const ChartHeader = ({
     if (!onSyncTimeframe || isSyncingTimeframe) return;
     setSyncClicked(true);
     window.setTimeout(() => setSyncClicked(false), 1000);
-    await onSyncTimeframe();
+    try {
+      await onSyncTimeframe();
+    } catch (err) {
+      console.error('Sync TimeFrame failed:', err);
+    }
   };
 
   return (
@@ -58,9 +60,9 @@ const ChartHeader = ({
           <button
             type="button"
             onClick={handleSyncClick}
-            disabled={isSyncingTimeframe}
-            title="Sync TimeFrame with Platform"
-            aria-label="Sync TimeFrame with Platform"
+            disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
+            title={selectedTimeframe === 'ticks' ? "Sync disabled for 'ticks'" : 'Sync TimeFrame with Platform'}
+            aria-label={selectedTimeframe === 'ticks' ? "Sync disabled for 'ticks'" : 'Sync TimeFrame with Platform'}
             className={`quflx-neo-icon-btn disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''}`}
           >
             <RefreshCcw className="w-4 h-4 quflx-neo-btn__icon" />
@@ -104,15 +106,6 @@ const ChartHeader = ({
               });
             }}
             icon={Layers}
-          />
-        </div>
-
-        <div className="w-36">
-          <Combobox 
-            placeholder="+ Object"
-            options={addObjectOptions}
-            onChange={onAddObjectSelect}
-            icon={Plus}
           />
         </div>
       </div>

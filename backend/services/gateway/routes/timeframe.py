@@ -39,6 +39,51 @@ LABEL_MAP = {
     "1h": "1h",
 }
 
+
+async def _run_capability(capability: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    runner_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py")
+    )
+
+    args = [
+        sys.executable,
+        runner_path,
+        capability,
+        "--inputs",
+        json.dumps(inputs),
+    ]
+
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, stderr = await process.communicate()
+        return {
+            "return_code": process.returncode,
+            "stdout": (stdout or b"").decode(errors="replace").strip(),
+            "stderr": (stderr or b"").decode(errors="replace").strip(),
+        }
+    except NotImplementedError:
+        import subprocess
+
+        def run_sync():
+            p = subprocess.run(args, capture_output=True, env=env, text=False)
+            return p.returncode, p.stdout, p.stderr
+
+        return_code, stdout, stderr = await asyncio.to_thread(run_sync)
+        return {
+            "return_code": int(return_code),
+            "stdout": (stdout or b"").decode(errors="replace").strip(),
+            "stderr": (stderr or b"").decode(errors="replace").strip(),
+        }
+
 @router.post("/select-timeframe")
 async def select_timeframe(payload: Dict[str, str] = Body(...)):
     timeframe = payload.get("timeframe")
@@ -85,61 +130,46 @@ async def sync_timeframe_ui(payload: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=400, detail=f"UI sync not configured for timeframe: {normalized}")
 
     try:
-        runner_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "../../../capabilities_v2/runner.py")
-        )
+        run_inputs = {
+            "labels": [label],
+            "attempts": 3,
+            "delay_ms": 250,
+            "tf_wait_s": 0.15,
+            "focus_on_chart": True,
+            "save_diag": True,
+        }
 
-        inputs = {"action": "select_timeframe", "label": label}
+        proc = await _run_capability("timeframe_select_sync", run_inputs)
+        output_str = proc.get("stdout") or ""
+        stderr_str = proc.get("stderr") or ""
 
-        env = dict(os.environ)
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUTF8"] = "1"
-
-        # Use async subprocess to avoid blocking the event loop
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            runner_path,
-            "timeframe_menu",
-            "--inputs",
-            json.dumps(inputs),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env
-        )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            err_msg = stderr.decode().strip()
-            logger.error(f"Sync timeframe UI failed: {err_msg}")
-            raise HTTPException(status_code=500, detail=f"Script execution failed: {err_msg}")
-
-        output_str = stdout.decode().strip()
-        try:
-            out = parse_script_json(output_str)
-        except Exception as e:
-            logger.error(f"Invalid sync timeframe UI output: {e} | raw={output_str}")
-            raise HTTPException(status_code=502, detail="Invalid script output")
+        out = parse_script_json(output_str)
+        if proc.get("return_code") != 0 and out.get("ok") is True:
+            logger.error("timeframe_select_sync returned non-zero but ok=True")
 
         if not out.get("ok"):
             raw_error = str(out.get("error") or "timeframe sync failed")
-            if raw_error == "open failed":
-                detail = (
-                    "Failed to open timeframe menu in Pocket Option UI. "
-                    "Ensure the trading chart is visible in the attached Chrome session "
-                    "and try again."
-                )
-            else:
-                detail = raw_error
-            raise HTTPException(status_code=500, detail=detail)
+            data = out.get("data") or {}
+            options = data.get("options") if isinstance(data, dict) else None
+            if isinstance(options, list) and options:
+                raw_error = f"{raw_error}. Visible options: {', '.join([str(x) for x in options[:20]])}"
 
-        data = out.get("data", {})
+            if "Failed to connect to Chrome" in raw_error or "Selenium not available" in raw_error:
+                raise HTTPException(status_code=424, detail=raw_error)
+
+            if raw_error in {"open failed", "menu button not found", "timeframe not found"}:
+                raise HTTPException(status_code=424, detail=raw_error)
+
+            if stderr_str and raw_error == "timeframe sync failed":
+                raw_error = f"{raw_error}: {stderr_str}"
+
+            raise HTTPException(status_code=500, detail=raw_error)
 
         return {
             "status": "success",
             "timeframe": normalized,
             "label": label,
-            "data": data,
+            "data": out.get("data", {}),
         }
 
     except HTTPException:

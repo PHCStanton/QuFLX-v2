@@ -7,6 +7,7 @@ import ChartWorkspace from './ChartWorkspace';
 import SettingsPanel from './SettingsPanel';
 import ErrorBoundary from './ErrorBoundary';
 import ContextPanelRouter from './ContextPanelRouter';
+import ErrorToast from './ErrorToast';
 
 const Dashboard = () => {
   const { connectSocket, disconnectSocket, activeTab } = useMarketStore();
@@ -22,25 +23,16 @@ const Dashboard = () => {
   useEffect(() => {
     const root = window.document.documentElement;
     // Remove all theme classes first
-    root.classList.remove('theme-light', 'theme-orange-dark', 'dark');
+    root.classList.remove('theme-light', 'theme-dark', 'theme-orange-dark', 'dark');
     
     let targetTheme = settings.global.theme;
     
-    // Handle System Theme
-    if (targetTheme === 'system') {
-      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      targetTheme = isDark ? 'dark' : 'light';
+    root.classList.add('dark');
+    if (targetTheme === 'dark') {
+      root.classList.add('theme-dark');
     }
-
-    if (targetTheme === 'light') {
-      root.classList.add('theme-light');
-      // No 'dark' class for light mode
-    } else {
-      // All other modes (dark, orange-dark) are considered 'dark' for Tailwind
-      root.classList.add('dark');
-      if (targetTheme === 'orange-dark') {
-        root.classList.add('theme-orange-dark');
-      }
+    if (targetTheme === 'orange-dark') {
+      root.classList.add('theme-orange-dark');
     }
   }, [settings.global.theme]);
 
@@ -82,6 +74,8 @@ const Dashboard = () => {
           Copyright © 2026 QuFLX. All rights Reserved
         </footer>
       </div>
+
+      <ErrorToast />
     </div>
   );
 };

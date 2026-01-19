@@ -78,7 +78,7 @@ class FavoriteStarSelect(Capability):
         if By is None:
             return CapResult(ok=False, data={}, error="Selenium not available", artifacts=())
 
-        min_pct: int = 92
+        min_pct: int = int(inputs.get("min_pct", 92))
         sweep_all: bool = bool(inputs.get("sweep_all", True))
         unstar_below: bool = bool(inputs.get("unstar_below", True))
         limit_to_visible: bool = bool(inputs.get("limit_to_visible", True))
@@ -349,19 +349,13 @@ class FavoriteStarSelect(Capability):
             is_in_target = False
             is_target_ok = True
             if target_assets:
-                # Fuzzy matching: check if target is in label or label is in target
-                is_in_target = any(t in norm_label or norm_label in t for t in normalized_targets)
+                is_in_target = norm_label in normalized_targets
                 
                 if target_assets_mode == "ignore" and is_in_target:
                     is_target_ok = False
-                
-                # DEBUG LOGGING for Target Assets
+
                 if is_in_target:
-                    logger.info(f"DEBUG: '{asset_label}' (norm: {norm_label}) MATCHED TARGET in {target_assets_mode} mode.")
-                elif target_assets_mode == "include":
-                    # In 'include' mode, non-targets are still eligible for the remainder of max_assets,
-                    # but they are not prioritized.
-                    pass
+                    logger.info(f"EXACT MATCH: '{norm_label}' found in targets")
             
             # Categorize
             # RULE: If it's a target asset in 'include' mode, it BYPASSES the payout requirement.
@@ -551,12 +545,19 @@ class FavoriteStarSelect(Capability):
             rows_found: rows.length,
             labels_checked: [],
             match_found: false,
+            match_type: null,
+            matched_label: null,
             star_found: false,
             click_attempted: false,
             star_classes: null,
             error: null
         };
-        
+
+        let bestMatch = null;
+        let bestMatchType = null;
+        let bestMatchLabel = "";
+        let bestMatchNorm = "";
+
         for (const row of rows) {
             const labelEl = row.querySelector(".alist__label, .asset-name, .name, [class*='label']");
             let rowLabel = "";
@@ -565,43 +566,60 @@ class FavoriteStarSelect(Capability):
             } else {
                 rowLabel = row.innerText.split("\\n")[0].trim().replace(/\\s*\\d+\\s*%\\s*$/, "");
             }
-            
+
             const normRowLabel = normalize(rowLabel);
             debug.labels_checked.push({raw: rowLabel, norm: normRowLabel});
-            
-            if (rowLabel === targetLabel || normRowLabel === normTarget || 
-                (normRowLabel.length > 3 && (normRowLabel.includes(normTarget) || normTarget.includes(normRowLabel)))) {
-                
-                debug.match_found = true;
-                row.scrollIntoView({block: 'center', behavior: 'instant'});
-                
-                // Robust star selector matching the snapshot extraction
-                const star = row.querySelector(
-                  "i.alist__icon.fa-star, i.alist__icon.fa-star-o, .add, .del, .fa-star, .fa-star-o, [class*='star'], .asset-star, button[class*='favorite'], [data-action='toggle-favorite']"
-                );
-                
-                if (star) {
-                    debug.star_found = true;
-                    debug.star_classes = star.className;
-                    try {
-                        star.click();
-                        debug.click_attempted = true;
-                    } catch(e) {
-                        debug.error = "star_click_error: " + e.message;
-                    }
-                    return debug;
-                } else {
-                    debug.error = "no_star_element_in_row";
-                    try {
-                        row.click();
-                        debug.click_attempted = true;
-                    } catch(e) {
-                        debug.error = "row_click_error: " + e.message;
-                    }
-                    return debug;
+
+            if (rowLabel === targetLabel || normRowLabel === normTarget) {
+                bestMatch = row;
+                bestMatchType = 'exact';
+                bestMatchLabel = rowLabel;
+                bestMatchNorm = normRowLabel;
+                break;
+            }
+
+            if (!bestMatch && normRowLabel.length > 3) {
+                if (normRowLabel.includes(normTarget) || normTarget.includes(normRowLabel)) {
+                    bestMatch = row;
+                    bestMatchType = 'fuzzy';
+                    bestMatchLabel = rowLabel;
+                    bestMatchNorm = normRowLabel;
                 }
             }
         }
+
+        if (bestMatch) {
+            debug.match_found = true;
+            debug.match_type = bestMatchType;
+            debug.matched_label = {raw: bestMatchLabel, norm: bestMatchNorm};
+            bestMatch.scrollIntoView({block: 'center', behavior: 'instant'});
+
+            const star = bestMatch.querySelector(
+              "i.alist__icon.fa-star, i.alist__icon.fa-star-o, .add, .del, .fa-star, .fa-star-o, [class*='star'], .asset-star, button[class*='favorite'], [data-action='toggle-favorite']"
+            );
+
+            if (star) {
+                debug.star_found = true;
+                debug.star_classes = star.className;
+                try {
+                    star.click();
+                    debug.click_attempted = true;
+                } catch(e) {
+                    debug.error = "star_click_error: " + e.message;
+                }
+                return debug;
+            }
+
+            debug.error = "no_star_element_in_row";
+            try {
+                bestMatch.click();
+                debug.click_attempted = true;
+            } catch(e) {
+                debug.error = "row_click_error: " + e.message;
+            }
+            return debug;
+        }
+
         return debug;
         """
         try:
@@ -611,7 +629,8 @@ class FavoriteStarSelect(Capability):
             if isinstance(result, dict):
                 logger.info(f"Click star debug for '{label}': rows_found={result.get('rows_found')}, "
                            f"match_found={result.get('match_found')}, star_found={result.get('star_found')}, "
-                           f"click_attempted={result.get('click_attempted')}, star_classes={result.get('star_classes')}, "
+                           f"match_type={result.get('match_type')}, click_attempted={result.get('click_attempted')}, "
+                           f"star_classes={result.get('star_classes')}, "
                            f"error={result.get('error')}")
                 if result.get('rows_found', 0) == 0:
                     logger.warning(f"NO ROWS FOUND - Assets dropdown may not be open!")

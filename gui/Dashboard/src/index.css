@@ -15,6 +15,10 @@
   --border-color: 255 255 255;
 }
 
+.theme-dark {
+  --dashboard-bg: 48 48 48;
+}
+
 .theme-light {
   /* Anime Theme - Yellow & Beige Gradient */
   --dashboard-bg: 252 237 207; /* LIGHT_BEIGE #fcedcf */
@@ -507,12 +511,46 @@
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
+  --logo-scene-size: 32px;
+  --logo-cube-size: 19px;
+  --logo-face-size: 16px;
+  --logo-face-depth: 8px;
+  --logo-face-bg: rgba(0, 10, 40, 0.9);
+  --logo-face-border: rgba(0, 224, 255, 0.8);
+  --logo-face-shadow: 0 0 12px rgba(0, 224, 255, 0.8), inset 0 0 8px rgba(0, 224, 255, 0.4);
+  --logo-face-radius: 50%;
+  --logo-face-opacity: 0.8;
+  --logo-face-bg-hover: rgba(0, 110, 255, 0.3);
+  --logo-face-border-hover: rgba(0, 224, 255, 1);
+  --logo-face-shadow-hover: 0 0 10px rgba(0, 224, 255, 0.6);
+  --logo-face-radius-hover: 0%;
+  --logo-face-opacity-hover: 0.9;
+  --logo-glow-size: 40px;
+  --logo-glow-bg: radial-gradient(circle, rgba(0, 224, 255, 0.3) 0%, transparent 70%);
+  --logo-glow-opacity: 0.4;
+  --logo-glow-opacity-hover: 1;
+  --logo-glow-scale-hover: 1.2;
+  --logo-text-gradient: linear-gradient(90deg, #d4eaff, #af8dff, #0151ff);
+  --logo-text-shadow-1: 0 0 8px rgba(64, 191, 255, 0.6);
+  --logo-text-shadow-2: 0 0 16px rgba(0, 220, 255, 0.4);
+}
+
+.theme-orange-dark .quflx-logo {
+  --logo-text-gradient: linear-gradient(90deg, #ffe7d1, #fb923c, #8b4513);
+  --logo-text-shadow-1: 0 0 8px rgba(251, 146, 60, 0.75);
+  --logo-text-shadow-2: 0 0 16px rgba(255, 140, 0, 0.45);
+  --logo-face-border: rgba(251, 146, 60, 0.85);
+  --logo-face-shadow: 0 0 12px rgba(251, 146, 60, 0.55), inset 0 0 8px rgba(255, 200, 150, 0.15);
+  --logo-face-bg-hover: rgba(251, 146, 60, 0.22);
+  --logo-face-border-hover: rgba(255, 180, 120, 0.95);
+  --logo-face-shadow-hover: 0 0 10px rgba(255, 140, 0, 0.55);
+  --logo-glow-bg: radial-gradient(circle, rgba(251, 146, 60, 0.26) 0%, transparent 70%);
 }
 
 /* --- Animated Cube Logo Styles --- */
 .logo-scene {
-  width: 32px;
-  height: 32px;
+  width: var(--logo-scene-size);
+  height: var(--logo-scene-size);
   perspective: 800px;
   display: flex;
   justify-content: center;
@@ -520,8 +558,8 @@
 }
 
 .logo-cube {
-  width: 16px;
-  height: 16px;
+  width: var(--logo-cube-size);
+  height: var(--logo-cube-size);
   position: relative;
   transform-style: preserve-3d;
   transform: rotateX(0deg) rotateY(0deg);
@@ -534,29 +572,29 @@
 
 .logo-face {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  background: rgba(0, 10, 40, 0.9); /* Dark core for black hole */
-  border: 1px solid rgba(0, 224, 255, 0.8);
-  box-shadow: 0 0 12px rgba(0, 224, 255, 0.8), inset 0 0 8px rgba(0, 224, 255, 0.4);
+  width: var(--logo-face-size);
+  height: var(--logo-face-size);
+  background: var(--logo-face-bg); /* Dark core for black hole */
+  border: 1px solid var(--logo-face-border);
+  box-shadow: var(--logo-face-shadow);
   backdrop-filter: blur(2px);
-  border-radius: 50%; /* Start as circle (Black Hole) */
+  border-radius: var(--logo-face-radius); /* Start as circle (Black Hole) */
   transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), 
               opacity 0.6s ease, 
               background 0.6s ease,
               border-color 0.6s ease,
               border-radius 0.8s ease,
               box-shadow 0.8s ease;
-  opacity: 0.8;
+  opacity: var(--logo-face-opacity);
   pointer-events: none;
 }
 
 .quflx-logo:hover .logo-face {
-  opacity: 0.9;
-  background: rgba(0, 110, 255, 0.3);
-  border-color: rgba(0, 224, 255, 1);
-  box-shadow: 0 0 10px rgba(0, 224, 255, 0.6);
-  border-radius: 0%; /* Transform to square (Cube) */
+  opacity: var(--logo-face-opacity-hover);
+  background: var(--logo-face-bg-hover);
+  border-color: var(--logo-face-border-hover);
+  box-shadow: var(--logo-face-shadow-hover);
+  border-radius: var(--logo-face-radius-hover); /* Transform to square (Cube) */
 }
 
 /* Default "Flat" state: all faces collapsed at center */
@@ -568,40 +606,41 @@
 .logo-face.bottom { transform: rotateX(-90deg) translateZ(0px); }
 
 /* Hover "Expanded" state: faces move to form a cube */
-.quflx-logo:hover .logo-face.front  { transform: rotateY(0deg) translateZ(8px); }
-.quflx-logo:hover .logo-face.back   { transform: rotateY(180deg) translateZ(8px); }
-.quflx-logo:hover .logo-face.right  { transform: rotateY(90deg) translateZ(8px); }
-.quflx-logo:hover .logo-face.left   { transform: rotateY(-90deg) translateZ(8px); }
-.quflx-logo:hover .logo-face.top    { transform: rotateX(90deg) translateZ(8px); }
-.quflx-logo:hover .logo-face.bottom { transform: rotateX(-90deg) translateZ(8px); }
+.quflx-logo:hover .logo-face.front  { transform: rotateY(0deg) translateZ(var(--logo-face-depth)); }
+.quflx-logo:hover .logo-face.back   { transform: rotateY(180deg) translateZ(var(--logo-face-depth)); }
+.quflx-logo:hover .logo-face.right  { transform: rotateY(90deg) translateZ(var(--logo-face-depth)); }
+.quflx-logo:hover .logo-face.left   { transform: rotateY(-90deg) translateZ(var(--logo-face-depth)); }
+.quflx-logo:hover .logo-face.top    { transform: rotateX(90deg) translateZ(var(--logo-face-depth)); }
+.quflx-logo:hover .logo-face.bottom { transform: rotateX(-90deg) translateZ(var(--logo-face-depth)); }
+
 
 .logo-scene::after {
   content: '';
   position: absolute;
-  width: 40px;
-  height: 40px;
-  background: radial-gradient(circle, rgba(0, 224, 255, 0.3) 0%, transparent 70%);
-  opacity: 0.4; /* Constant subtle glow for the black hole */
+  width: var(--logo-glow-size);
+  height: var(--logo-glow-size);
+  background: var(--logo-glow-bg);
+  opacity: var(--logo-glow-opacity); /* Constant subtle glow for the black hole */
   transition: opacity 0.8s ease, transform 0.8s ease;
   pointer-events: none;
 }
 
 .quflx-logo:hover .logo-scene::after {
-  opacity: 1;
-  transform: scale(1.2);
+  opacity: var(--logo-glow-opacity-hover);
+  transform: scale(var(--logo-glow-scale-hover));
 }
 
 .quflx-logo-text-main,
 .quflx-logo-text-version {
   font-weight: 900;
   line-height: 1;
-  background: linear-gradient(90deg, #d4eaff, #af8dff, #0151ff);
+  background: var(--logo-text-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow:
-    0 0 8px rgba(64, 191, 255, 0.6),
-    0 0 16px rgba(0, 220, 255, 0.4);
+    var(--logo-text-shadow-1),
+    var(--logo-text-shadow-2);
 }
 
 .quflx-logo-text-main {

@@ -19,7 +19,7 @@ import AiAnswerModal from './AiAnswerModal';
 import OscillatorPanel from './OscillatorPanel';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 import ErrorBoundary from './ErrorBoundary';
-import { timeframeOptions, csvOptions, indicatorOptions, addObjectOptions } from '../config/chartOptions';
+import { timeframeOptions, csvOptions, indicatorOptions } from '../config/chartOptions';
 
 const ChartWorkspace = () => {
   const { settings } = useSettingsStore();
@@ -153,8 +153,6 @@ const ChartWorkspace = () => {
     [settingsIndicator, updateIndicator]
   );
 
-  const noop = useCallback(() => {}, []);
-
   return (
     <Card className="col-span-9 flex flex-col flex-1 overflow-hidden rounded-2xl quflx-section-light border border-gray-800 shadow-xl relative">
       {lastError && (
@@ -176,8 +174,6 @@ const ChartWorkspace = () => {
         addIndicator={addIndicator}
         activeIndicators={activeIndicators}
         removeIndicator={removeIndicator}
-        addObjectOptions={addObjectOptions}
-        onAddObjectSelect={noop}
         onOpenScreenshot={openScreenshot}
         onAskAi={handleAskAi}
         isAsking={isAsking}

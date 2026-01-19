@@ -16,7 +16,7 @@ export async function saveChartScreenshot({ imageBase64, annotated = false, asse
     payload.timeframe = timeframe;
   }
 
-  const res = await fetch('http://localhost:8000/api/v1/screenshots/chart', {
+  const res = await fetch('http://localhost:8000/api/v1/screenshots/save', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
