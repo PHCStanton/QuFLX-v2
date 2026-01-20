@@ -19,19 +19,6 @@
   --dashboard-bg: 48 48 48;
 }
 
-.theme-light {
-  /* Anime Theme - Yellow & Beige Gradient */
-  --dashboard-bg: 252 237 207; /* LIGHT_BEIGE #fcedcf */
-  --card-bg: 255 255 255;
-  --section-bg: 15 15 35;
-  --text-primary: 66 56 0; /* Dark Olive/Brown for contrast */
-  --text-secondary: 100 90 40;
-  --accent-primary: 233 211 5; /* YELLOW #e9d305 */
-  --accent-green: 22 163 74; /* Green 600 #16a34a */
-  --accent-glow: 233, 211, 5;
-  --border-color: 212 190 140;
-}
-
 .theme-orange-dark {
   --dashboard-bg: 10 12 16;
   --card-bg: 20 22 28;
@@ -42,6 +29,32 @@
   --accent-green: 34 197 94; /* Green 500 #22c55e */
   --accent-glow: 251, 146, 60;
   --border-color: 45 48 55;
+}
+
+.theme-ironman {
+  --dashboard-bg: 6 8 12;
+  --card-bg: 10 12 18;
+  --section-bg: 12 16 24;
+  --text-primary: 240 248 255;
+  --text-secondary: 150 175 190;
+  --accent-primary: 255 59 59;
+  --accent-green: 0 217 255;
+  --accent-glow: 0, 217, 255;
+  --border-color: 40 48 60;
+  --quflx-sidebar-bg-image: url('./assets/IRONMAN_BG8.jpg');
+}
+
+.theme-black-white {
+  --dashboard-bg: 8 9 11;
+  --card-bg: 14 15 18;
+  --section-bg: 18 19 24;
+  --text-primary: 245 245 245;
+  --text-secondary: 190 190 190;
+  --accent-primary: 245 245 245;
+  --accent-green: 220 220 220;
+  --accent-glow: 245, 245, 245;
+  --border-color: 60 60 66;
+  --quflx-sidebar-bg-image: url('./assets/textures/Grid_Texture.jpg');
 }
 
 /* --- Base Card Styles --- */
@@ -55,23 +68,37 @@
   border: 10px solid rgba(42, 84, 121, 0.2);
 }
 
-.theme-light .quflx-card {
-  background-color: #fcedcf;
-  background-image: 
-    linear-gradient(135deg, #fcedcf 0%, #e9d305 100%); /* LIGHT_BEIGE to YELLOW */
-  box-shadow: 
-    0 15px 30px -10px rgba(233, 211, 5, 0.3),
-    0 0 0 1px rgba(233, 211, 5, 0.1);
-  border: 1px solid rgba(233, 211, 5, 0.2);
-}
-
 .theme-orange-dark .quflx-card {
   background-image: 
-    linear-gradient(165deg, #ff8c00 0%, #8b4513 25%, #020408 70%);
+    linear-gradient(165deg, #ff9500 0%, #8b4513 25%, #020408 70%);
   box-shadow: 
     0 25px 50px -12px rgba(0, 0, 0, 0.9),
     0 0 0 1px rgba(255, 140, 0, 0.2);
   border: 1px solid rgba(255, 140, 0, 0.2);
+}
+
+.theme-ironman .quflx-card {
+  background-color: #05070b;
+  background-image:
+    linear-gradient(135deg, rgba(255, 59, 59, 0.26) 0%, rgba(0, 217, 255, 0.18) 55%, rgba(0, 0, 0, 0.88) 100%),
+    radial-gradient(circle at 18% 35%, rgba(255, 59, 59, 0.22), transparent 55%),
+    radial-gradient(circle at 82% 35%, rgba(0, 217, 255, 0.20), transparent 55%);
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.92),
+    0 0 0 1px rgba(0, 217, 255, 0.14);
+  border: 1px solid rgba(0, 217, 255, 0.22);
+}
+
+.theme-black-white .quflx-card {
+  background-color: #07080a;
+  background-image:
+    linear-gradient(135deg, rgba(245, 245, 245, 0.14) 0%, rgba(245, 245, 245, 0.05) 45%, rgba(0, 0, 0, 0.92) 100%),
+    radial-gradient(circle at 15% 40%, rgba(255, 255, 255, 0.10), transparent 55%),
+    radial-gradient(circle at 85% 35%, rgba(255, 255, 255, 0.06), transparent 60%);
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.92),
+    0 0 0 1px rgba(245, 245, 245, 0.10);
+  border: 1px solid rgba(245, 245, 245, 0.16);
 }
 
 /* --- Topbar Styles --- */
@@ -80,18 +107,26 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.theme-light .quflx-topbar {
-  background-color: rgba(252, 237, 207, 0.9);
-  background-image:
-    linear-gradient(90deg, rgba(252, 237, 207, 0.95), rgba(233, 211, 5, 0.2)),
-    radial-gradient(circle at 0% 0%, rgba(233, 211, 5, 0.1), transparent 70%);
-  border-bottom: 1px solid rgba(233, 211, 5, 0.2);
-}
-
 .theme-orange-dark .quflx-topbar {
   background-image:
     linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(var(--accent-glow), 0.72)),
     radial-gradient(circle at top left, rgba(248, 245, 245, 0.4), transparent 55%);
+}
+
+.theme-ironman .quflx-topbar {
+  background-image:
+    linear-gradient(90deg, rgba(255, 59, 59, 0.20) 0%, rgba(6, 8, 12, 0.92) 40%, rgba(0, 217, 255, 0.22) 100%),
+    radial-gradient(circle at 12% 0%, rgba(255, 59, 59, 0.18), transparent 55%),
+    radial-gradient(circle at 88% 0%, rgba(0, 217, 255, 0.16), transparent 55%);
+  border-bottom: 1px solid rgba(0, 217, 255, 0.18);
+}
+
+.theme-black-white .quflx-topbar {
+  background-image:
+    linear-gradient(90deg, rgba(245, 245, 245, 0.14) 0%, rgba(8, 9, 11, 0.94) 40%, rgba(245, 245, 245, 0.12) 100%),
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.10), transparent 55%),
+    radial-gradient(circle at 88% 0%, rgba(255, 255, 255, 0.08), transparent 55%);
+  border-bottom: 1px solid rgba(245, 245, 245, 0.12);
 }
 
 /* --- Sidebar Styles --- */
@@ -113,19 +148,18 @@
   pointer-events: none;
 }
 
-.theme-light .quflx-sidebar::before {
-  background-image: var(--quflx-sidebar-bg-image, url('./assets/textures/Anime_Girl_BG1.jpg'));
-  opacity: 0.3;
-  filter: brightness(1.1) contrast(1.1);
+.theme-ironman .quflx-sidebar::before {
+  background-image: var(--quflx-sidebar-bg-image, url('./assets/IRONMAN_BG8.jpg'));
+  opacity: 0.55;
+  filter: saturate(1.15) contrast(1.12) brightness(0.85);
 }
 
-.theme-light .quflx-sidebar {
-  background-color: rgba(252, 237, 207, 0.8) !important;
+.theme-black-white .quflx-sidebar::before {
+  background-image: var(--quflx-sidebar-bg-image, url('./assets/textures/Grid_Texture.jpg'));
+  opacity: 0.52;
+  filter: grayscale(1) contrast(1.1) brightness(0.85);
 }
 
-.theme-light .quflx-sidebar * {
-  color: rgb(66, 56, 0);
-}
 
 /* --- Sidebar Item Styles --- */
 .quflx-sidebar-item-active {
@@ -144,28 +178,42 @@
   box-shadow: inset 0 0 50px rgba(42, 84, 121, 0.2);
 }
 
-.theme-light .quflx-sidebar-item-active {
-  background-color: rgba(233, 211, 5, 0.3);
-  color: rgb(66, 56, 0);
-  border-right: 4px solid rgb(233, 211, 5);
-  box-shadow: inset 0 0 10px rgba(233, 211, 5, 0.1);
-  font-weight: 700;
+.theme-ironman .quflx-sidebar-item-active {
+  background-color: rgba(255, 59, 59, 0.18);
+  color: #ffffff;
+  border-right: 4px solid rgb(0, 217, 255);
+  box-shadow:
+    inset 0 0 18px rgba(255, 59, 59, 0.18),
+    0 0 28px rgba(0, 217, 255, 0.18);
+  text-shadow: 0 0 10px rgba(0, 217, 255, 0.18);
 }
 
-.theme-light .quflx-sidebar-item:hover {
-  background-color: rgba(233, 211, 5, 0.15);
-  color: rgb(66, 56, 0);
+.theme-ironman .quflx-sidebar-item:hover {
+  background-color: rgba(0, 217, 255, 0.14);
+  color: #ffffff;
+  box-shadow: inset 0 0 50px rgba(0, 217, 255, 0.14);
+}
+
+.theme-black-white .quflx-sidebar-item-active {
+  background-color: rgba(245, 245, 245, 0.10);
+  color: #ffffff;
+  border-right: 4px solid rgba(245, 245, 245, 0.70);
+  box-shadow:
+    inset 0 0 18px rgba(255, 255, 255, 0.10),
+    0 0 22px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.12);
+}
+
+.theme-black-white .quflx-sidebar-item:hover {
+  background-color: rgba(245, 245, 245, 0.06);
+  color: #ffffff;
+  box-shadow: inset 0 0 50px rgba(255, 255, 255, 0.08);
 }
 
 /* --- Right Panel Styles --- */
 .quflx-right-panel {
   position: relative;
   overflow: hidden;
-}
-
-.theme-light .quflx-right-panel {
-  background-color: #fcedcf;
-  background-image: radial-gradient(circle at top right, rgba(233, 211, 5, 0.1), transparent 70%);
 }
 
 .quflx-right-panel > * {
@@ -176,90 +224,47 @@
 /* --- Neomorphic Buttons (AI & Screenshot) --- */
 .quflx-screenshot-btn,
 .quflx-ai-btn {
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid rgba(255, 255, 255, 0.8); /* White border */
-  background: linear-gradient(145deg, #2d3748, #1e293b);
-  box-shadow: 
-    4px 4px 8px rgba(0, 0, 0, 0.4),
-    -2px -2px 6px rgba(255, 255, 255, 0.05),
-    inset 0 0 10px rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  z-index: 1;
-}
-
-.theme-light .quflx-screenshot-btn,
-.theme-light .quflx-ai-btn {
-  background: linear-gradient(145deg, #ffffff, #fcedcf);
-  box-shadow: 
-    4px 4px 8px rgba(0, 0, 0, 0.1),
-    -2px -2px 6px rgba(255, 255, 255, 0.8),
-    inset 0 0 10px rgba(255, 255, 255, 0.1);
-  color: #1e293b;
-}
-
-.quflx-screenshot-btn:hover,
-.quflx-ai-btn:hover {
-  transform: scale(1.08) translateY(-2px);
-  box-shadow: 
-    6px 6px 12px rgba(0, 0, 0, 0.5),
-    -3px -3px 8px rgba(255, 255, 255, 0.08),
-    0 0 20px rgba(255, 255, 255, 0.3);
 }
 
 .quflx-screenshot-btn:hover {
-  color: #fc7171;
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2) !important;
+  transform: translateY(-1px);
 }
 
-.theme-light .quflx-screenshot-btn:hover,
-.theme-light .quflx-ai-btn:hover {
-  box-shadow: 
-    6px 6px 12px rgba(0, 0, 0, 0.15),
-    -3px -3px 8px rgba(255, 255, 255, 1),
-    0 0 20px rgba(255, 255, 255, 0.2);
+.quflx-ai-btn:hover {
+  box-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1) !important;
+  background: #ffffff !important;
+  transform: translateY(-1px);
 }
 
-.theme-light .quflx-screenshot-btn:hover {
-  color: #fc7171;
-}
-
-.quflx-screenshot-btn:active,
-.quflx-ai-btn:active {
-  transform: scale(0.95) translateY(1px);
-  box-shadow: 
-    inset 4px 4px 8px rgba(0, 0, 0, 0.5),
-    inset -2px -2px 6px rgba(255, 255, 255, 0.05);
-}
-
-.theme-light .quflx-screenshot-btn:active,
-.theme-light .quflx-ai-btn:active {
-  box-shadow: 
-    inset 4px 4px 8px rgba(0, 0, 0, 0.1),
-    inset -2px -2px 6px rgba(255, 255, 255, 0.8);
-}
-
-/* Icon Glow & Effects */
 .quflx-screenshot-btn svg,
 .quflx-ai-btn svg {
-  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.3));
+  filter: none;
   transition: all 0.3s ease;
   position: relative;
   z-index: 2;
 }
 
+.quflx-screenshot-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: inherit;
+}
+
+.quflx-ai-btn svg {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
 .quflx-ai-btn:hover svg {
-  filter: drop-shadow(0 0 5px rgba(195, 0, 255, 0.85));
+  filter: drop-shadow(0 0 7px rgba(195, 0, 255, 0.882));
 }
 
 .quflx-screenshot-btn:hover svg {
-  filter: drop-shadow(0 0 4px rgba(252, 113, 113, 0.65));
+  color: #fdf9fa !important; /* Cleaner red (Rose 600) */
+  filter: drop-shadow(0 0 5px rgb(255, 0, 0)); /* REMOVES ICON GLOW */ 
+  stroke-width: 3px;
 }
 
 .quflx-neo-icon-btn {
@@ -279,13 +284,9 @@
     inset 0 0 10px rgba(0, 0, 0, 0.4);
 }
 
-.theme-light .quflx-neo-icon-btn {
-  background: linear-gradient(145deg, #ffffff, #e0e0e0);
-  box-shadow:
-    10px 10px 20px rgba(0, 0, 0, 0.12),
-    -8px -8px 14px rgba(255, 255, 255, 0.85),
-    inset 0 0 12px rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(233, 211, 5, 0.25) !important;
+.quflx-neo-icon-btn--sm {
+  width: 2.1rem;
+  height: 2.1rem;
 }
 
 .quflx-neo-icon-btn:hover {
@@ -296,24 +297,11 @@
     0 0 18px rgba(100, 200, 255, 0.22);
 }
 
-.theme-light .quflx-neo-icon-btn:hover {
-  box-shadow:
-    8px 8px 16px rgba(0, 0, 0, 0.14),
-    -6px -6px 1px rgba(255, 255, 255, 0.9),
-    0 0 16px rgba(100, 200, 255, 0.22);
-}
-
 .quflx-neo-icon-btn:active {
   transform: translateY(1px);
   box-shadow:
     inset 12px 12px 24px rgba(0, 0, 0, 0.7),
     inset -12px -12px 24px rgba(40, 50, 70, 0.25);
-}
-
-.theme-light .quflx-neo-icon-btn:active {
-  box-shadow:
-    inset 10px 10px 20px rgba(0, 0, 0, 0.08),
-    inset -8px -8px 14px rgba(255, 255, 255, 0.6);
 }
 
 .quflx-neo-square-btn {
@@ -333,13 +321,10 @@
     inset 0 0 10px rgba(0, 0, 0, 0.4);
 }
 
-.theme-light .quflx-neo-square-btn {
-  background: linear-gradient(145deg, #ffffff, #e0e0e0);
-  box-shadow:
-    10px 10px 20px rgba(0, 0, 0, 0.12),
-    -8px -8px 14px rgba(255, 255, 255, 0.85),
-    inset 0 0 12px rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(233, 211, 5, 0.25) !important;
+.quflx-neo-square-btn--sm {
+  width: 2.0rem;
+  height: 2.0rem;
+  border-radius: 12px;
 }
 
 .quflx-neo-square-btn:hover {
@@ -350,13 +335,6 @@
     0 0 18px rgba(100, 200, 255, 0.22);
 }
 
-.theme-light .quflx-neo-square-btn:hover {
-  box-shadow:
-    8px 8px 16px rgba(0, 0, 0, 0.14),
-    -6px -6px 10px rgba(255, 255, 255, 0.9),
-    0 0 16px rgba(100, 200, 255, 0.22);
-}
-
 .quflx-neo-square-btn:active {
   transform: translateY(1px);
   box-shadow:
@@ -364,10 +342,33 @@
     inset -12px -12px 24px rgba(40, 50, 70, 0.25);
 }
 
-.theme-light .quflx-neo-square-btn:active {
-  box-shadow:
-    inset 10px 10px 20px rgba(0, 0, 0, 0.08),
-    inset -8px -8px 14px rgba(255, 255, 255, 0.6);
+/* White Special Feature Button (AI) */
+.quflx-neo-square-btn--white {
+  background: linear-gradient(145deg, #ffffff, #f4f4f4);
+  box-shadow: 
+    2px 2px 5px rgba(0, 0, 0, 0.1),
+    -1px -1px 3px rgba(255, 255, 255, 0.2),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.02);
+  color: #1e293b;
+  border: none;
+}
+
+.quflx-neo-square-btn--white:hover {
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+}
+
+.quflx-neo-square-btn--white:active {
+  transform: translateY(1px);
+  box-shadow: 
+    inset 6px 6px 10px rgba(0, 0, 0, 0.1),
+    inset -6px -6px 10px rgba(255, 255, 255, 0.7);
+}
+
+.quflx-neo-square-btn--white svg {
+  color: #1e293b;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.1));
 }
 
 .quflx-neo-pill-btn {
@@ -382,15 +383,6 @@
     inset 0 0 10px rgba(0, 0, 0, 0.4);
 }
 
-.theme-light .quflx-neo-pill-btn {
-  background: linear-gradient(145deg, #ffffff, #e0e0e0);
-  box-shadow:
-    10px 10px 20px rgba(0, 0, 0, 0.12),
-    -8px -8px 14px rgba(255, 255, 255, 0.85),
-    inset 0 0 12px rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(233, 211, 5, 0.25) !important;
-}
-
 .quflx-neo-pill-btn:hover {
   transform: translateY(-2px);
   box-shadow:
@@ -399,24 +391,11 @@
     0 0 18px rgba(100, 200, 255, 0.22);
 }
 
-.theme-light .quflx-neo-pill-btn:hover {
-  box-shadow:
-    8px 8px 16px rgba(0, 0, 0, 0.14),
-    -6px -6px 10px rgba(255, 255, 255, 0.9),
-    0 0 16px rgba(100, 200, 255, 0.22);
-}
-
 .quflx-neo-pill-btn:active {
   transform: translateY(1px);
   box-shadow:
     inset 12px 12px 24px rgba(0, 0, 0, 0.7),
     inset -12px -12px 24px rgba(40, 50, 70, 0.25);
-}
-
-.theme-light .quflx-neo-pill-btn:active {
-  box-shadow:
-    inset 10px 10px 20px rgba(0, 0, 0, 0.08),
-    inset -8px -8px 14px rgba(255, 255, 255, 0.6);
 }
 
 .quflx-neo-btn-clicked .quflx-neo-btn__icon {
@@ -452,19 +431,6 @@
     0 8px 18px rgba(0, 0, 0, 0.35);
 }
 
-.theme-light .quflx-settings-card {
-  box-shadow:
-    0 14px 28px rgba(0, 0, 0, 0.12),
-    0 6px 14px rgba(0, 0, 0, 0.08);
-}
-
-.theme-light .quflx-section-light {
-  background-color: #ffffff;
-  background-image: linear-gradient(135deg, #ffffff 0%, #fcedcf 100%);
-  border: 1px solid rgba(233, 211, 5, 0.3);
-  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.05);
-}
-
 .theme-orange-dark .quflx-section-light {
   background-color: #0a0c10;
   background-image:
@@ -476,30 +442,6 @@
 }
 
 /* --- UI Elements (Buttons, Inputs, etc.) --- */
-.theme-light button,
-.theme-light input,
-.theme-light select,
-.theme-light textarea {
-  background-color: #ffffff !important;
-  color: rgb(66, 56, 0) !important;
-  border: 1px solid rgba(233, 211, 5, 0.5) !important;
-}
-
-.theme-light button:hover {
-  background-color: #fcedcf !important;
-}
-
-.theme-light h1,
-.theme-light h2,
-.theme-light h3,
-.theme-light h4,
-.theme-light h5,
-.theme-light h6,
-.theme-light label,
-.theme-light span,
-.theme-light p {
-  color: rgb(66, 56, 0) !important;
-}
 
 .quflx-logo-text-version {
   color: #ffffff !important;
@@ -545,6 +487,35 @@
   --logo-face-border-hover: rgba(255, 180, 120, 0.95);
   --logo-face-shadow-hover: 0 0 10px rgba(255, 140, 0, 0.55);
   --logo-glow-bg: radial-gradient(circle, rgba(251, 146, 60, 0.26) 0%, transparent 70%);
+}
+
+.theme-ironman .quflx-logo {
+  --logo-text-gradient: linear-gradient(90deg, #00d9ff, #ff3b3b);
+  --logo-text-shadow-1: 0 0 8px rgba(255, 59, 59, 0.55);
+  --logo-text-shadow-2: 0 0 16px rgba(127, 29, 29, 0.35);
+  --logo-face-bg: rgba(20, 8, 10, 0.92);
+  --logo-face-border: rgba(127, 29, 29, 0.85);
+  --logo-face-shadow: 0 0 8px rgba(255, 59, 59, 0.22), inset 0 0 6px rgba(127, 29, 29, 0.18);
+  --logo-face-bg-hover: rgba(255, 59, 59, 0.22);
+  --logo-face-border-hover: rgba(255, 59, 59, 0.95);
+  --logo-face-shadow-hover: 0 0 9px rgba(255, 59, 59, 0.28);
+  --logo-glow-bg: radial-gradient(circle, rgba(255, 59, 59, 0.10) 0%, transparent 70%);
+  --logo-glow-opacity: 0.14;
+  --logo-glow-opacity-hover: 0.28;
+  --logo-glow-size: 34px;
+}
+
+.theme-black-white .quflx-logo {
+  --logo-text-gradient: linear-gradient(90deg, #ffffff, #cfcfcf, #0a0b0d);
+  --logo-text-shadow-1: 0 0 8px rgba(255, 255, 255, 0.28);
+  --logo-text-shadow-2: 0 0 16px rgba(255, 255, 255, 0.14);
+  --logo-face-bg: rgba(8, 9, 11, 0.92);
+  --logo-face-border: rgba(245, 245, 245, 0.85);
+  --logo-face-shadow: 0 0 12px rgba(245, 245, 245, 0.28), inset 0 0 8px rgba(255, 255, 255, 0.10);
+  --logo-face-bg-hover: rgba(245, 245, 245, 0.14);
+  --logo-face-border-hover: rgba(255, 255, 255, 0.95);
+  --logo-face-shadow-hover: 0 0 12px rgba(255, 255, 255, 0.26);
+  --logo-glow-bg: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
 }
 
 /* --- Animated Cube Logo Styles --- */
