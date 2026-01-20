@@ -4,6 +4,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 const SETTINGS_VERSION = 2;
 
 const normalizeTheme = (value) => {
+  if (value === 'black-white') return 'black-white';
+  if (value === 'ironman') return 'ironman';
   if (value === 'orange-dark') return 'orange-dark';
   if (value === 'system') return 'system';
   return 'dark';

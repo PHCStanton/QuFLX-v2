@@ -163,6 +163,8 @@ class TimeframeMenu(Capability):
                 self._attempt_close(ctx)
                 return CapResult(ok=False, data={"label": label, **meta}, error="timeframe not found", artifacts=tuple(arts))
 
+            self._attempt_close(ctx)
+
             post = take_screenshot_if(ctx, f"screenshots/timeframe_select_post_{timestamp()}.png")
             if post:
                 arts.append(post)

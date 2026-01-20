@@ -34,6 +34,10 @@ const useChartWorkspaceIndicators = ({
     if (!selectedAsset || !selectedTimeframe) return;
     if (!indicatorRequest.indicators.length) return;
 
+    const tfRaw = String(selectedTimeframe || '').trim().toLowerCase();
+    const isHistoryTimeframe = tfRaw.endsWith('m') || tfRaw.endsWith('h') || tfRaw.match(/^\d+$/);
+    if (!isHistoryTimeframe) return;
+
     loadIndicators({
       asset: selectedAsset,
       timeframe: selectedTimeframe,
@@ -48,12 +52,21 @@ const useChartWorkspaceIndicators = ({
         return;
       }
 
+      const tfRaw = String(selectedTimeframe || '').trim().toLowerCase();
+      const isHistoryTimeframe = tfRaw.endsWith('m') || tfRaw.endsWith('h') || tfRaw.match(/^\d+$/);
+
       if (candle) {
-        await appendCandle({
-          asset: selectedAsset,
-          timeframe: selectedTimeframe,
-          candle,
-        });
+        if (isHistoryTimeframe) {
+          await appendCandle({
+            asset: selectedAsset,
+            timeframe: selectedTimeframe,
+            candle,
+          });
+        }
+      }
+
+      if (!isHistoryTimeframe) {
+        return;
       }
 
       if (!indicatorRequest.indicators.length) {
@@ -81,4 +94,3 @@ const useChartWorkspaceIndicators = ({
 };
 
 export default useChartWorkspaceIndicators;
-

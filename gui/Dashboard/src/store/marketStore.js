@@ -398,12 +398,38 @@ const createMarketSlice = (set, get) => ({
     }));
 
     const timeframe = get().selectedTimeframe || '1m';
-    const timeframeMin = timeframe.replace('m', '');
-    const limit = 200;
+    const tfRaw = String(timeframe).trim().toLowerCase();
+    const tfNumberMatch = tfRaw.match(/^\d+$/);
+    const minutesRaw = tfRaw.endsWith('m') ? tfRaw.slice(0, -1) : null;
+    const hoursRaw = tfRaw.endsWith('h') ? tfRaw.slice(0, -1) : null;
+    const secondsRaw = tfRaw.endsWith('s') ? tfRaw.slice(0, -1) : null;
 
     // Get dynamic wait time from settings
     const { settings } = (await import('./settingsStore')).default.getState();
     const waitTime = settings.automation.historyWaitTime || 8;
+    const dataSourceMode = settings.analysis?.dataSourceMode || 'history_and_streaming';
+
+    if (tfRaw === 'ticks' || (secondsRaw && secondsRaw.match(/^\d+$/))) {
+      const msg = `History is not available for ${timeframe}. Use Streaming Only or History + Streaming.`;
+      set((state) => ({
+        historyCandles: { ...state.historyCandles, [asset]: [] },
+        historyStatus: { ...state.historyStatus, [asset]: 'skipped' },
+        lastError: dataSourceMode === 'history_only' ? msg : state.lastError
+      }));
+      return;
+    }
+
+    let timeframeMinutes = 1;
+    if (minutesRaw && minutesRaw.match(/^\d+$/)) {
+      timeframeMinutes = Math.max(1, parseInt(minutesRaw, 10));
+    } else if (hoursRaw && hoursRaw.match(/^\d+$/)) {
+      timeframeMinutes = Math.max(1, parseInt(hoursRaw, 10) * 60);
+    } else if (tfNumberMatch) {
+      timeframeMinutes = Math.max(1, parseInt(tfRaw, 10));
+    }
+
+    const timeframeMin = String(timeframeMinutes);
+    const limit = 200;
 
     try {
       // Step 1: Quick check for existing CSV file

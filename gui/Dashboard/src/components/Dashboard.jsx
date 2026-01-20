@@ -23,7 +23,7 @@ const Dashboard = () => {
   useEffect(() => {
     const root = window.document.documentElement;
     // Remove all theme classes first
-    root.classList.remove('theme-light', 'theme-dark', 'theme-orange-dark', 'dark');
+    root.classList.remove('theme-light', 'theme-dark', 'theme-orange-dark', 'theme-ironman', 'theme-black-white', 'dark');
     
     let targetTheme = settings.global.theme;
     
@@ -33,6 +33,12 @@ const Dashboard = () => {
     }
     if (targetTheme === 'orange-dark') {
       root.classList.add('theme-orange-dark');
+    }
+    if (targetTheme === 'ironman') {
+      root.classList.add('theme-ironman');
+    }
+    if (targetTheme === 'black-white') {
+      root.classList.add('theme-black-white');
     }
   }, [settings.global.theme]);
 

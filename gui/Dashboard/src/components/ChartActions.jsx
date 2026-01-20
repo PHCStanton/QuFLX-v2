@@ -1,8 +1,11 @@
+import { useId } from 'react';
 import { Camera } from 'lucide-react';
 import askAiClickSound from '../assets/Sounds/UIClick-Ai_short.mp3';
 import screenshotClickSound from '../assets/Sounds/screenshot.mp3';
 
 const ChartActions = ({ onOpenScreenshot, onAskAi, isCapturing, isAsking }) => {
+  const chipGradientId = `chipGradient-${useId().replace(/:/g, '')}`;
+
   const handleScreenshotClick = () => {
     if (isCapturing) return;
     const audio = new Audio(screenshotClickSound);
@@ -26,59 +29,71 @@ const ChartActions = ({ onOpenScreenshot, onAskAi, isCapturing, isAsking }) => {
   };
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-2">
       <button
         type="button"
 	        onClick={handleScreenshotClick}
         disabled={isCapturing}
-        className="quflx-screenshot-btn disabled:opacity-60 disabled:cursor-not-allowed"
+        className="quflx-neo-square-btn quflx-neo-square-btn--sm quflx-screenshot-btn text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
         title="Capture chart screenshot"
       >
-        <Camera size={18} />
+        <Camera size={16} />
       </button>
       <button
         type="button"
-	        onClick={handleAskAiClick}
+        onClick={handleAskAiClick}
         disabled={isAsking}
-        className="quflx-ai-btn disabled:opacity-60 disabled:cursor-not-allowed"
+        className="quflx-neo-square-btn quflx-neo-square-btn--sm quflx-neo-square-btn--white quflx-ai-btn disabled:opacity-60 disabled:cursor-not-allowed"
         title={isAsking ? 'Asking AI…' : 'Ask AI about current market context'}
       >
-        <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
           <defs>
-            <linearGradient id="chipGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#4a4a4a"/>
-              <stop offset="100%" stopColor="#2a2a2a"/>
+            <linearGradient id={chipGradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#94a3b8" />
+              <stop offset="100%" stopColor="#475569" />
             </linearGradient>
           </defs>
-          
+
           {/* Connection pins - Top */}
-          <rect x="30" y="15" width="5" height="8" rx="1.5" fill="currentColor" opacity="0.6"/>
-          <rect x="47" y="8" width="5" height="15" rx="1.5" fill="currentColor" opacity="0.8"/>
-          <rect x="65" y="15" width="5" height="8" rx="1.5" fill="currentColor" opacity="0.6"/>
-          
+          <rect x="32" y="4" width="6" height="10" rx="2" fill="currentColor" opacity="0.4" />
+          <rect x="47" y="2" width="6" height="12" rx="2" fill="currentColor" opacity="0.6" />
+          <rect x="62" y="4" width="6" height="10" rx="2" fill="currentColor" opacity="0.4" />
+
           {/* Connection pins - Bottom */}
-          <rect x="30" y="77" width="5" height="8" rx="1.5" fill="currentColor" opacity="0.6"/>
-          <rect x="47" y="77" width="5" height="15" rx="1.5" fill="currentColor" opacity="0.8"/>
-          <rect x="65" y="77" width="5" height="8" rx="1.5" fill="currentColor" opacity="0.6"/>
-          
+          <rect x="32" y="86" width="6" height="10" rx="2" fill="currentColor" opacity="0.4" />
+          <rect x="47" y="86" width="6" height="12" rx="2" fill="currentColor" opacity="0.6" />
+          <rect x="62" y="86" width="6" height="10" rx="2" fill="currentColor" opacity="0.4" />
+
           {/* Connection pins - Left */}
-          <rect x="15" y="30" width="8" height="5" rx="1.5" fill="currentColor" opacity="0.6"/>
-          <rect x="8" y="47" width="15" height="5" rx="1.5" fill="currentColor" opacity="0.8"/>
-          <rect x="15" y="65" width="8" height="5" rx="1.5" fill="currentColor" opacity="0.6"/>
-          
+          <rect x="4" y="32" width="10" height="6" rx="2" fill="currentColor" opacity="0.4" />
+          <rect x="2" y="47" width="12" height="6" rx="2" fill="currentColor" opacity="0.6" />
+          <rect x="4" y="62" width="10" height="6" rx="2" fill="currentColor" opacity="0.4" />
+
           {/* Connection pins - Right */}
-          <rect x="77" y="30" width="8" height="5" rx="1.5" fill="currentColor" opacity="0.6"/>
-          <rect x="77" y="47" width="15" height="5" rx="1.5" fill="currentColor" opacity="0.8"/>
-          <rect x="77" y="65" width="8" height="5" rx="1.5" fill="currentColor" opacity="0.6"/>
-          
+          <rect x="86" y="32" width="10" height="6" rx="2" fill="currentColor" opacity="0.4" />
+          <rect x="86" y="47" width="12" height="6" rx="2" fill="currentColor" opacity="0.6" />
+          <rect x="86" y="62" width="10" height="6" rx="2" fill="currentColor" opacity="0.4" />
+
           {/* Main chip body */}
-          <rect x="20" y="20" width="60" height="60" rx="6" fill="url(#chipGradient)" stroke="currentColor" strokeWidth="2"/>
-          
+          <rect x="12" y="12" width="76" height="76" rx="10" fill={`url(#${chipGradientId})`} stroke="currentColor" strokeWidth="1.5" />
+
           {/* Inner chip detail */}
-          <rect x="26" y="26" width="48" height="48" rx="3" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5"/>
-          
+          <rect x="20" y="20" width="60" height="60" rx="6" fill="none" stroke="#ffffff" strokeWidth="1" opacity="0.2" />
+
           {/* AI Text */}
-          <text x="50" y="64" fontFamily="Arial, sans-serif" fontSize="44" fontWeight="bold" fill="currentColor" textAnchor="middle">AI</text>
+          <text
+            x="50"
+            y="52"
+            fontFamily="system-ui, sans-serif"
+            fontSize="50"
+            fontWeight="900"
+            fill="#ffffff"
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ letterSpacing: '-0.02em' }}
+          >
+            AI
+          </text>
         </svg>
       </button>
     </div>

@@ -63,9 +63,9 @@ const ChartHeader = ({
             disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
             title={selectedTimeframe === 'ticks' ? "Sync disabled for 'ticks'" : 'Sync TimeFrame with Platform'}
             aria-label={selectedTimeframe === 'ticks' ? "Sync disabled for 'ticks'" : 'Sync TimeFrame with Platform'}
-            className={`quflx-neo-icon-btn disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''}`}
+            className={`quflx-neo-icon-btn quflx-neo-icon-btn--sm disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''}`}
           >
-            <RefreshCcw className="w-4 h-4 quflx-neo-btn__icon" />
+            <RefreshCcw className="w-3.5 h-3.5 quflx-neo-btn__icon" />
           </button>
         )}
 

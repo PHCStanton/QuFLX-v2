@@ -106,11 +106,20 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     timeframe_min = 1
     if isinstance(timeframe, str):
         tf = timeframe.strip().lower()
+        if tf == "ticks":
+            return _json_error(HistoryErrorCode.UNSUPPORTED_TIMEFRAME, f"unsupported timeframe: {timeframe}")
         if tf.endswith("m"):
             raw = tf[:-1]
             if not raw.isdigit():
                 return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
             timeframe_min = max(1, int(raw))
+        elif tf.endswith("h"):
+            raw = tf[:-1]
+            if not raw.isdigit():
+                return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
+            timeframe_min = max(1, int(raw) * 60)
+        elif tf.endswith("s"):
+            return _json_error(HistoryErrorCode.UNSUPPORTED_TIMEFRAME, f"unsupported timeframe: {timeframe}")
         elif tf.isdigit():
             timeframe_min = max(1, int(tf))
         else:
@@ -244,11 +253,20 @@ async def append_candle(payload: Dict[str, Any] = Body(...)):
     timeframe_min = 1
     if isinstance(timeframe, str):
         tf = timeframe.strip().lower()
+        if tf == "ticks":
+            raise HTTPException(status_code=400, detail="append-candle does not support 'ticks' timeframe")
         if tf.endswith("m"):
             try:
                 timeframe_min = max(1, int(tf[:-1]))
             except Exception:
                 timeframe_min = 1
+        elif tf.endswith("h"):
+            try:
+                timeframe_min = max(1, int(tf[:-1]) * 60)
+            except Exception:
+                timeframe_min = 1
+        elif tf.endswith("s"):
+            raise HTTPException(status_code=400, detail=f"append-candle does not support seconds timeframe: {timeframe}")
         elif tf.isdigit():
             timeframe_min = max(1, int(tf))
     else:
