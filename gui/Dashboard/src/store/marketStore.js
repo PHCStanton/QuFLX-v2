@@ -38,6 +38,8 @@ const createUiSlice = (set) => ({
   lastError: null,
   setError: (message) => set({ lastError: message }),
   clearError: () => set({ lastError: null }),
+  lastAnnotatedScreenshotDataUrl: null,
+  setLastAnnotatedScreenshotDataUrl: (dataUrl) => set({ lastAnnotatedScreenshotDataUrl: dataUrl || null }),
   activeIndicators: [],
   addIndicator: (indicator) =>
     set((state) => ({
@@ -79,8 +81,8 @@ const createMarketSlice = (set, get) => ({
   assetFilterState: {
     maxAssets: 5,
     minPayout: 92,
-    targetAssets: '',
-    targetAssetsMode: 'ignore',
+    includeAssets: '',
+    ignoreAssets: '',
     filterMode: null
   },
   setAssetFilterState: (state) => set({ assetFilterState: state }),
@@ -583,8 +585,8 @@ const createMarketSlice = (set, get) => ({
       const filterState = get().assetFilterState;
       const filterOptions = passedOptions || {
         max_assets: filterState.maxAssets,
-        target_assets: parseTargetAssets(filterState.targetAssets),
-        target_assets_mode: filterState.targetAssetsMode,
+        include_assets: parseTargetAssets(filterState.includeAssets),
+        ignore_assets: parseTargetAssets(filterState.ignoreAssets),
         filter_mode: filterState.filterMode
       };
       

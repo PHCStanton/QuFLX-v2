@@ -8,6 +8,9 @@ const getErrorMessage = (err) => {
 const useAIChat = ({
   askAI,
   captureImage,
+  lastAnnotatedImage,
+  imageSource,
+  autoIncludeContext,
   marketData,
   selectedAssetKey,
   indicatorSeries,
@@ -23,7 +26,17 @@ const useAIChat = ({
   const handleAskAi = useCallback(async () => {
     if (isAsking) return;
 
-    const image = captureImage ? await captureImage() : null;
+    const prompt = window.prompt('Ask AI about the current market context:');
+    if (!prompt) return;
+
+    let image = null;
+    const src = String(imageSource || '').toLowerCase();
+    if (src === 'annotated' && typeof lastAnnotatedImage === 'string' && lastAnnotatedImage.trim()) {
+      image = lastAnnotatedImage;
+    } else if (src === 'live' || src === 'annotated') {
+      image = captureImage ? await captureImage() : null;
+    }
+
     const recentTicks = (marketData && selectedAssetKey && marketData[selectedAssetKey])
       ? marketData[selectedAssetKey].slice(-20)
       : [];
@@ -43,17 +56,17 @@ const useAIChat = ({
       });
     }
 
-    const context = {
-      asset: selectedAsset,
-      timeframe: selectedTimeframe,
-      currentPrice: recentTicks[recentTicks.length - 1]?.price,
-      activeIndicators: Array.isArray(activeIndicators) ? activeIndicators.map((i) => i.name) : [],
-      recentTicks,
-      indicatorSnapshots
-    };
-
-    const prompt = window.prompt('Ask AI about the current market context:');
-    if (!prompt) return;
+    const includeContext = autoIncludeContext !== false;
+    const context = includeContext
+      ? {
+        asset: selectedAsset,
+        timeframe: selectedTimeframe,
+        currentPrice: recentTicks[recentTicks.length - 1]?.price,
+        activeIndicators: Array.isArray(activeIndicators) ? activeIndicators.map((i) => i.name) : [],
+        recentTicks,
+        indicatorSnapshots
+      }
+      : { asset: selectedAsset, timeframe: selectedTimeframe };
 
     try {
       setIsAsking(true);
@@ -73,6 +86,9 @@ const useAIChat = ({
   }, [
     isAsking,
     captureImage,
+    lastAnnotatedImage,
+    imageSource,
+    autoIncludeContext,
     marketData,
     selectedAssetKey,
     indicatorSeries,

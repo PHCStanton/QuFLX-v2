@@ -86,8 +86,15 @@ class FavoriteStarSelect(Capability):
         close_after: bool = bool(inputs.get("close_after", True))
         filter_mode: Optional[str] = inputs.get("filter_mode", None)
         max_assets: Optional[int] = inputs.get("max_assets", 5)
+        include_assets: Optional[List[str]] = inputs.get("include_assets", None)
+        ignore_assets: Optional[List[str]] = inputs.get("ignore_assets", None)
+
         target_assets: Optional[List[str]] = inputs.get("target_assets", None)
         target_assets_mode: str = inputs.get("target_assets_mode", "ignore")
+        if include_assets is None and target_assets_mode == "include":
+            include_assets = target_assets
+        if ignore_assets is None and target_assets_mode == "ignore":
+            ignore_assets = target_assets
 
         if isinstance(max_assets, int) and max_assets <= 0:
             max_assets = None
@@ -95,9 +102,15 @@ class FavoriteStarSelect(Capability):
         if isinstance(target_assets, list) and not target_assets:
             target_assets = None
 
+        if isinstance(include_assets, list) and not include_assets:
+            include_assets = None
+
+        if isinstance(ignore_assets, list) and not ignore_assets:
+            ignore_assets = None
+
         # Log the filter configuration for debugging
         logger.info(f"FavoriteStarSelect inputs: min_pct={min_pct}, max_assets={max_assets}, "
-                    f"target_assets={target_assets}, target_assets_mode={target_assets_mode}, "
+                    f"include_assets={include_assets}, ignore_assets={ignore_assets}, "
                     f"filter_mode={filter_mode}")
 
         data: Dict[str, Any] = {
@@ -108,8 +121,8 @@ class FavoriteStarSelect(Capability):
             "dry_run": dry_run,
             "filter_mode": filter_mode,
             "max_assets": max_assets,  # NEW
-            "target_assets": target_assets,  # NEW
-            "target_assets_mode": target_assets_mode,
+            "include_assets": include_assets,
+            "ignore_assets": ignore_assets,
             "attempts": {},
             "processed": {
                 "selected_now": [],
@@ -173,8 +186,8 @@ class FavoriteStarSelect(Capability):
             min_pct,
             unstar_below,
             max_assets,
-            target_assets,
-            target_assets_mode,
+            include_assets,
+            ignore_assets,
             filter_mode
         )
 
@@ -317,8 +330,8 @@ class FavoriteStarSelect(Capability):
         min_pct: int,
         unstar_below: bool,
         max_assets: Optional[int],
-        target_assets: Optional[List[str]],
-        target_assets_mode: str,
+        include_assets: Optional[List[str]],
+        ignore_assets: Optional[List[str]],
         filter_mode: Optional[str]
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
@@ -326,8 +339,9 @@ class FavoriteStarSelect(Capability):
         Returns (to_star, to_unstar, selection)
         """
         eligible = []
-        
-        normalized_targets = [normalize_asset(a) for a in (target_assets or [])]
+
+        normalized_includes = [normalize_asset(a) for a in (include_assets or [])]
+        normalized_ignores = [normalize_asset(a) for a in (ignore_assets or [])]
         
         for item in items:
             asset_label = item["label"] or "(unknown)"
@@ -346,56 +360,53 @@ class FavoriteStarSelect(Capability):
                 is_filter_ok = False
             
             # 3. Target Assets Mode (Ignore/Include)
-            is_in_target = False
-            is_target_ok = True
-            if target_assets:
-                is_in_target = norm_label in normalized_targets
-                
-                if target_assets_mode == "ignore" and is_in_target:
-                    is_target_ok = False
+            is_included = norm_label in normalized_includes if normalized_includes else False
+            is_ignored = norm_label in normalized_ignores if normalized_ignores else False
 
-                if is_in_target:
-                    logger.info(f"EXACT MATCH: '{norm_label}' found in targets")
+            if is_included:
+                logger.info(f"EXACT MATCH (INCLUDE): '{norm_label}' found in include list")
+
+            if is_ignored:
+                logger.info(f"EXACT MATCH (IGNORE): '{norm_label}' found in ignore list")
             
-            # Categorize
-            # RULE: If it's a target asset in 'include' mode, it BYPASSES the payout requirement.
-            force_eligible = (target_assets_mode == "include" and is_in_target)
+            force_eligible = bool(is_included)
 
-            if (is_payout_ok or force_eligible) and is_filter_ok and is_target_ok:
-                item["is_target"] = is_in_target
+            if (is_payout_ok or force_eligible) and is_filter_ok and not is_ignored:
+                item["is_included"] = is_included
                 eligible.append(item)
-                if is_in_target:
-                    msg = f"Asset '{asset_label}' is a TARGET and is ELIGIBLE."
+                if is_included:
+                    msg = f"Asset '{asset_label}' is INCLUDED and is ELIGIBLE."
                     if not is_payout_ok:
                         msg += f" (Bypassing payout threshold: {payout}% < {min_pct}%)"
                     logger.info(msg)
-            elif is_in_target:
-                logger.info(f"Asset '{asset_label}' is a target but was REJECTED: payout_ok={is_payout_ok}, filter_ok={is_filter_ok}, target_ok={is_target_ok} (payout={payout}%)")
+            elif is_included or is_ignored:
+                logger.info(
+                    f"Asset '{asset_label}' was not eligible: payout_ok={is_payout_ok}, filter_ok={is_filter_ok}, ignored={is_ignored} (payout={payout}%)"
+                )
             
         # Apply Selection Priority
         to_star = []
         selection = []
         
-        # Prioritize: Targets first, then others
-        targets = [i for i in eligible if i["is_target"]]
-        others = [i for i in eligible if not i["is_target"]]
+        included = [i for i in eligible if i.get("is_included")]
+        others = [i for i in eligible if not i.get("is_included")]
 
-        if target_assets and target_assets_mode == "include":
-            # Mode 'include' prioritizes targets
+        if include_assets:
             if max_assets is None:
-                selection = targets + others
+                selection = included + others
             else:
-                selection = targets[:max_assets]
+                selection = included[:max_assets]
                 if len(selection) < max_assets:
                     selection += others[:max_assets - len(selection)]
         else:
-            # Normal or IGNORE mode (targets already filtered out of 'eligible')
             if max_assets is None:
                 selection = eligible
             else:
                 selection = eligible[:max_assets]
-        
-        logger.info(f"Selection finished. Mode: {target_assets_mode}, Max: {max_assets}, Eligible: {len(eligible)}, Targets: {len(targets)}, Selection: {[i['label'] for i in selection]}")
+
+        logger.info(
+            f"Selection finished. Max: {max_assets}, Eligible: {len(eligible)}, Included: {len(included)}, Selection: {[i['label'] for i in selection]}"
+        )
         
         to_star = [i for i in selection if not i["is_selected"]]
         

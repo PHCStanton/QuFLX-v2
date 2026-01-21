@@ -264,16 +264,139 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('ai', { responseVerbosity: val })}
             />
           </SettingRow>
-          <SettingRow label="Auto-include Chart" description="Send chart screenshot with AI queries">
-            <NeomorphicSwitch 
-              checked={settings.ai.autoIncludeChart}
-              onChange={() => updateSection('ai', { autoIncludeChart: !settings.ai.autoIncludeChart })}
+          <SettingRow label="Ask AI Image" description="Select which image is sent with AI queries">
+            <DropdownInput
+              value={settings.ai.imageSource}
+              options={[
+                { label: 'None', value: 'none' },
+                { label: 'Live Snapshot', value: 'live' },
+                { label: 'Latest Annotated Screenshot', value: 'annotated' }
+              ]}
+              onChange={(val) => updateSection('ai', { imageSource: val })}
             />
           </SettingRow>
           <SettingRow label="Auto-include Context" description="Send market data context with AI queries">
             <NeomorphicSwitch 
               checked={settings.ai.autoIncludeContext}
               onChange={() => updateSection('ai', { autoIncludeContext: !settings.ai.autoIncludeContext })}
+            />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection title="Screenshot & Markup">
+          <SettingRow label="Default Tool" description="Tool selected when screenshot editor opens">
+            <DropdownInput
+              value={settings.screenshot.defaultTool}
+              options={[
+                { label: 'Arrow', value: 'arrow' },
+                { label: 'Line', value: 'line' },
+                { label: 'Rect', value: 'rect' },
+                { label: 'Text', value: 'text' },
+                { label: 'Circle', value: 'circle' }
+              ]}
+              onChange={(val) => updateSection('screenshot', { defaultTool: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Default Color" description="Default color for markups and text">
+            <DropdownInput
+              value={settings.screenshot.defaultColor}
+              options={[
+                { label: 'Orange', value: 'orange' },
+                { label: 'Blue', value: 'blue' },
+                { label: 'White', value: 'white' },
+                { label: 'Yellow', value: 'yellow' },
+                { label: 'Green', value: 'green' }
+              ]}
+              onChange={(val) => updateSection('screenshot', { defaultColor: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Default Font Size" description="Font size used for screenshot text tool">
+            <DropdownInput
+              value={settings.screenshot.defaultFontSize}
+              options={[
+                { label: '12', value: 12 },
+                { label: '16', value: 16 },
+                { label: '20', value: 20 },
+                { label: '28', value: 28 }
+              ]}
+              onChange={(val) => updateSection('screenshot', { defaultFontSize: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Notes Margin" description="Add a writable notes margin to the screenshot editor">
+            <NeomorphicSwitch
+              checked={settings.screenshot.notesMarginEnabled}
+              onChange={() =>
+                updateSection('screenshot', { notesMarginEnabled: !settings.screenshot.notesMarginEnabled })
+              }
+            />
+          </SettingRow>
+          <SettingRow label="Notes Width" description="Width of the notes margin (pixels)">
+            <SliderInput
+              value={settings.screenshot.notesMarginWidth}
+              min={200}
+              max={600}
+              step={20}
+              unit="px"
+              onChange={(val) => updateSection('screenshot', { notesMarginWidth: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Default Save Mode" description="How screenshots are exported by default">
+            <DropdownInput
+              value={settings.screenshot.saveMode}
+              options={[
+                { label: 'Full (Chart + Notes)', value: 'full' },
+                { label: 'Crop to Chart Only', value: 'crop' }
+              ]}
+              onChange={(val) => updateSection('screenshot', { saveMode: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Emoji Strip" description="Show a quick emoji strip in screenshot editor">
+            <NeomorphicSwitch
+              checked={settings.screenshot.emojiStripEnabled}
+              onChange={() =>
+                updateSection('screenshot', { emojiStripEnabled: !settings.screenshot.emojiStripEnabled })
+              }
+            />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection title="Risk Manager">
+          <SettingRow label="Daily Max Trades" description="Maximum trades per day">
+            <SliderInput
+              value={settings.riskManager.dailyMaxTrades}
+              min={0}
+              max={200}
+              step={1}
+              onChange={(val) => updateSection('riskManager', { dailyMaxTrades: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Max Consecutive Losses" description="Stop trading after this many losses">
+            <SliderInput
+              value={settings.riskManager.maxConsecutiveLosses}
+              min={0}
+              max={50}
+              step={1}
+              onChange={(val) => updateSection('riskManager', { maxConsecutiveLosses: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Daily Profit Target" description="Target profit for the day">
+            <SliderInput
+              value={settings.riskManager.dailyProfitTarget}
+              min={0}
+              max={1000}
+              step={5}
+              unit="$"
+              onChange={(val) => updateSection('riskManager', { dailyProfitTarget: val })}
+            />
+          </SettingRow>
+          <SettingRow label="Max Drawdown" description="Stop trading after drawdown percent">
+            <SliderInput
+              value={settings.riskManager.maxDrawdownPercent}
+              min={0}
+              max={100}
+              step={1}
+              unit="%"
+              onChange={(val) => updateSection('riskManager', { maxDrawdownPercent: val })}
             />
           </SettingRow>
         </SettingsSection>

@@ -20,16 +20,21 @@ async def ask_ai(payload: Dict[str, Any] = Body(...)):
     if not isinstance(prompt, str) or not prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
 
+    context: Dict[str, Any] = {}
+    context_raw = payload.get("context")
+    if isinstance(context_raw, dict):
+        context.update(context_raw)
+
     asset = payload.get("asset")
     timeframe = payload.get("timeframe")
-
-    context: Dict[str, Any] = {}
     if isinstance(asset, str) and asset.strip():
         context["asset"] = asset.strip()
     if isinstance(timeframe, str) and timeframe.strip():
         context["timeframe"] = timeframe.strip()
 
     image_raw = payload.get("image_base64")
+    if not (isinstance(image_raw, str) and image_raw.strip()):
+        image_raw = payload.get("image")
     image: Optional[str] = None
     if isinstance(image_raw, str) and image_raw.strip():
         image = image_raw.strip()

@@ -1,8 +1,23 @@
 # Asset Selection Improvements Plan
 **Date:** 2026-01-19  
-**Status:** In Progress  
+**Status:** Partially Completed (Code Implemented; Manual E2E Pending)  
 **Reference:** Investigation of SPECIFIC ASSET filter feature  
 **Author:** @Team_Leader with @Investigator, @Coder, @Frontend-Specialist
+
+**Verified Completion Audit:** 2026-01-20  
+
+### Completion Snapshot (Verified)
+
+| Phase | Status |
+|-------|--------|
+| Phase 0 (Branch + Backups) | [ ] Not performed |
+| Phase 1 (min_pct input) | [x] Implemented |
+| Phase 2 (Exact target matching) | [x] Implemented |
+| Phase 3 (Exact-first click targeting) | [x] Implemented |
+| Phase 4 (Quick-Add icons) | [x] Implemented |
+| Phase 5 (Manual E2E in Pocket Option) | [ ] Not yet executed |
+| Phase 6 (Docs/Commit/PR) | [ ] Not yet executed |
+| Automated Gates | [x] pytest / Dashboard lint / Dashboard build / Playwright QA |
 
 ---
 
@@ -38,7 +53,7 @@ This plan addresses critical bugs discovered in the **Specific Asset Filter** fe
 
 ### Bug #1: Fuzzy Click Targeting
 **File:** `capabilities_v2/favorite_star_select.py`  
-**Location:** `_click_star_by_label()` method, lines 461-463
+**Location:** `_click_star_by_label()` method, JavaScript matching logic
 
 **Current Code (Problematic):**
 ```javascript
@@ -58,7 +73,7 @@ if (rowLabel === targetLabel || normRowLabel === normTarget ||
 
 ### Bug #2: Fuzzy Target Matching
 **File:** `capabilities_v2/favorite_star_select.py`  
-**Location:** `_apply_selection_rules()` method, line 247
+**Location:** `_apply_selection_rules()` method, target membership test
 
 **Current Code (Problematic):**
 ```python
@@ -76,7 +91,7 @@ is_in_target = any(t in norm_label or norm_label in t for t in normalized_target
 
 ### Bug #3: `min_pct` Input Ignored
 **File:** `capabilities_v2/favorite_star_select.py`  
-**Location:** Line 79
+**Location:** `run()` method input parsing
 
 **Current Code (Problematic):**
 ```python
@@ -97,6 +112,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
 - [ ] **0.1: Create Git Branch**
   - `git checkout -b feature/asset-selection-improvements`
   - **Test:** Verify branch created with `git branch`
+  - **Audit Result:** Branch not created (current branch differs)
 
 - [ ] **0.2: Backup Critical Files**
   - Copy current versions to `_backups/2026-01-19/`:
@@ -104,6 +120,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
     - `gui/Dashboard/src/components/AssetListView.jsx`
     - `gui/Dashboard/src/components/AssetPanel.jsx`
   - **Test:** Verify backups exist and are readable
+  - **Audit Result:** Backup folder not present
 
 ---
 
@@ -111,9 +128,9 @@ min_pct: int = 92  # Hardcoded, ignores input!
 **Goal:** Ensure Min Payout setting is respected  
 **Estimated Time:** 5 minutes
 
-- [ ] **1.1: Read `min_pct` from inputs**
+- [x] **1.1: Read `min_pct` from inputs**
   - **File:** `capabilities_v2/favorite_star_select.py`
-  - **Line:** 79
+  - **Location:** `run()` method input parsing
   - **BEFORE:**
     ```python
     min_pct: int = 92
@@ -126,6 +143,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
     - Set Min Payout to 80% in Dashboard
     - Click "Get Assets"
     - Verify backend logs show `min_pct=80`
+  - **Audit Result:** Implemented in code; manual verification pending
 
 ---
 
@@ -133,9 +151,9 @@ min_pct: int = 92  # Hardcoded, ignores input!
 **Goal:** Ensure only exact asset matches are recognized as targets  
 **Estimated Time:** 15 minutes
 
-- [ ] **2.1: Replace fuzzy matching with exact matching**
+- [x] **2.1: Replace fuzzy matching with exact matching**
   - **File:** `capabilities_v2/favorite_star_select.py`
-  - **Location:** `_apply_selection_rules()` method, line 247
+  - **Location:** `_apply_selection_rules()` method
   - **BEFORE:**
     ```python
     is_in_target = any(t in norm_label or norm_label in t for t in normalized_targets)
@@ -152,7 +170,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
     - Verify "EURUSD" (non-OTC) is NOT matched as a target
     - Verify "EURUSDOTC" IS matched as a target
 
-- [ ] **2.2: Add debug logging for target matching**
+- [x] **2.2: Add debug logging for target matching**
   - **File:** `capabilities_v2/favorite_star_select.py`
   - **Action:** Add logging when target matching occurs
     ```python
@@ -163,6 +181,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
         # Remove or comment out old fuzzy matching debug logs
     ```
   - **Test:** Verify logs show "EXACT MATCH" only for exact matches
+  - **Audit Result:** Implemented in code
 
 ---
 
@@ -170,9 +189,9 @@ min_pct: int = 92  # Hardcoded, ignores input!
 **Goal:** Ensure the correct row is clicked when starring assets  
 **Estimated Time:** 30 minutes
 
-- [ ] **3.1: Replace fuzzy click matching with exact-first strategy**
+- [x] **3.1: Replace fuzzy click matching with exact-first strategy**
   - **File:** `capabilities_v2/favorite_star_select.py`
-  - **Location:** `_click_star_by_label()` JavaScript code, lines 430-500
+  - **Location:** `_click_star_by_label()` JavaScript code
   - **Strategy:** 
     1. First pass: look for exact match only
     2. If no exact match found, then try fuzzy match (fallback for platform display variations)
@@ -219,10 +238,12 @@ min_pct: int = 92  # Hardcoded, ignores input!
     - Click "Get Assets" 
     - Watch Pocket Option dropdown
     - Verify "EURUSD OTC" row is starred (not "EURUSD")
+  - **Audit Result:** Implemented in code; manual verification pending
 
-- [ ] **3.2: Add match type to debug output**
+- [x] **3.2: Add match type to debug output**
   - **Action:** Include `match_type: 'exact' | 'fuzzy'` in debug result
   - **Test:** Check backend logs for match type information
+  - **Audit Result:** Implemented in code
 
 ---
 
@@ -232,7 +253,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
 
 #### 4.1: Update AssetPanel State Management
 
-- [ ] **4.1.1: Add helper functions to manage specific assets list**
+- [x] **4.1.1: Add helper functions to manage specific assets list**
   - **File:** `gui/Dashboard/src/components/AssetPanel.jsx`
   - **Action:** Add functions to add/remove assets from specificAssets
     ```javascript
@@ -266,10 +287,11 @@ min_pct: int = 92  # Hardcoded, ignores input!
     };
     ```
   - **Test:** Console log verification of state updates
+  - **Audit Result:** Implemented in code
 
 #### 4.2: Update AssetListView Component
 
-- [ ] **4.2.1: Add new props to AssetListView**
+- [x] **4.2.1: Add new props to AssetListView**
   - **File:** `gui/Dashboard/src/components/AssetListView.jsx`
   - **Action:** Add props for quick-add functionality
     ```javascript
@@ -283,7 +305,7 @@ min_pct: int = 92  # Hardcoded, ignores input!
     }) => {
     ```
 
-- [ ] **4.2.2: Add quick-add icons to asset row**
+- [x] **4.2.2: Add quick-add icons to asset row**
   - **File:** `gui/Dashboard/src/components/AssetListView.jsx`
   - **Action:** Add [+] and [—] buttons next to each asset
     ```jsx
@@ -340,8 +362,9 @@ min_pct: int = 92  # Hardcoded, ignores input!
     </div>
     ```
   - **Test:** Visual verification of icons rendering
+  - **Audit Result:** Implemented in code
 
-- [ ] **4.2.3: Wire props in AssetPanel**
+- [x] **4.2.3: Wire props in AssetPanel**
   - **File:** `gui/Dashboard/src/components/AssetPanel.jsx`
   - **Action:** Pass the new props to AssetListView
     ```jsx
@@ -359,12 +382,19 @@ min_pct: int = 92  # Hardcoded, ignores input!
     - Mode switches to INCLUDE
     - Asset row shows checkmark
     - Click checkmark → asset removed from filter
+  - **Audit Result:** Implemented in code
 
 ---
 
 ### Phase 5: Integration Testing
 **Goal:** Verify end-to-end flow works correctly  
 **Estimated Time:** 30 minutes
+
+- [x] **5.0: Automated Gates (Repo Health Check)**
+  - Backend: `pytest` (passed)
+  - Dashboard: `npm run lint` (passed)
+  - Dashboard: `npm run build` (passed)
+  - Dashboard: `npm run test:qa` (passed)
 
 - [ ] **5.1: OTC Filter + Specific Assets Test**
   - **Setup:**
@@ -445,23 +475,23 @@ If critical issues are discovered post-merge:
 ## 7. Success Criteria
 
 ### Bug Fixes
-- [ ] Specific asset filter uses exact matching only
-- [ ] Click targeting uses exact-first strategy
-- [ ] Min Payout setting is respected
-- [ ] OTC filter works correctly with specific assets
+- [x] Specific asset filter uses exact matching only (code)
+- [x] Click targeting uses exact-first strategy (code)
+- [x] Min Payout setting is respected (code)
+- [ ] OTC filter works correctly with specific assets (manual verification pending)
 
 ### New Feature
-- [ ] [+] button adds asset to INCLUDE filter
-- [ ] [—] button adds asset to IGNORE filter  
-- [ ] Checkmark shows when asset is in filter
-- [ ] Click checkmark removes asset from filter
-- [ ] Filter changes are reflected in Specific Assets field
+- [x] [+] button adds asset to INCLUDE filter (code)
+- [x] [—] button adds asset to IGNORE filter (code)  
+- [x] Checkmark shows when asset is in filter (code)
+- [x] Click checkmark removes asset from filter (code)
+- [x] Filter changes are reflected in Specific Assets field (code)
 
 ### CORE_PRINCIPLES Compliance
-- [ ] No silent failures (Principle #8)
-- [ ] Fail fast with clear errors (Principle #9)
-- [ ] Clean separation of UI and logic (Principle #6)
-- [ ] All tests pass before proceeding (Principle #3)
+- [~] No silent failures (Principle #8)
+- [~] Fail fast with clear errors (Principle #9)
+- [x] Clean separation of UI and logic (Principle #6)
+- [x] All tests pass before proceeding (Principle #3)
 
 ---
 
@@ -475,4 +505,4 @@ If critical issues are discovered post-merge:
 
 **Plan Compiled by:** @Team_Leader  
 **Date:** 2026-01-19  
-**Approval Required Before Implementation:** User confirmation to proceed
+**Approval Required Before Merge:** Complete Phase 5 manual E2E verification

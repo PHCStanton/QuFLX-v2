@@ -4,6 +4,7 @@ import json
 import logging
 import asyncio
 import traceback
+import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Body
@@ -27,8 +28,35 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
         max_assets = payload.get("max_assets")
         if max_assets is not None:
             max_assets = max(1, min(50, int(max_assets)))
+
+        def parse_assets(value: Any) -> Optional[List[str]]:
+            if value is None:
+                return None
+            if isinstance(value, list):
+                cleaned = [normalize_asset(v) for v in value if isinstance(v, str) and v.strip()]
+                cleaned = [v for v in cleaned if v]
+                return sorted({*cleaned}) if cleaned else None
+            if isinstance(value, str):
+                raw = value.strip()
+                if not raw:
+                    return None
+                parts = [p for p in re.split(r"[\n,;\s]+", raw) if p]
+                cleaned = [normalize_asset(p) for p in parts]
+                cleaned = [v for v in cleaned if v]
+                return sorted({*cleaned}) if cleaned else None
+            return None
+
+        include_assets = parse_assets(payload.get("include_assets"))
+        ignore_assets = parse_assets(payload.get("ignore_assets"))
+
         target_assets = payload.get("target_assets")
         target_assets_mode = payload.get("target_assets_mode", "ignore")
+        legacy_targets = parse_assets(target_assets)
+        if include_assets is None and target_assets_mode == "include":
+            include_assets = legacy_targets
+        if ignore_assets is None and target_assets_mode == "ignore":
+            ignore_assets = legacy_targets
+
         sweep_all = bool(payload.get("sweep_all", True))
         unstar_below = bool(payload.get("unstar_below", True))
         filter_mode = payload.get("filter_mode")
@@ -42,8 +70,8 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
             "unstar_below": unstar_below,
             "filter_mode": filter_mode,
             "max_assets": max_assets,
-            "target_assets": target_assets,
-            "target_assets_mode": target_assets_mode,
+            "include_assets": include_assets,
+            "ignore_assets": ignore_assets,
         }
         
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))
@@ -99,7 +127,8 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
                     "already_favorited": len(already_favorited),
                     "skipped_max_limit": processed.get("counts", {}).get("skipped_max_limit", 0),
                     "max_assets_limit": max_assets,
-                    "target_assets_specified": bool(target_assets),
+                    "include_assets_specified": bool(include_assets),
+                    "ignore_assets_specified": bool(ignore_assets),
                     "filter_mode": filter_mode,
                 },
             }

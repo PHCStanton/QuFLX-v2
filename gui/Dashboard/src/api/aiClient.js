@@ -8,7 +8,7 @@ export async function askAI({ prompt, context = {}, image = null }) {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ prompt, context, image }),
+    body: JSON.stringify({ prompt, context, image_base64: image }),
   });
 
   if (!res.ok) {

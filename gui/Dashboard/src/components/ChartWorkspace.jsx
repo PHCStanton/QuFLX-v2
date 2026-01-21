@@ -40,6 +40,8 @@ const ChartWorkspace = () => {
     lastError, clearError,
     setError,
     syncTimeframeUi,
+    lastAnnotatedScreenshotDataUrl,
+    setLastAnnotatedScreenshotDataUrl,
   } = useMarketStore();
 
   const health = useStreamHealth();
@@ -59,6 +61,9 @@ const ChartWorkspace = () => {
   const { isAsking, handleAskAi, answer, isAnswerOpen, closeAnswer } = useAIChat({
     askAI,
     captureImage: captureCompositeChart,
+    lastAnnotatedImage: lastAnnotatedScreenshotDataUrl,
+    imageSource: settings?.ai?.imageSource,
+    autoIncludeContext: settings?.ai?.autoIncludeContext,
     marketData,
     selectedAssetKey,
     indicatorSeries,
@@ -130,13 +135,14 @@ const ChartWorkspace = () => {
   }, [setIsScreenshotOpen]);
 
   const handleSaveScreenshot = useCallback(async ({ dataUrl, asset, timeframe }) => {
+    setLastAnnotatedScreenshotDataUrl(dataUrl);
     await saveChartScreenshot({
       imageBase64: dataUrl,
       annotated: true,
       asset,
       timeframe,
     });
-  }, []);
+  }, [setLastAnnotatedScreenshotDataUrl]);
 
   const handleCloseIndicatorSettings = useCallback(() => {
     setSettingsIndicator(null);

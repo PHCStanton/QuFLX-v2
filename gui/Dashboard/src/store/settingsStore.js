@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-const SETTINGS_VERSION = 2;
+const SETTINGS_VERSION = 3;
 
 const normalizeTheme = (value) => {
   if (value === 'black-white') return 'black-white';
@@ -37,6 +37,16 @@ const defaultSettings = {
     responseVerbosity: 'balanced',
     autoIncludeChart: true,
     autoIncludeContext: true,
+    imageSource: 'live',
+  },
+  screenshot: {
+    defaultTool: 'arrow',
+    defaultColor: 'orange',
+    defaultFontSize: 16,
+    notesMarginEnabled: false,
+    notesMarginWidth: 320,
+    saveMode: 'full',
+    emojiStripEnabled: false,
   },
   userProfile: {
     displayName: '',
@@ -70,11 +80,51 @@ const sanitizeSettingsForBackend = (settings) => {
 };
 
 const normalizeSettings = (settings) => {
-  const next = { ...settings };
-  const global = next.global ? { ...next.global } : {};
-  global.theme = normalizeTheme(global.theme);
-  next.global = global;
-  return next;
+  const s = settings && typeof settings === 'object' ? settings : {};
+
+  const merged = {
+    ...defaultSettings,
+    ...s,
+    global: {
+      ...(defaultSettings.global || {}),
+      ...(s.global || {}),
+    },
+    automation: {
+      ...(defaultSettings.automation || {}),
+      ...(s.automation || {}),
+    },
+    analysis: {
+      ...(defaultSettings.analysis || {}),
+      ...(s.analysis || {}),
+    },
+    ai: {
+      ...(defaultSettings.ai || {}),
+      ...(s.ai || {}),
+    },
+    screenshot: {
+      ...(defaultSettings.screenshot || {}),
+      ...(s.screenshot || {}),
+    },
+    userProfile: {
+      ...(defaultSettings.userProfile || {}),
+      ...(s.userProfile || {}),
+    },
+    riskManager: {
+      ...(defaultSettings.riskManager || {}),
+      ...(s.riskManager || {}),
+    },
+    calendarJournal: {
+      ...(defaultSettings.calendarJournal || {}),
+      ...(s.calendarJournal || {}),
+    },
+    strategyLab: {
+      ...(defaultSettings.strategyLab || {}),
+      ...(s.strategyLab || {}),
+    },
+  };
+
+  merged.global.theme = normalizeTheme(merged.global.theme);
+  return merged;
 };
 
 const useSettingsStore = create(
@@ -110,6 +160,10 @@ const useSettingsStore = create(
               ai: {
                 ...(current.ai || {}),
                 ...(backendSettings.ai || {}),
+              },
+              screenshot: {
+                ...(current.screenshot || {}),
+                ...(backendSettings.screenshot || {}),
               },
               userProfile: {
                 ...(current.userProfile || {}),
@@ -179,6 +233,10 @@ const useSettingsStore = create(
               ai: {
                 ...(current.ai || {}),
                 ...(saved.ai || {}),
+              },
+              screenshot: {
+                ...(current.screenshot || {}),
+                ...(saved.screenshot || {}),
               },
               userProfile: {
                 ...(current.userProfile || {}),

@@ -9,6 +9,7 @@ const AssetListView = ({
   onToggleCollapsed,
   panelMode,
   onTogglePanelMode,
+  minPayout,
   payoutAssets,
   selectedAsset,
   selectedAssetLoading,
@@ -16,9 +17,10 @@ const AssetListView = ({
   onRemoveAsset,
   onAddToInclude,
   onAddToIgnore,
-  onRemoveFromFilter,
-  isAssetInFilter,
-  specificAssetMode,
+  onRemoveFromInclude,
+  onRemoveFromIgnore,
+  isAssetIncluded,
+  isAssetIgnored,
   quotesByAssetKey,
   tickerAssets,
   assetSearchQuery,
@@ -49,7 +51,7 @@ const AssetListView = ({
       <div className="flex justify-between items-center mb-2 shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
-            {panelMode === 'list' ? '92% Payout Assets' : 'OTC Ticker'}
+            {panelMode === 'list' ? `${minPayout}% Payout Assets` : 'OTC Ticker'}
             {panelMode === 'list' && (
               <span className="text-xs bg-accent-green text-black px-1.5 py-0.5 rounded font-bold">{count}</span>
             )}
@@ -63,23 +65,26 @@ const AssetListView = ({
               </div>
             </div>
           </h3>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!isCollapsed && (
+            <NeomorphicSwitch
+              checked={panelMode === 'ticker'}
+              onChange={onTogglePanelMode}
+              leftLabel={`${minPayout}% Assets`}
+              rightLabel="Ticker View"
+            />
+          )}
           <button
             type="button"
             onClick={onToggleCollapsed}
             className="p-1 hover:bg-section-bg/50 rounded text-text-secondary transition-colors"
+            title={isCollapsed ? 'Expand' : 'Collapse'}
           >
             {isCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
-
-        {!isCollapsed && (
-          <NeomorphicSwitch
-            checked={panelMode === 'ticker'}
-            onChange={onTogglePanelMode}
-            leftLabel="92% Assets"
-            rightLabel="Ticker View"
-          />
-        )}
       </div>
 
       {!isCollapsed && (
@@ -132,19 +137,31 @@ const AssetListView = ({
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] opacity-70">92%</span>
+                        <span className="text-[10px] opacity-70">{minPayout}%</span>
                         <div className="flex items-center gap-1">
-                          {isAssetInFilter(asset) ? (
+                          {isAssetIncluded(asset) ? (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onRemoveFromFilter(asset);
+                                onRemoveFromInclude(asset);
                               }}
                               className="w-5 h-5 flex items-center justify-center rounded bg-accent-green/20 text-accent-green border border-accent-green/50 hover:bg-accent-green/30 transition-colors"
-                              title={`In ${String(specificAssetMode || '').toUpperCase()} filter - click to remove`}
+                              title="Included - click to remove"
                             >
                               <Check size={12} />
+                            </button>
+                          ) : isAssetIgnored(asset) ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRemoveFromIgnore(asset);
+                              }}
+                              className="w-5 h-5 flex items-center justify-center rounded bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 transition-colors"
+                              title="Ignored - click to remove"
+                            >
+                              <Minus size={12} />
                             </button>
                           ) : (
                             <>

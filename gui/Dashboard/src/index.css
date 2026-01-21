@@ -258,7 +258,7 @@
 }
 
 .quflx-ai-btn:hover svg {
-  filter: drop-shadow(0 0 7px rgba(195, 0, 255, 0.882));
+  filter: drop-shadow(0 0 5px rgba(195, 0, 255, 0.882));
 }
 
 .quflx-screenshot-btn:hover svg {

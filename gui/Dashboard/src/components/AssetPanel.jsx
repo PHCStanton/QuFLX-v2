@@ -20,7 +20,19 @@ const parseSpecificAssets = (value) => {
   } else if (raw.includes('/')) {
     parts = [raw];
   } else {
-    parts = raw.split(/\s+/);
+    const tokens = raw.split(/\s+/).filter(Boolean);
+    const merged = [];
+    for (let i = 0; i < tokens.length; i += 1) {
+      const cur = tokens[i];
+      const next = tokens[i + 1];
+      if (next && normalizeSpecificAsset(next) === 'OTC') {
+        merged.push(`${cur}${next}`);
+        i += 1;
+        continue;
+      }
+      merged.push(cur);
+    }
+    parts = merged;
   }
 
   return Array.from(new Set(parts.map((a) => normalizeSpecificAsset(String(a).trim())).filter(Boolean)));
@@ -50,8 +62,8 @@ const AssetPanel = () => {
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
   const [maxAssetsToStar, setMaxAssetsToStar] = useState(5);
   const [minPayout, setMinPayout] = useState(92);
-  const [specificAssets, setSpecificAssets] = useState('');
-  const [specificAssetMode, setSpecificAssetMode] = useState('ignore');
+  const [includeAssets, setIncludeAssets] = useState('');
+  const [ignoreAssets, setIgnoreAssets] = useState('');
   const [otcOnly, setOtcOnly] = useState(false);
   const [topHeight, setTopHeight] = useState(220);
   const [isTopCollapsed, setIsTopCollapsed] = useState(false);
@@ -148,49 +160,90 @@ const AssetPanel = () => {
 
   const backendReady = Boolean(backendStatus && backendStatus.readyForAssets);
 
-  const specificAssetSet = useMemo(() => new Set(parseSpecificAssets(specificAssets)), [specificAssets]);
+  const includeAssetSet = useMemo(() => new Set(parseSpecificAssets(includeAssets)), [includeAssets]);
+  const ignoreAssetSet = useMemo(() => new Set(parseSpecificAssets(ignoreAssets)), [ignoreAssets]);
 
-  const addToSpecificAssets = (asset, mode) => {
+  const addToIncludeAssets = (asset) => {
     const normalized = normalizeSpecificAsset(asset);
     if (!normalized) {
       return;
     }
 
-    setSpecificAssetMode(mode);
-    setSpecificAssets((prev) => {
-      const currentAssets = parseSpecificAssets(prev);
-      if (!currentAssets.includes(normalized)) {
-        return [...currentAssets, normalized].join(', ');
+    setIgnoreAssets((prev) => {
+      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
+      return current.join(', ');
+    });
+
+    setIncludeAssets((prev) => {
+      const current = parseSpecificAssets(prev);
+      if (!current.includes(normalized)) {
+        return [...current, normalized].join(', ');
       }
-      return currentAssets.join(', ');
+      return current.join(', ');
     });
   };
 
-  const removeFromSpecificAssets = (asset) => {
+  const addToIgnoreAssets = (asset) => {
     const normalized = normalizeSpecificAsset(asset);
     if (!normalized) {
       return;
     }
 
-    setSpecificAssets((prev) => {
-      const currentAssets = parseSpecificAssets(prev).filter((a) => a !== normalized);
-      return currentAssets.join(', ');
+    setIncludeAssets((prev) => {
+      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
+      return current.join(', ');
+    });
+
+    setIgnoreAssets((prev) => {
+      const current = parseSpecificAssets(prev);
+      if (!current.includes(normalized)) {
+        return [...current, normalized].join(', ');
+      }
+      return current.join(', ');
     });
   };
 
-  const isAssetInFilter = (asset) => specificAssetSet.has(normalizeSpecificAsset(asset));
+  const removeFromIncludeAssets = (asset) => {
+    const normalized = normalizeSpecificAsset(asset);
+    if (!normalized) {
+      return;
+    }
+
+    setIncludeAssets((prev) => {
+      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
+      return current.join(', ');
+    });
+  };
+
+  const removeFromIgnoreAssets = (asset) => {
+    const normalized = normalizeSpecificAsset(asset);
+    if (!normalized) {
+      return;
+    }
+
+    setIgnoreAssets((prev) => {
+      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
+      return current.join(', ');
+    });
+  };
+
+  const isAssetIncluded = (asset) => includeAssetSet.has(normalizeSpecificAsset(asset));
+  const isAssetIgnored = (asset) => ignoreAssetSet.has(normalizeSpecificAsset(asset));
 
   const handleGetAssets = () => {
-    const parsedTargets = parseSpecificAssets(specificAssets);
+    const parsedInclude = parseSpecificAssets(includeAssets);
+    const parsedIgnore = parseSpecificAssets(ignoreAssets);
     const options = {
       min_pct: minPayout
     };
     if (maxAssetsToStar) {
       options.max_assets = maxAssetsToStar;
     }
-    if (parsedTargets.length) {
-      options.target_assets = parsedTargets;
-      options.target_assets_mode = specificAssetMode;
+    if (parsedInclude.length) {
+      options.include_assets = parsedInclude;
+    }
+    if (parsedIgnore.length) {
+      options.ignore_assets = parsedIgnore;
     }
     if (otcOnly) {
       options.filter_mode = 'otc';
@@ -199,8 +252,8 @@ const AssetPanel = () => {
     setAssetFilterState({
       maxAssets: maxAssetsToStar,
       minPayout,
-      targetAssets: parsedTargets.join(', '),
-      targetAssetsMode: specificAssetMode,
+      includeAssets: parsedInclude.join(', '),
+      ignoreAssets: parsedIgnore.join(', '),
       filterMode: otcOnly ? 'otc' : null
     });
 
@@ -232,10 +285,14 @@ const AssetPanel = () => {
           }
           minPayout={minPayout}
           onMinPayoutChange={(val) => setMinPayout(Math.max(1, Math.min(100, parseInt(val, 10) || 92)))}
-          specificAssets={specificAssets}
-          onSpecificAssetsChange={setSpecificAssets}
-          specificAssetMode={specificAssetMode}
-          onSpecificAssetModeChange={setSpecificAssetMode}
+          includeAssets={includeAssets}
+          onIncludeAssetsChange={setIncludeAssets}
+          includeAssetList={Array.from(includeAssetSet)}
+          onRemoveIncludeAsset={removeFromIncludeAssets}
+          ignoreAssets={ignoreAssets}
+          onIgnoreAssetsChange={setIgnoreAssets}
+          ignoreAssetList={Array.from(ignoreAssetSet)}
+          onRemoveIgnoreAsset={removeFromIgnoreAssets}
         />
       </DataSourceControls>
 
@@ -258,16 +315,18 @@ const AssetPanel = () => {
         onToggleCollapsed={() => setIsBottomCollapsed((prev) => !prev)}
         panelMode={panelMode}
         onTogglePanelMode={() => setPanelMode(panelMode === 'list' ? 'ticker' : 'list')}
+        minPayout={minPayout}
         payoutAssets={payoutAssets}
         selectedAsset={selectedAsset}
         selectedAssetLoading={selectedAssetLoading}
         onSelectAsset={setSelectedAsset}
         onRemoveAsset={removePayoutAsset}
-        onAddToInclude={(asset) => addToSpecificAssets(asset, 'include')}
-        onAddToIgnore={(asset) => addToSpecificAssets(asset, 'ignore')}
-        onRemoveFromFilter={removeFromSpecificAssets}
-        isAssetInFilter={isAssetInFilter}
-        specificAssetMode={specificAssetMode}
+        onAddToInclude={addToIncludeAssets}
+        onAddToIgnore={addToIgnoreAssets}
+        onRemoveFromInclude={removeFromIncludeAssets}
+        onRemoveFromIgnore={removeFromIgnoreAssets}
+        isAssetIncluded={isAssetIncluded}
+        isAssetIgnored={isAssetIgnored}
         quotesByAssetKey={quotesByAssetKey}
         tickerAssets={tickerAssets}
         assetSearchQuery={assetSearchQuery}

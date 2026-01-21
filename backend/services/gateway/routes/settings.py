@@ -30,17 +30,43 @@ class AnalysisSettings(BaseModel):
     defaultTimeframe: str = "1m"
     chartPrecision: int = Field(5, ge=0, le=8)
     autoLoadIndicators: bool = False
+    dataSourceMode: str = "history_and_streaming"
 
 class AISettings(BaseModel):
     responseVerbosity: str = "balanced"
     autoIncludeChart: bool = True
     autoIncludeContext: bool = True
+    imageSource: str = "live"
+
+class ScreenshotSettings(BaseModel):
+    defaultTool: str = "arrow"
+    defaultColor: str = "orange"
+    defaultFontSize: int = Field(16, ge=8, le=64)
+    notesMarginEnabled: bool = False
+    notesMarginWidth: int = Field(320, ge=200, le=600)
+    saveMode: str = "full"
+    emojiStripEnabled: bool = False
+
+class UserProfileSettings(BaseModel):
+    displayName: str = ""
+    experienceLevel: str = "intermediate"
+
+class RiskManagerSettings(BaseModel):
+    dailyMaxTrades: int = Field(10, ge=0, le=200)
+    maxConsecutiveLosses: int = Field(3, ge=0, le=50)
+    dailyProfitTarget: int = Field(50, ge=0, le=100000)
+    maxDrawdownPercent: int = Field(5, ge=0, le=100)
 
 class PlatformSettings(BaseModel):
     global_settings: GlobalSettings = Field(default_factory=GlobalSettings, alias="global")
     automation: AutomationSettings = Field(default_factory=AutomationSettings)
     analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
     ai: AISettings = Field(default_factory=AISettings)
+    screenshot: ScreenshotSettings = Field(default_factory=ScreenshotSettings)
+    userProfile: UserProfileSettings = Field(default_factory=UserProfileSettings)
+    riskManager: RiskManagerSettings = Field(default_factory=RiskManagerSettings)
+    calendarJournal: Dict[str, Any] = Field(default_factory=dict)
+    strategyLab: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         allow_population_by_field_name = True
