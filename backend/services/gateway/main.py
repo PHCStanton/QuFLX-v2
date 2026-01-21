@@ -1,16 +1,20 @@
 import sys
 import os
 import logging
+import time
+import uuid
+import contextvars
 import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 import json
+from logging.handlers import TimedRotatingFileHandler
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
@@ -28,15 +32,94 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
 from backend.services.ai.service import AIService
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, asset_control, ops
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, asset_control, ops, dev_logs
 from backend.services.gateway.socket_events import register_socket_events
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("APIGateway")
+RUN_ID = uuid.uuid4().hex[:12]
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar('request_id', default='-')
+
+
+class ContextFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.run_id = RUN_ID
+        record.request_id = request_id_var.get('-')
+        return True
+
+
+def _normalize_log_level(value: str) -> int:
+    v = str(value or '').strip().upper()
+    if v == 'DEBUG':
+        return logging.DEBUG
+    if v == 'WARNING' or v == 'WARN':
+        return logging.WARNING
+    if v == 'ERROR':
+        return logging.ERROR
+    if v == 'CRITICAL':
+        return logging.CRITICAL
+    return logging.INFO
+
+
+def configure_logging(*, service_name: str = 'gateway') -> None:
+    log_level = _normalize_log_level(os.getenv('QFLX_LOG_LEVEL', 'INFO'))
+    enable_file_logs = str(os.getenv('QFLX_LOG_TO_FILE', '1')).strip() not in {'0', 'false', 'False', 'no', 'NO'}
+    base_dir = os.getenv('QFLX_LOG_DIR')
+    if not base_dir:
+        base_dir = str(project_root / 'system_LOGS')
+
+    service_dir = Path(base_dir) / service_name
+    formatter = logging.Formatter(
+        fmt='%(asctime)sZ | %(levelname)s | %(name)s | run=%(run_id)s req=%(request_id)s | %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S'
+    )
+
+    root = logging.getLogger()
+    root.setLevel(log_level)
+    if not any(isinstance(f, ContextFilter) for f in root.filters):
+        root.addFilter(ContextFilter())
+
+    already_configured = any(getattr(h, '_qflx_handler', False) for h in root.handlers)
+    if already_configured:
+        return
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(log_level)
+    console.setFormatter(formatter)
+    console._qflx_handler = True
+    root.addHandler(console)
+
+    if enable_file_logs:
+        service_dir.mkdir(parents=True, exist_ok=True)
+
+        app_path = service_dir / f'{service_name}.log'
+        err_path = service_dir / f'{service_name}.error.log'
+        access_path = service_dir / f'{service_name}.access.log'
+
+        app_fh = TimedRotatingFileHandler(str(app_path), when='midnight', interval=1, backupCount=14, utc=True, encoding='utf-8')
+        app_fh.setLevel(log_level)
+        app_fh.setFormatter(formatter)
+        app_fh._qflx_handler = True
+        root.addHandler(app_fh)
+
+        err_fh = TimedRotatingFileHandler(str(err_path), when='midnight', interval=1, backupCount=30, utc=True, encoding='utf-8')
+        err_fh.setLevel(logging.ERROR)
+        err_fh.setFormatter(formatter)
+        err_fh._qflx_handler = True
+        root.addHandler(err_fh)
+
+        access_logger = logging.getLogger(f'{service_name}.access')
+        access_logger.setLevel(log_level)
+        access_logger.propagate = False
+        access_logger.addFilter(ContextFilter())
+        access_fh = TimedRotatingFileHandler(str(access_path), when='midnight', interval=1, backupCount=14, utc=True, encoding='utf-8')
+        access_fh.setLevel(log_level)
+        access_fh.setFormatter(formatter)
+        access_fh._qflx_handler = True
+        access_logger.addHandler(access_fh)
+
+
+configure_logging(service_name='gateway')
+logger = logging.getLogger('gateway')
+access_logger = logging.getLogger('gateway.access')
 
 # Redis Configuration
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -50,6 +133,8 @@ system_state = {
     "collector": "disconnected",
     "stream": "idle"
 }
+
+DEBUG_ERRORS = str(os.getenv('QFLX_DEBUG_ERRORS', '0')).strip() in {'1', 'true', 'True', 'yes', 'YES'}
 
 def validate_market_data(data: Dict[str, Any]) -> bool:
     """
@@ -91,13 +176,55 @@ async def lifespan(app: FastAPI):
 # FastAPI Setup
 app = FastAPI(title="QuFLX v2 API Gateway", lifespan=lifespan)
 
+
+@app.middleware('http')
+async def request_context_middleware(request: Request, call_next):
+    incoming_request_id = request.headers.get('X-Request-ID')
+    req_id = str(incoming_request_id or uuid.uuid4().hex[:12]).strip() or uuid.uuid4().hex[:12]
+    token = request_id_var.set(req_id)
+
+    started = time.monotonic()
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        elapsed_ms = (time.monotonic() - started) * 1000.0
+        status_code = response.status_code if response is not None else 500
+        access_logger.info('%s %s status=%s duration_ms=%.2f', request.method, request.url.path, status_code, elapsed_ms)
+        request_id_var.reset(token)
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"GLOBAL ERROR: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Global error: {str(exc)}"}
-    )
+    error_id = uuid.uuid4().hex[:12]
+    logger.error('GLOBAL ERROR error_id=%s', error_id, exc_info=True)
+
+    payload: Dict[str, Any] = {
+        'detail': 'Internal server error',
+        'error_id': error_id,
+        'request_id': request_id_var.get('-'),
+    }
+
+    if DEBUG_ERRORS:
+        payload['debug'] = {
+            'type': exc.__class__.__name__,
+            'message': str(exc),
+        }
+
+    return JSONResponse(status_code=500, content=payload)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    payload: Dict[str, Any] = {
+        'detail': exc.detail,
+        'request_id': request_id_var.get('-'),
+    }
+    if DEBUG_ERRORS:
+        payload['debug'] = {
+            'status_code': exc.status_code,
+        }
+    return JSONResponse(status_code=exc.status_code, content=payload)
 
 # CORS Setup
 app.add_middleware(
@@ -123,6 +250,7 @@ app.include_router(settings.router, prefix="/api/v1/settings", tags=["Settings"]
 app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
 app.include_router(asset_control.router, prefix="/api/v1/asset-control", tags=["Asset Control"])
 app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops"])
+app.include_router(dev_logs.router, prefix="/api/v1/dev/logs", tags=["Dev Logs"])
 
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""
@@ -183,6 +311,23 @@ async def get_status():
     }
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
+    parser = argparse.ArgumentParser(description='Run QuFLX v2 API Gateway')
+    parser.add_argument('--host', default=os.getenv('QFLX_GATEWAY_HOST', '0.0.0.0'))
+    parser.add_argument('--port', type=int, default=int(os.getenv('QFLX_GATEWAY_PORT', '8000')))
+    parser.add_argument('--reload', action='store_true', default=str(os.getenv('QFLX_GATEWAY_RELOAD', '1')).strip() in {'1', 'true', 'True', 'yes', 'YES'})
+    parser.add_argument('--log-level', default=os.getenv('QFLX_LOG_LEVEL', 'INFO'))
+    parser.add_argument('--log-dir', default=os.getenv('QFLX_LOG_DIR', str(project_root / 'system_LOGS')))
+    parser.add_argument('--log-to-file', action='store_true', default=str(os.getenv('QFLX_LOG_TO_FILE', '1')).strip() not in {'0', 'false', 'False', 'no', 'NO'})
+    parser.add_argument('--debug-errors', action='store_true', default=str(os.getenv('QFLX_DEBUG_ERRORS', '0')).strip() in {'1', 'true', 'True', 'yes', 'YES'})
+    args = parser.parse_args()
+
+    os.environ['QFLX_LOG_LEVEL'] = str(args.log_level)
+    os.environ['QFLX_LOG_DIR'] = str(args.log_dir)
+    os.environ['QFLX_LOG_TO_FILE'] = '1' if args.log_to_file else '0'
+    os.environ['QFLX_DEBUG_ERRORS'] = '1' if args.debug_errors else '0'
+
+    configure_logging(service_name='gateway')
     # Use loop="asyncio" to ensure it respects the policy set at the top
-    uvicorn.run("main:socket_app", host="0.0.0.0", port=8000, reload=True, loop="asyncio")
+    uvicorn.run("main:socket_app", host=str(args.host), port=int(args.port), reload=bool(args.reload), loop="asyncio", log_level=str(args.log_level).lower())
