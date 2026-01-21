@@ -110,6 +110,15 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
   - For all xAI calls (text, vision, voice), the backend constructs a concise `TradingContext` from strategy data rather than relying on the frontend for truth.
   - Chart screenshots are captured in the Dashboard and sent as base64 images to the backend, which attaches them to xAI vision requests.
 
+- **Modal vs Panel UX Split (Frontend)**
+  - Ask AI modal is the default entry point for quick questions and single-response analysis.
+  - AI Insights tab is the long-form conversation workspace and should not subsume domain tabs (Risk Manager, Strategy Lab).
+  - Screenshot editor can hand off an annotated image directly into Ask AI.
+
+- **Image Source Selection (Frontend)**
+  - Image source is selectable: None / Live Snapshot / Latest Annotated Screenshot.
+  - Latest annotated screenshot is persisted across refresh to support repeatable "Annotated" requests.
+
 - **Tool/Function Calling**
   - Trading-related actions exposed to xAI are modeled as explicit tools (e.g. `get_market_snapshot`, `simulate_entry`) with clear JSON schemas and server-side validation.
   - xAI may request tool calls; the backend executes them via existing strategy/market modules and feeds the results back into the conversation.

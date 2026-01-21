@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './apiBase';
+
 export async function saveChartScreenshot({ imageBase64, annotated = false, asset, timeframe }) {
   if (!imageBase64 || typeof imageBase64 !== 'string') {
     throw new Error('imageBase64 must be a non-empty string');
@@ -16,7 +18,7 @@ export async function saveChartScreenshot({ imageBase64, annotated = false, asse
     payload.timeframe = timeframe;
   }
 
-  const res = await fetch('http://localhost:8000/api/v1/screenshots/save', {
+  const res = await fetch(`${getApiBaseUrl()}/api/v1/screenshots/save`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1,9 +1,11 @@
+import { getApiBaseUrl } from './apiBase';
+
 export async function askAI({ prompt, context = {}, image = null }) {
   if (!prompt || typeof prompt !== 'string') {
     throw new Error('prompt must be a non-empty string');
   }
 
-  const res = await fetch('http://localhost:8000/api/v1/ai/ask', {
+  const res = await fetch(`${getApiBaseUrl()}/api/v1/ai/ask`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

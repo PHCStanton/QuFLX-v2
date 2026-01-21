@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import Card from './Card';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
@@ -8,14 +8,14 @@ import ChartWorkspaceOverlays from './ChartWorkspaceOverlays';
 import useTickAggregation from '../hooks/useTickAggregation';
 import useOverlayIndicators from '../hooks/useOverlayIndicators';
 import useScreenshotCapture from '../hooks/useScreenshotCapture';
-import useAIChat from '../hooks/useAIChat';
+import useAskAi from '../hooks/useAskAi';
 import useChartWorkspaceIndicators from '../hooks/useChartWorkspaceIndicators';
 import useChartWorkspaceHeaderControls from '../hooks/useChartWorkspaceHeaderControls';
 import { useStreamHealth } from '../hooks/useStreamHealth';
 import { askAI } from '../api/aiClient';
 import { saveChartScreenshot } from '../api/screenshotClient';
 import ScreenshotModal from './ScreenshotModal';
-import AiAnswerModal from './AiAnswerModal';
+import AskAiModal from './AskAiModal';
 import OscillatorPanel from './OscillatorPanel';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 import ErrorBoundary from './ErrorBoundary';
@@ -42,6 +42,7 @@ const ChartWorkspace = () => {
     syncTimeframeUi,
     lastAnnotatedScreenshotDataUrl,
     setLastAnnotatedScreenshotDataUrl,
+    setCaptureChartImage,
   } = useMarketStore();
 
   const health = useStreamHealth();
@@ -58,7 +59,7 @@ const ChartWorkspace = () => {
     openScreenshot
   } = useScreenshotCapture({ onError: setError });
 
-  const { isAsking, handleAskAi, answer, isAnswerOpen, closeAnswer } = useAIChat({
+  const { isAsking, ask } = useAskAi({
     askAI,
     captureImage: captureCompositeChart,
     lastAnnotatedImage: lastAnnotatedScreenshotDataUrl,
@@ -72,7 +73,14 @@ const ChartWorkspace = () => {
     selectedTimeframe,
     onError: setError
   });
+  const [isAskAiOpen, setIsAskAiOpen] = useState(false);
+  const [askAiForceImageDataUrl, setAskAiForceImageDataUrl] = useState(null);
   const [settingsIndicator, setSettingsIndicator] = useState(null);
+
+  useEffect(() => {
+    setCaptureChartImage(captureCompositeChart);
+    return () => setCaptureChartImage(null);
+  }, [setCaptureChartImage, captureCompositeChart]);
 
   const handleChartReady = useCallback(({ chart, series }) => {
     setCandleSeries(series);
@@ -144,6 +152,21 @@ const ChartWorkspace = () => {
     });
   }, [setLastAnnotatedScreenshotDataUrl]);
 
+  const handleAskAiOpen = useCallback(() => {
+    setAskAiForceImageDataUrl(null);
+    setIsAskAiOpen(true);
+  }, []);
+
+  const handleAskAiClose = useCallback(() => {
+    setIsAskAiOpen(false);
+    setAskAiForceImageDataUrl(null);
+  }, []);
+
+  const handleScreenshotSendToAi = useCallback(async ({ dataUrl }) => {
+    setAskAiForceImageDataUrl(dataUrl);
+    setIsAskAiOpen(true);
+  }, []);
+
   const handleCloseIndicatorSettings = useCallback(() => {
     setSettingsIndicator(null);
   }, []);
@@ -181,7 +204,7 @@ const ChartWorkspace = () => {
         activeIndicators={activeIndicators}
         removeIndicator={removeIndicator}
         onOpenScreenshot={openScreenshot}
-        onAskAi={handleAskAi}
+        onAskAi={handleAskAiOpen}
         isAsking={isAsking}
         isCapturing={isCapturing}
         onIndicatorClick={handleIndicatorClick}
@@ -189,20 +212,29 @@ const ChartWorkspace = () => {
         isSyncingTimeframe={isSyncingTimeframe}
       />
 
-      <AiAnswerModal
-        isOpen={isAnswerOpen}
-        answer={answer}
-        onClose={closeAnswer}
-      />
-
-      <ScreenshotModal
-        isOpen={isScreenshotOpen}
-        imageDataUrl={screenshotDataUrl}
+      <AskAiModal
+        isOpen={isAskAiOpen}
+        onClose={handleAskAiClose}
+        onAsk={ask}
         asset={selectedAsset}
         timeframe={selectedTimeframe}
-        onClose={handleCloseScreenshot}
-        onSave={handleSaveScreenshot}
+        forceImageDataUrl={askAiForceImageDataUrl}
       />
+
+      {isScreenshotOpen ? (
+        <div className="p-3 border-b border-gray-800 bg-gray-950/40">
+          <ScreenshotModal
+            variant="panel"
+            isOpen={isScreenshotOpen}
+            imageDataUrl={screenshotDataUrl}
+            asset={selectedAsset}
+            timeframe={selectedTimeframe}
+            onClose={handleCloseScreenshot}
+            onSave={handleSaveScreenshot}
+            onSendToAi={handleScreenshotSendToAi}
+          />
+        </div>
+      ) : null}
 
       <IndicatorSettingsModal
         isOpen={!!settingsIndicator}
@@ -211,29 +243,31 @@ const ChartWorkspace = () => {
         onSave={handleSaveIndicatorSettings}
       />
 
-      <div
-        id="quflx-chart-screenshot-root"
-        className="flex-1 relative w-full min-h-0 flex flex-col"
-      >
-        <ChartWorkspaceOverlays health={health} isLoading={isLoading} selectedAsset={selectedAsset} />
-        <div className="flex-1 min-h-[220px] relative">
-          <div className="w-full h-full">
-            <ErrorBoundary>
-              <ChartContainer onChartReady={handleChartReady} onError={setError} />
-            </ErrorBoundary>
+      {!isScreenshotOpen ? (
+        <div
+          id="quflx-chart-screenshot-root"
+          className="flex-1 relative w-full min-h-0 flex flex-col"
+        >
+          <ChartWorkspaceOverlays health={health} isLoading={isLoading} selectedAsset={selectedAsset} />
+          <div className="flex-1 min-h-[220px] relative">
+            <div className="w-full h-full">
+              <ErrorBoundary>
+                <ChartContainer onChartReady={handleChartReady} onError={setError} />
+              </ErrorBoundary>
+            </div>
           </div>
-        </div>
 
-        <OscillatorPanel
-          mainChart={mainChart}
-          selectedAsset={selectedAsset}
-          selectedTimeframe={selectedTimeframe}
-          oscillatorIndicators={oscillatorIndicators}
-          indicatorSeries={indicatorSeries}
-          indicatorStatus={indicatorStatus}
-          onError={setError}
-        />
-      </div>
+          <OscillatorPanel
+            mainChart={mainChart}
+            selectedAsset={selectedAsset}
+            selectedTimeframe={selectedTimeframe}
+            oscillatorIndicators={oscillatorIndicators}
+            indicatorSeries={indicatorSeries}
+            indicatorStatus={indicatorStatus}
+            onError={setError}
+          />
+        </div>
+      ) : null}
     </Card>
   );
 };

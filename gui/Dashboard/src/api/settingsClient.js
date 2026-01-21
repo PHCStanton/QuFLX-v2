@@ -1,5 +1,7 @@
+import { getApiBaseUrl } from './apiBase';
+
 export async function fetchSettings() {
-  const res = await fetch('http://localhost:8000/api/v1/settings', {
+  const res = await fetch(`${getApiBaseUrl()}/api/v1/settings`, {
     method: 'GET'
   });
 
@@ -24,7 +26,7 @@ export async function updateSettings(payload) {
     throw new Error('payload must be an object');
   }
 
-  const res = await fetch('http://localhost:8000/api/v1/settings', {
+  const res = await fetch(`${getApiBaseUrl()}/api/v1/settings`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
@@ -47,4 +49,3 @@ export async function updateSettings(payload) {
 
   return res.json();
 }
-

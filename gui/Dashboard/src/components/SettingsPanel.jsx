@@ -319,7 +319,7 @@ const SettingsPanel = () => {
                 { label: '20', value: 20 },
                 { label: '28', value: 28 }
               ]}
-              onChange={(val) => updateSection('screenshot', { defaultFontSize: val })}
+              onChange={(val) => updateSection('screenshot', { defaultFontSize: Number(val) })}
             />
           </SettingRow>
           <SettingRow label="Notes Margin" description="Add a writable notes margin to the screenshot editor">

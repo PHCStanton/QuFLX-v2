@@ -26,6 +26,10 @@
    - Redis running on default port 6379.
    - Chrome with DevTools Protocol enabled for the Collector.
 
+## Dashboard API Base URL
+- Dashboard API clients support `VITE_API_BASE_URL` (fallback `http://localhost:8000`).
+- Use this to avoid hardcoding localhost in multi-env builds.
+
 ## Local Ops Controls (Gateway)
 
 - Gateway supports local-only ops endpoints for starting Chrome and starting/pausing the Collector.
@@ -43,6 +47,9 @@
 - `pandas`, `pandas-ta` (optional), `talib` (optional): Indicator calculation.
 - `lightweight-charts`: Frontend charting.
 - `xai-sdk` or HTTP client: Integration with xAI chat/vision/voice APIs.
+
+## AI Keys (Backend)
+- Backend AI service reads `AI_API_KEY` (or `GROK_API_KEY`) and `AI_MODEL` / `AI_BASE_URL`.
 
 ## Settings & Configuration
 - Gateway exposes `GET /api/v1/settings` and `PUT /api/v1/settings` as the central API for platform settings, backed by a versioned JSON file in `data/settings/settings.json`.

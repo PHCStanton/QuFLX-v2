@@ -2,6 +2,34 @@ import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { validateMarketData } from '../utils/validators';
 
+const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
+
+const readStringFromStorage = (key) => {
+  try {
+    const value = localStorage.getItem(key);
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  } catch (err) {
+    console.warn('Failed to read from localStorage:', err);
+    return null;
+  }
+};
+
+const writeStringToStorage = (key, value) => {
+  try {
+    if (typeof value === 'string' && value.trim()) {
+      localStorage.setItem(key, value);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (err) {
+    console.warn('Failed to write to localStorage:', err);
+  }
+};
+
+const initialLastAnnotatedScreenshotDataUrl = readStringFromStorage(LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY);
+
 const normalizeAsset = (asset) => {
   if (!asset) return '';
   return String(asset).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -38,8 +66,31 @@ const createUiSlice = (set) => ({
   lastError: null,
   setError: (message) => set({ lastError: message }),
   clearError: () => set({ lastError: null }),
-  lastAnnotatedScreenshotDataUrl: null,
-  setLastAnnotatedScreenshotDataUrl: (dataUrl) => set({ lastAnnotatedScreenshotDataUrl: dataUrl || null }),
+  lastAnnotatedScreenshotDataUrl: initialLastAnnotatedScreenshotDataUrl,
+  setLastAnnotatedScreenshotDataUrl: (dataUrl) => {
+    const next = typeof dataUrl === 'string' && dataUrl.trim() ? dataUrl : null;
+    writeStringToStorage(LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY, next);
+    set({ lastAnnotatedScreenshotDataUrl: next });
+  },
+  aiMessages: [],
+  appendAiMessage: (message) => {
+    if (!message || typeof message !== 'object') return;
+    set((state) => ({
+      aiMessages: state.aiMessages.concat([
+        {
+          role: message.role,
+          content: message.content,
+          ts: message.ts || Date.now(),
+          meta: message.meta || null,
+        }
+      ])
+    }));
+  },
+  clearAiMessages: () => set({ aiMessages: [] }),
+  aiDraftPrompt: '',
+  setAiDraftPrompt: (value) => set({ aiDraftPrompt: typeof value === 'string' ? value : '' }),
+  captureChartImage: null,
+  setCaptureChartImage: (fn) => set({ captureChartImage: typeof fn === 'function' ? fn : null }),
   activeIndicators: [],
   addIndicator: (indicator) =>
     set((state) => ({

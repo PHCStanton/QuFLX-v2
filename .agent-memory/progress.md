@@ -57,13 +57,20 @@
 - [ ] Implement AI Gateway module wrapping xAI chat/vision APIs.
 - [ ] Implement TradingContext builder using existing strategy/indicator data.
 - [x] Add `/api/v1/ai/ask` endpoint in Gateway.
-- [x] Implement minimal Ask-AI UI (prompt + in-app answer modal).
-- [ ] Replace `window.prompt()` with an in-app Ask-AI panel (with toggles for screenshot/context).
+- [x] Implement Ask AI Quick Modal + AI Insights Panel thread.
+- [x] Remove `window.prompt()` UX and use in-app prompt input.
+- [x] Add Screenshot → AI handoff from the screenshot editor.
+- [x] Persist latest annotated screenshot across refresh for "Annotated" image source.
+- [x] Add clear "AI thinking" indicator in the Ask AI modal.
+- [ ] Implement TradingContext contract enforcement (backend schema + size limits).
 
 ## Phase 5.3: Voice Agent (xAI Voice API) (Planning)
 - [ ] Design backend voice gateway (WebSocket proxy to xAI Voice Agent API).
 - [ ] Design frontend voice assistant UI (mic control, transcripts, session state).
 - [ ] Define shared session model between text and voice assistants.
+  
+### Voice (Browser)
+- [x] Add best-effort voice input in Ask AI modal using Web Speech API (browser dependent).
 
 ## Phase 5.4: Settings & Configuration Architecture (Foundation & Scaffolding Complete)
 - [x] Define settings architecture across Global, User Profile, AI Assistant, and each Sidebar tab section in `v2_Dev_Docs/Settings_Architecture_Endpoints.md`.
@@ -95,7 +102,7 @@
 ### In Progress
 - [ ] Implement overlay indicators on main chart (EMA, BBands, SuperTrend).
 - [ ] Implement oscillator panes (RSI, MACD histogram) synchronized with main time scale.
-- [ ] Replace Ask-AI prompt with in-app UI panel.
+- [ ] Harden `/api/v1/ai/ask` contract (schema validation, structured errors, size limits).
 
 
 ## Phase 4.2: Pocket Option Topdown v2 (Timeframe + Data Collection Foundation)

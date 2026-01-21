@@ -11,6 +11,43 @@ const normalizeTheme = (value) => {
   return 'dark';
 };
 
+const normalizeAiImageSource = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'none') return 'none';
+  if (v === 'annotated') return 'annotated';
+  return 'live';
+};
+
+const normalizeScreenshotTool = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'line') return 'line';
+  if (v === 'rect') return 'rect';
+  if (v === 'text') return 'text';
+  if (v === 'circle') return 'circle';
+  return 'arrow';
+};
+
+const normalizeScreenshotColor = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'blue') return 'blue';
+  if (v === 'white') return 'white';
+  if (v === 'yellow') return 'yellow';
+  if (v === 'green') return 'green';
+  return 'orange';
+};
+
+const normalizeScreenshotFontSize = (value) => {
+  const n = Number(value);
+  if (n === 12 || n === 16 || n === 20 || n === 28) return n;
+  return defaultSettings.screenshot.defaultFontSize;
+};
+
+const normalizeScreenshotSaveMode = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'crop') return 'crop';
+  return 'full';
+};
+
 const defaultSettings = {
   version: SETTINGS_VERSION,
   global: {
@@ -124,6 +161,22 @@ const normalizeSettings = (settings) => {
   };
 
   merged.global.theme = normalizeTheme(merged.global.theme);
+  merged.ai = { ...(merged.ai || {}) };
+  merged.ai.imageSource = normalizeAiImageSource(merged.ai.imageSource);
+
+  merged.screenshot = { ...(merged.screenshot || {}) };
+  merged.screenshot.defaultTool = normalizeScreenshotTool(merged.screenshot.defaultTool);
+  merged.screenshot.defaultColor = normalizeScreenshotColor(merged.screenshot.defaultColor);
+  merged.screenshot.defaultFontSize = normalizeScreenshotFontSize(merged.screenshot.defaultFontSize);
+  merged.screenshot.notesMarginEnabled = Boolean(merged.screenshot.notesMarginEnabled);
+  merged.screenshot.notesMarginWidth = clampNumber(merged.screenshot.notesMarginWidth, {
+    min: 200,
+    max: 600,
+    fallback: defaultSettings.screenshot.notesMarginWidth,
+  });
+  merged.screenshot.saveMode = normalizeScreenshotSaveMode(merged.screenshot.saveMode);
+  merged.screenshot.emojiStripEnabled = Boolean(merged.screenshot.emojiStripEnabled);
+
   return merged;
 };
 

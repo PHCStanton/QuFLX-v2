@@ -30,7 +30,8 @@ QuFLX v2 is a sophisticated automated trading and decision-support platform for 
 ## Current Delivery Status (High-Level)
 - The Gateway and Dashboard now enforce explicit error semantics for history collection (no semantic 200 failures).
 - History API shapes are converging on `candles` as the canonical list key.
-- Dashboard Ask-AI is minimally usable (prompt + in-app answer modal), pending a dedicated AI Gateway + TradingContext builder.
+- Dashboard Ask AI is implemented with a Quick Modal + AI Insights panel thread, including screenshot-to-AI handoff and annotated screenshot persistence.
+- Backend AI is operational via `/api/v1/ai/ask`, pending a dedicated AI Gateway + TradingContext builder with strict schema enforcement.
 
 ## Success Metrics
 - **Modularity**: Components (Collector, Strategy, Gateway, AI Gateway) can be restarted independently without system failure.

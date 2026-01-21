@@ -1,7 +1,7 @@
 # QuFLX v2 – Screenshot & Markup Enhancements Plan
 
 **Date:** 2026-01-21  
-**Status:** Planned  
+**Status:** Implemented  
 **Audience:** Product Owner, Engineering, AI/Automation  
 **Scope:** `gui/Dashboard/src/components/ScreenshotModal.jsx` and related Ask AI linkage
 
@@ -28,9 +28,17 @@ Key user feedback captured:
    - The latest annotated screenshot, or
    - No image
 
+### Completion Status (2026-01-21)
+
+- [x] Notes Margin (interactive canvas area)
+- [x] Crop / Export mode (crop to chart only)
+- [x] Markup enhancements (circle, font size, color palette)
+- [~] Emoji support (best-effort rendering depends on OS)
+- [x] Ask AI image linkage (Live / Annotated / None with fallback)
+
 ---
 
-## 2. Current State (Verified)
+## 2. Current State (Updated)
 
 ### 2.1 Screenshot Capture
 
@@ -49,18 +57,19 @@ Current tools in Screenshot Modal:
 - Line
 - Arrow
 - Rect
-- Text (via prompt)
+- Circle
+- Text (inline entry + click-to-place)
 - Undo / Clear / Save
 
 Constraints:
 
-- Canvas is sized exactly to the image. Any layout “gutter” area outside the canvas is not interactive.
-- Text uses a fixed font size and a fixed color.
+- Canvas includes an optional notes margin that is part of the interactive area.
+- Text and shapes use configurable color and text font size.
 
 ### 2.3 Ask AI Linkage
 
-- Ask AI captures a live image at the moment of asking and sends it with context.
-- The annotated screenshot in Screenshot Modal is saved to disk but is not automatically used for Ask AI.
+- Ask AI image source is configurable: Live snapshot / Latest annotated / None.
+- Latest annotated screenshot is captured when saving from the screenshot editor.
 
 Implementation references:
 
@@ -237,7 +246,7 @@ Implementation options:
 
 ## 6. Phased Implementation Plan
 
-### Phase 1: Markup Controls (Low Risk, High Value)
+### Phase 1: Markup Controls (Low Risk, High Value) [x]
 
 Deliver:
 
@@ -251,7 +260,7 @@ Acceptance:
 - Text renders with the selected font size.
 - Undo/Clear continue to work.
 
-### Phase 2: Circle Tool
+### Phase 2: Circle Tool [x]
 
 Deliver:
 
@@ -263,7 +272,7 @@ Acceptance:
 - Circle can be drawn at any size and is rendered correctly after mouse-up.
 - Circle obeys selected color.
 
-### Phase 3: Notes Margin (Intentional Space)
+### Phase 3: Notes Margin (Intentional Space) [x]
 
 Deliver:
 
@@ -275,7 +284,7 @@ Acceptance:
 - When Notes Margin is enabled, tools work inside the margin.
 - The margin is included in “Save Full”.
 
-### Phase 4: Crop / Export Options
+### Phase 4: Crop / Export Options [x]
 
 Deliver:
 
@@ -286,7 +295,7 @@ Acceptance:
 - Cropped export contains only chart region (no margin).
 - Markups on the chart remain present in the crop.
 
-### Phase 5: Emoji Support (Optional)
+### Phase 5: Emoji Support (Optional) [~]
 
 Deliver:
 
@@ -297,7 +306,7 @@ Acceptance:
 
 - Pasted emojis render correctly in most environments.
 
-### Phase 6: Ask AI Linkage Improvements
+### Phase 6: Ask AI Linkage Improvements [x]
 
 Deliver:
 
@@ -348,3 +357,13 @@ Acceptance:
 - Ask AI gateway: `backend/services/gateway/routes/ai.py`
 - AI provider wrapper: `backend/services/ai/service.py`
 
+---
+
+## 10. Next Recommendations
+
+- [ ] Replace all `window.prompt` UX with a dedicated Ask AI modal/panel
+- [ ] Add redo (currently Undo only) and session persistence for markups
+- [ ] Persist last annotated screenshot across refresh (store data URL/path)
+- [ ] Add keyboard shortcuts (Esc close, Ctrl+Z undo, Ctrl+S save)
+- [ ] Add a small on-screen label for AI image source (not only in prompt text)
+- [ ] Add optional “Save As” naming (asset/timeframe/timestamp presets)

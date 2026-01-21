@@ -2,7 +2,7 @@
 
 ## Current Focus
 - **Indicators & Regimes (Next Implementation Wave):** Implement overlays + oscillators on Lightweight Charts using backend-calculated series.
-- **AI Assistant (Incremental Integration):** Keep `/api/v1/ai/ask` usable now while building towards an AI Gateway + TradingContext.
+- **AI Assistant (Incremental Integration):** Keep `/api/v1/ai/ask` usable now while building towards an AI Gateway + TradingContext schema enforcement.
 - **Protocol Robustness:** Maintain explicit HTTP error semantics and consistent API shapes (`candles`) to prevent silent failures.
 
 ## Recent Changes
@@ -13,7 +13,10 @@
   - Static options extracted to `gui/Dashboard/src/config/chartOptions.js`.
   - Orchestration moved into focused hooks and small UI components.
   - `ChartWorkspace.jsx` reduced to ~240 LOC (<250 target met).
-- **UI messaging standardized**: removed all `window.alert()`; AI answers display via modal; screenshot save errors display inline.
+- **Ask AI UX upgraded (Quick Modal + Panel thread):** removed `window.prompt()` from the Dashboard and added an in-app Ask AI modal with a handoff to AI Insights.
+- **Screenshot → AI linkage:** screenshot editor includes an Ask AI action that sends the current canvas (respects crop mode) into Ask AI.
+- **Annotated screenshot persistence:** latest annotated screenshot is persisted across refresh and supports “Image Source: Annotated”.
+- **API base URL is configurable:** Dashboard API clients read `VITE_API_BASE_URL` (fallback `http://localhost:8000`).
 - **Bundle optimization**: Vite manual chunking added; build no longer emits the >500kB chunk-size warning.
 - **Local Ops controls added (Chrome + Stream)**:
   - Gateway exposes dev-gated endpoints under `/api/v1/ops/*` to start Chrome and start/pause the Collector.
@@ -82,9 +85,11 @@
   - Core Dashboard is stable for streaming and basic visualization.
   - ChartWorkspace is now modular and smaller (<250 LOC) to reduce regression risk.
   - Indicator visualization (overlays + oscillator panes) is still the next major feature implementation.
-  - Ask-AI is minimally implemented:
-    - Prompt capture still uses `window.prompt()`.
-    - Responses display in an in-app modal.
+  - Ask AI is implemented with two UX surfaces:
+    - Ask AI modal (quick assist + optional voice transcript + “thinking” indicator).
+    - AI Insights panel (threaded chat + input box).
+  - Screenshot editor includes an Ask AI action to analyze annotated screenshots.
+  - Latest annotated screenshot is persisted across refresh to support “Annotated” image source.
   - A dedicated `useSettingsStore` (Zustand) and `settingsClient` are in place to manage Global/User/AI + per-tab settings separately from `useMarketStore`.
   - Sidebar ordering updated so `Calendar & Journal` and `Settings` are the final two sidebar items; `Settings` can host global and profile configuration views.
   - TopBar **Chrome** and **Stream** badges are now clickable controls backed by Gateway ops endpoints.
@@ -94,9 +99,9 @@
    - Implement overlay indicators on the main chart (start with EMA + Bollinger + SuperTrend).
    - Keep oscillators in separate panes (RSI, MACD histogram) synchronized with main time scale.
 
-2. **AI Assistant UI Hardening (Frontend)**
-   - Replace `window.prompt()` with an in-app input panel/modal.
-   - Add "include screenshot" + "include context" toggles using existing `captureCompositeChart`.
+2. **AI Assistant Backend Hardening (Gateway + AI Service)**
+   - Enforce strict request schema for `/api/v1/ai/ask` (pydantic model + size limits).
+   - Improve structured error responses and reduce sensitive logging.
 
 3. **AI Gateway + TradingContext (Backend)**
    - Introduce a dedicated AI Gateway module and a TradingContext builder.
