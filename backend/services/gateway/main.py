@@ -3,7 +3,6 @@ import os
 import logging
 import time
 import uuid
-import contextvars
 import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -35,16 +34,7 @@ from backend.services.ai.service import AIService
 from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, asset_control, ops, dev_logs
 from backend.services.gateway.socket_events import register_socket_events
 
-RUN_ID = uuid.uuid4().hex[:12]
-request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar('request_id', default='-')
-
-
-class ContextFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.run_id = RUN_ID
-        record.request_id = request_id_var.get('-')
-        return True
-
+from backend.services.gateway.request_context import ContextFilter, request_id_var
 
 def _normalize_log_level(value: str) -> int:
     v = str(value or '').strip().upper()

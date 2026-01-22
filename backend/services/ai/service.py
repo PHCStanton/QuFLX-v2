@@ -1,10 +1,29 @@
+import json
 import logging
 import os
-import json
-import httpx
 from typing import Any, Dict, Optional
 
+import httpx
+
 logger = logging.getLogger("AIService")
+
+
+class AIServiceError(Exception):
+    def __init__(
+        self,
+        *,
+        code: str,
+        user_message: str,
+        status_code: int,
+        retryable: bool,
+        provider_status: Optional[int] = None,
+    ) -> None:
+        super().__init__(user_message)
+        self.code = str(code)
+        self.user_message = str(user_message)
+        self.status_code = int(status_code)
+        self.retryable = bool(retryable)
+        self.provider_status = provider_status
 
 
 class AIService:
@@ -28,18 +47,37 @@ class AIService:
         if not self._enabled:
             logger.warning("AI_API_KEY not found in environment. AI Service disabled.")
 
-    async def ask(self, prompt: str, context: Optional[Dict[str, Any]] = None, image: Optional[str] = None) -> Dict[str, Any]:
+    async def ask(
+        self,
+        *,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+        image: Optional[str] = None,
+        request_id: str = '-',
+        asset: Optional[str] = None,
+        timeframe: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Ask the AI service a question with optional structured context and image.
         
         Uses the xAI/Grok API compatible with OpenAI chat completions format.
         """
         if not self._enabled:
-            return {
-                "answer": "AI service is currently disabled (missing API Key).",
-                "meta": {"ok": False, "error": "missing_api_key"},
-            }
+            raise AIServiceError(
+                code='missing_api_key',
+                user_message='AI service is disabled (missing API key).',
+                status_code=503,
+                retryable=False,
+            )
 
-        logger.info("AIService.ask called with prompt: %s (image_present: %s)", prompt, bool(image))
+        logger.info(
+            'AIService.ask request_id=%s model=%s asset=%s timeframe=%s image_present=%s prompt_len=%s',
+            request_id,
+            self.model,
+            asset or '-',
+            timeframe or '-',
+            bool(image),
+            len(prompt or ''),
+        )
 
         # Prepare system message based on context
         system_content = "You are a helpful trading assistant for QuFLX."
@@ -87,35 +125,84 @@ class AIService:
                 response = await client.post(
                     self.base_url,
                     headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {self.api_key}"
+                        'Content-Type': 'application/json',
+                        'Authorization': f'Bearer {self.api_key}',
                     },
-                    json=payload
+                    json=payload,
                 )
-                
-                if response.status_code != 200:
-                    logger.error(f"AI API Error: {response.status_code} - {response.text}")
-                    return {
-                        "answer": f"Error from AI provider: {response.status_code}",
-                        "meta": {"ok": False, "status": response.status_code, "raw_error": response.text}
-                    }
 
-                data = response.json()
-                answer = data['choices'][0]['message']['content']
-                
-                return {
-                    "answer": answer,
-                    "meta": {
-                        "ok": True,
-                        "model": data.get("model", self.model),
-                        "usage": data.get("usage", {}),
-                        "used_context_keys": list((context or {}).keys()),
-                    },
-                }
+            if response.status_code != 200:
+                retryable = response.status_code >= 500 or response.status_code == 429
+                logger.error(
+                    'AI provider error request_id=%s status=%s retryable=%s',
+                    request_id,
+                    response.status_code,
+                    retryable,
+                )
+                raise AIServiceError(
+                    code='provider_error',
+                    user_message='AI provider returned an error.',
+                    status_code=502,
+                    retryable=retryable,
+                    provider_status=response.status_code,
+                )
 
-        except Exception as e:
-            logger.exception("Exception during AI request")
+            data = response.json()
+            choices = data.get('choices')
+            if not isinstance(choices, list) or not choices:
+                raise AIServiceError(
+                    code='invalid_provider_response',
+                    user_message='AI provider response was invalid.',
+                    status_code=502,
+                    retryable=True,
+                )
+
+            message = choices[0].get('message') if isinstance(choices[0], dict) else None
+            content = message.get('content') if isinstance(message, dict) else None
+            if not isinstance(content, str) or not content.strip():
+                raise AIServiceError(
+                    code='invalid_provider_response',
+                    user_message='AI provider response was missing content.',
+                    status_code=502,
+                    retryable=True,
+                )
+
             return {
-                "answer": "An internal error occurred while contacting the AI service.",
-                "meta": {"ok": False, "error": str(e)}
+                'answer': content,
+                'meta': {
+                    'ok': True,
+                    'model': data.get('model', self.model),
+                    'usage': data.get('usage', {}),
+                    'used_context_keys': list((context or {}).keys()),
+                },
             }
+
+        except AIServiceError:
+            raise
+
+        except httpx.TimeoutException:
+            logger.error('AI provider timeout request_id=%s', request_id)
+            raise AIServiceError(
+                code='timeout',
+                user_message='AI provider timed out.',
+                status_code=504,
+                retryable=True,
+            )
+
+        except httpx.RequestError:
+            logger.error('AI provider unreachable request_id=%s', request_id, exc_info=True)
+            raise AIServiceError(
+                code='provider_unreachable',
+                user_message='AI provider is unreachable.',
+                status_code=502,
+                retryable=True,
+            )
+
+        except Exception:
+            logger.error('AI request failed request_id=%s', request_id, exc_info=True)
+            raise AIServiceError(
+                code='internal_error',
+                user_message='An internal error occurred while contacting the AI service.',
+                status_code=500,
+                retryable=False,
+            )

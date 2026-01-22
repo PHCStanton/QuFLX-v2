@@ -1,3 +1,7 @@
+# System LOGS and Monitoring
+# --------------------------
+system_LOGS/
+
 # Assets GUII Folder
 gui\Dashboard\src\assets
 

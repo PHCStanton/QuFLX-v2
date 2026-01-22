@@ -15,13 +15,22 @@ export async function askAI({ prompt, context = {}, image = null }) {
 
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
+    let requestId = null;
+    let code = null;
     try {
       const data = await res.json();
-      if (data && data.detail) detail = data.detail;
+      if (data && typeof data.detail === 'string') detail = data.detail;
+      if (data && typeof data.request_id === 'string') requestId = data.request_id;
+      if (data && typeof data.code === 'string') code = data.code;
     } catch {
       // ignore JSON parse errors and use generic detail
     }
-    throw new Error(`AI request failed: ${detail}`);
+
+    const suffixParts = [];
+    if (code) suffixParts.push(`code=${code}`);
+    if (requestId) suffixParts.push(`req=${requestId}`);
+    const suffix = suffixParts.length ? ` (${suffixParts.join(' ')})` : '';
+    throw new Error(`AI request failed: ${detail}${suffix}`);
   }
 
   return res.json();
