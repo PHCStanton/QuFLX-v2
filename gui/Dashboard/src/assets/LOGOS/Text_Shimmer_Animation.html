@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shimmer Text Logo – White to Black</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background: #0a0a15;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .logo-container {
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .logo-text {
+      font-size: 7rem;
+      font-weight: 900;
+      letter-spacing: -0.05em;
+
+      /* Base gradient: white → black */
+      background: linear-gradient(90deg, #ffffff 0%, #000000 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+
+      background-size: 200% 100%;
+      background-position: 100% 0;
+      transition: background-position 1.2s ease;
+    }
+
+    /* Shine layer – clipped to text shape */
+    .logo-text::after {
+      content: attr(data-text);
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        100deg,
+        transparent 30%,
+        rgba(255,255,255,0.9) 48%,
+        rgba(255,255,255,0.4) 52%,
+        transparent 70%
+      );
+      background-size: 300% 100%;
+      background-position: 150% 0;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      mix-blend-mode: screen;
+      opacity: 0;
+      pointer-events: none;
+      transition: 
+        opacity 0.45s ease,
+        background-position 1.4s ease;
+    }
+
+    .logo-container:hover .logo-text {
+      background-position: -100% 0;
+    }
+
+    .logo-container:hover .logo-text::after {
+      opacity: 1;
+      background-position: -120% 0;
+    }
+
+    /* Shrink on hover */
+    .logo-container {
+      transform: scale(1);
+    }
+
+    .logo-container:hover {
+      transform: scale(0.94);
+    }
+
+    /* Optional subtle under-glow */
+    .logo-container::before {
+      content: "";
+      position: absolute;
+      inset: -25% -15%;
+      background: radial-gradient(circle at 50% 40%, rgba(180,180,180,0.08) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .logo-container:hover::before {
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo-container">
+    <div class="logo-text" data-text="GROK">GROK</div>
+  </div>
+
+</body>
+</html>
