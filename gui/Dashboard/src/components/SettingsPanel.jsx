@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSettingsStore from '../store/settingsStore';
+import useMarketStore from '../store/marketStore';
 import { 
   SettingsSection, 
   SettingRow, 
@@ -9,11 +10,69 @@ import {
 } from './Settings/SettingsPrimitives';
 import NeomorphicSwitch from './NeomorphicSwitch';
 import { Save, RotateCcw, Download } from 'lucide-react';
+import { QFLX_PERSIST_KEYS } from '../store/persistMiddleware';
+import { indicatorOptions } from '../config/chartOptions';
 
 const SettingsPanel = () => {
   const { settings, updateSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
+  const { assetFilterState, setAssetFilterState, activeIndicators, setActiveIndicators } = useMarketStore();
   const sidebarSkinFileInputRef = useRef(null);
   const [sidebarSkinError, setSidebarSkinError] = useState('');
+
+  const indicatorPresetOptions = useMemo(
+    () => [
+      { label: 'Custom (keep current)', value: 'custom' },
+      { label: 'None', value: 'none' },
+      { label: 'Trend (EMA + SuperTrend + BBands)', value: 'trend' },
+      { label: 'Momentum (RSI + MACD Histogram)', value: 'momentum' },
+    ],
+    []
+  );
+
+  const applyIndicatorPreset = (presetId) => {
+    if (presetId === 'custom') {
+      return;
+    }
+
+    if (presetId === 'none') {
+      setActiveIndicators([]);
+      return;
+    }
+
+    const keysByPreset = {
+      trend: ['ema', 'supertrend', 'bollinger_bands'],
+      momentum: ['rsi', 'macd_histogram'],
+    };
+
+    const desired = keysByPreset[presetId] || [];
+    const metas = desired
+      .map((value) => indicatorOptions.find((o) => o.value === value))
+      .filter(Boolean);
+
+    const next = metas.map((meta) => {
+      const value =
+        meta.displayValue ||
+        (meta.params
+          ? Object.values(meta.params)
+              .filter((v) => v !== undefined && v !== null)
+              .join(',')
+          : 'Default');
+
+      return {
+        id: `${presetId}-${meta.value}`,
+        name: meta.label,
+        value,
+        type: meta.value,
+        key: meta.key,
+        kind: meta.kind,
+        source: meta.source || 'backend',
+        params: meta.params || {},
+        paramConfig: meta.paramConfig || []
+      };
+    });
+
+    setActiveIndicators(next);
+  };
 
   const sidebarSkinPreviewUrl = useMemo(() => {
     return settings.global.sidebarSkinDataUrl || '';
@@ -28,6 +87,58 @@ const SettingsPanel = () => {
     if (success) {
       // Could add a toast notification here
       console.log('Settings saved successfully');
+    }
+  };
+
+  const handleResetAllPersisted = () => {
+    const ok = window.confirm(
+      'This will reset QuFLX settings to defaults, clear all locally persisted QuFLX state, and reload the page. Continue?'
+    );
+    if (!ok) return;
+
+    try {
+      resetAll();
+    } catch (err) {
+      console.error('Failed to reset settings state:', err);
+    }
+
+    try {
+      const knownKeys = Object.values(QFLX_PERSIST_KEYS);
+      knownKeys.forEach((key) => {
+        try {
+          window.localStorage.removeItem(key);
+        } catch (err) {
+          console.warn(`Failed to remove localStorage key: ${key}`, err);
+        }
+      });
+
+      try {
+        const extraKeys = [];
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+          const key = window.localStorage.key(i);
+          if (!key) continue;
+          if (key.startsWith('quflx-') || key.startsWith('quflx.') || key.startsWith('quflx:')) {
+            extraKeys.push(key);
+          }
+        }
+        extraKeys.forEach((key) => {
+          try {
+            window.localStorage.removeItem(key);
+          } catch (err) {
+            console.warn(`Failed to remove localStorage key: ${key}`, err);
+          }
+        });
+      } catch (err) {
+        console.warn('Failed to enumerate localStorage keys:', err);
+      }
+    } catch (err) {
+      console.error('Failed to clear local persisted state:', err);
+    }
+
+    try {
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to reload page after reset:', err);
     }
   };
 
@@ -176,17 +287,21 @@ const SettingsPanel = () => {
           <SettingRow label="History Wait Time" description="How long to wait for manual asset click (seconds)">
             <SliderInput 
               value={settings.automation.historyWaitTime}
-              min={1}
-              max={8}
-              step={1}
+              min={0.5}
+              max={5}
+              step={0.5}
               unit="s"
               onChange={(val) => updateSection('automation', { historyWaitTime: val })}
             />
           </SettingRow>
-          <SettingRow label="Auto-Select Assets" description="Automatically select asset in Pocket Option UI">
-            <NeomorphicSwitch 
-              checked={settings.automation.autoSelectAssets}
-              onChange={() => updateSection('automation', { autoSelectAssets: !settings.automation.autoSelectAssets })}
+          <SettingRow label="Link Timeframe Sync" description="Auto-sync platform timeframe when you change the timeframe">
+            <NeomorphicSwitch
+              checked={Boolean(settings.automation.linkTimeframeSync)}
+              onChange={() =>
+                updateSection('automation', {
+                  linkTimeframeSync: !settings.automation.linkTimeframeSync
+                })
+              }
             />
           </SettingRow>
           <SettingRow label="Retry Attempts" description="Max attempts for UI automation tasks">
@@ -398,6 +513,81 @@ const SettingsPanel = () => {
               unit="%"
               onChange={(val) => updateSection('riskManager', { maxDrawdownPercent: val })}
             />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection title="Advanced">
+          <SettingRow label="Reset All Settings" description="Clears local persistence and resets backend settings">
+            <button
+              type="button"
+              onClick={handleResetAllPersisted}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-200 rounded-lg transition-colors text-sm font-medium border border-red-700/40"
+            >
+              <RotateCcw size={16} /> Reset All Settings
+            </button>
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection title="Asset Controls">
+          <SettingRow label="OTC Only" description="Persist the OTC-only filter in the Dashboard Data Source">
+            <NeomorphicSwitch
+              checked={assetFilterState?.filterMode === 'otc'}
+              onChange={() =>
+                setAssetFilterState({
+                  ...(assetFilterState || {}),
+                  filterMode: assetFilterState?.filterMode === 'otc' ? null : 'otc'
+                })
+              }
+            />
+          </SettingRow>
+
+          <SettingRow label="Included Assets" description="Comma / space separated symbols (persisted)">
+            <textarea
+              rows={3}
+              value={assetFilterState?.includeAssets || ''}
+              onChange={(e) =>
+                setAssetFilterState({
+                  ...(assetFilterState || {}),
+                  includeAssets: e.target.value
+                })
+              }
+              placeholder="AUDNZDOTC, EURUSDOTC"
+              className="w-full min-w-[12rem] px-2 py-1 text-xs bg-card-bg border border-border-primary rounded text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+            />
+          </SettingRow>
+
+          <SettingRow label="Ignored Assets" description="Comma / space separated symbols (persisted)">
+            <textarea
+              rows={3}
+              value={assetFilterState?.ignoreAssets || ''}
+              onChange={(e) =>
+                setAssetFilterState({
+                  ...(assetFilterState || {}),
+                  ignoreAssets: e.target.value
+                })
+              }
+              placeholder="USDJPYOTC, GBPUSDOTC"
+              className="w-full min-w-[12rem] px-2 py-1 text-xs bg-card-bg border border-border-primary rounded text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+            />
+          </SettingRow>
+
+          <SettingRow label="Indicator Preset" description="Apply a preset indicator setup">
+            <DropdownInput
+              value={settings.analysis.indicatorPresetId || 'custom'}
+              options={indicatorPresetOptions}
+              onChange={(val) => {
+                updateSection('analysis', { indicatorPresetId: val });
+                applyIndicatorPreset(val);
+              }}
+            />
+          </SettingRow>
+
+          <SettingRow label="Active Indicators" description="Current indicator set persisted across sessions">
+            <div className="text-xs text-text-secondary">
+              {Array.isArray(activeIndicators) && activeIndicators.length
+                ? activeIndicators.map((i) => i.name).filter(Boolean).join(', ')
+                : 'None'}
+            </div>
           </SettingRow>
         </SettingsSection>
 

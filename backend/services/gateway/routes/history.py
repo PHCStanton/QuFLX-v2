@@ -133,11 +133,11 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     # We'll wait up to 3 seconds for the payload to appear
     duration_raw = payload.get("duration", 3)
     try:
-        duration_s = int(duration_raw)
+        duration_s = float(duration_raw)
     except Exception:
         return _json_error(HistoryErrorCode.INVALID_DURATION, f"invalid duration: {duration_raw}")
 
-    if duration_s < 1:
+    if duration_s < 0.5:
         return _json_error(HistoryErrorCode.INVALID_DURATION, f"invalid duration: {duration_s}")
 
     try:

@@ -93,6 +93,7 @@ const ChartWorkspace = () => {
       selectedAsset,
       setSelectedTimeframe,
       syncTimeframeUi,
+      linkTimeframeSync: settings?.automation?.linkTimeframeSync,
       setError,
     });
 
@@ -210,6 +211,7 @@ const ChartWorkspace = () => {
         onIndicatorClick={handleIndicatorClick}
         onSyncTimeframe={handleSyncTimeframe}
         isSyncingTimeframe={isSyncingTimeframe}
+      isTimeframeSyncLinked={Boolean(settings?.automation?.linkTimeframeSync)}
       />
 
       <AskAiModal

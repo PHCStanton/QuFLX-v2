@@ -54,17 +54,18 @@ const AssetPanel = () => {
     tickerMaxAssets,
     backendStatus,
     collectHistory,
+    assetFilterState,
     setAssetFilterState,
   } = useMarketStore();
 
   const streamHealth = useStreamHealth();
 
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
-  const [maxAssetsToStar, setMaxAssetsToStar] = useState(5);
-  const [minPayout, setMinPayout] = useState(92);
-  const [includeAssets, setIncludeAssets] = useState('');
-  const [ignoreAssets, setIgnoreAssets] = useState('');
-  const [otcOnly, setOtcOnly] = useState(false);
+  const maxAssetsToStar = assetFilterState?.maxAssets ?? 5;
+  const minPayout = assetFilterState?.minPayout ?? 92;
+  const includeAssets = assetFilterState?.includeAssets ?? '';
+  const ignoreAssets = assetFilterState?.ignoreAssets ?? '';
+  const otcOnly = assetFilterState?.filterMode === 'otc';
   const [topHeight, setTopHeight] = useState(220);
   const [isTopCollapsed, setIsTopCollapsed] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
@@ -163,6 +164,20 @@ const AssetPanel = () => {
   const includeAssetSet = useMemo(() => new Set(parseSpecificAssets(includeAssets)), [includeAssets]);
   const ignoreAssetSet = useMemo(() => new Set(parseSpecificAssets(ignoreAssets)), [ignoreAssets]);
 
+  const setIncludeAssets = (value) => {
+    setAssetFilterState({
+      ...(assetFilterState || {}),
+      includeAssets: typeof value === 'string' ? value : ''
+    });
+  };
+
+  const setIgnoreAssets = (value) => {
+    setAssetFilterState({
+      ...(assetFilterState || {}),
+      ignoreAssets: typeof value === 'string' ? value : ''
+    });
+  };
+
   const addToIncludeAssets = (asset) => {
     const normalized = normalizeSpecificAsset(asset);
     if (!normalized) {
@@ -250,6 +265,7 @@ const AssetPanel = () => {
     }
 
     setAssetFilterState({
+      ...(assetFilterState || {}),
       maxAssets: maxAssetsToStar,
       minPayout,
       includeAssets: parsedInclude.join(', '),
@@ -272,7 +288,12 @@ const AssetPanel = () => {
         autoRefresh={autoRefresh}
         onToggleAutoRefresh={toggleAutoRefresh}
         otcOnly={otcOnly}
-        onToggleOtcOnly={() => setOtcOnly((prev) => !prev)}
+        onToggleOtcOnly={() =>
+          setAssetFilterState({
+            ...(assetFilterState || {}),
+            filterMode: otcOnly ? null : 'otc'
+          })
+        }
         onGetAssets={handleGetAssets}
         onCollectHistory={collectHistory}
         isBusyRefreshing={autoRefresh}
@@ -281,10 +302,18 @@ const AssetPanel = () => {
         <AssetFilterGroup
           maxAssetsToStar={maxAssetsToStar}
           onMaxAssetsChange={(val) =>
-            setMaxAssetsToStar(Math.max(1, Math.min(50, parseInt(val, 10) || 15)))
+            setAssetFilterState({
+              ...(assetFilterState || {}),
+              maxAssets: Math.max(1, Math.min(50, parseInt(val, 10) || 15))
+            })
           }
           minPayout={minPayout}
-          onMinPayoutChange={(val) => setMinPayout(Math.max(1, Math.min(100, parseInt(val, 10) || 92)))}
+          onMinPayoutChange={(val) =>
+            setAssetFilterState({
+              ...(assetFilterState || {}),
+              minPayout: Math.max(1, Math.min(100, parseInt(val, 10) || 92))
+            })
+          }
           includeAssets={includeAssets}
           onIncludeAssetsChange={setIncludeAssets}
           includeAssetList={Array.from(includeAssetSet)}

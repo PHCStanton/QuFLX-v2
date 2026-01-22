@@ -80,11 +80,11 @@ class HistoryCollector(Capability):
         timeframe_min = self._parse_timeframe_minutes(timeframe_raw)
 
         if action == "collect":
-            duration_s = int(inputs.get("duration", 0))
+            duration_s = float(inputs.get("duration", 0))
             return self._collect_only(ctx, asset, duration_s, timeframe_min)
 
         if action == "collect_and_save":
-            duration_s = int(inputs.get("duration", 10))
+            duration_s = float(inputs.get("duration", 10))
             return self._collect_and_save(ctx, asset, duration_s, timeframe_min, output_root_str)
 
         raw_candles = inputs.get("candles")
@@ -106,7 +106,7 @@ class HistoryCollector(Capability):
         self,
         ctx: Ctx,
         asset: str,
-        duration_s: int,
+        duration_s: float,
         timeframe_min: Optional[int],
     ) -> CapResult:
         if ctx.driver is None:
@@ -163,7 +163,7 @@ class HistoryCollector(Capability):
                 break
             time.sleep(0.5)
 
-        deadline = time.time() + max(0, duration_s)
+        deadline = time.time() + max(0.0, float(duration_s))
         ticks: List[Any] = []
         while time.time() < deadline:
             for t in interceptor.fetch_ticks():
@@ -201,7 +201,7 @@ class HistoryCollector(Capability):
         self,
         ctx: Ctx,
         asset: str,
-        duration_s: int,
+        duration_s: float,
         timeframe_min: Optional[int],
         output_root: Optional[str],
     ) -> CapResult:
@@ -228,7 +228,7 @@ class HistoryCollector(Capability):
         history_candles: List[Candle] = []
         # Use duration_s if provided and larger than 3s, otherwise default to 3s
         # This allows the frontend to control the timeout (e.g. 15s for manual mode)
-        wait_time = max(3, duration_s) if duration_s > 0 else 3
+        wait_time = max(3.0, float(duration_s)) if duration_s > 0 else 3.0
         history_deadline = time.time() + wait_time
         
         logger.info(f"Waiting for history data for {asset} (timeout: {wait_time}s)...")
@@ -274,11 +274,11 @@ class HistoryCollector(Capability):
         # we don't need to wait for additional ticks. This enables rapid subsequent requests.
         if history_candles:
             # History captured - collect ticks for max 2 seconds to get latest updates
-            tick_duration = min(2, duration_s) if duration_s > 0 else 0
+            tick_duration = min(2.0, float(duration_s)) if duration_s > 0 else 0.0
             logger.info(f"History captured ({len(history_candles)} candles), collecting ticks for {tick_duration}s only")
         else:
             # No history yet - collect ticks for full duration
-            tick_duration = max(1, duration_s)
+            tick_duration = max(1.0, float(duration_s))
             logger.info(f"No history captured, collecting ticks for full {tick_duration}s")
         
         deadline = time.time() + tick_duration
@@ -552,7 +552,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HistoryCollector test harness")
     parser.add_argument("--asset", required=True, help="Asset label as shown in PocketOption")
     parser.add_argument("--timeframe", default="1m", help="Timeframe, e.g. 1m")
-    parser.add_argument("--duration", type=int, default=0, help="Extra seconds to collect ticks")
+    parser.add_argument("--duration", type=float, default=0, help="Extra seconds to collect ticks")
     args = parser.parse_args()
 
     ctx = None

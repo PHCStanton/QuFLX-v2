@@ -5,6 +5,7 @@ const useChartWorkspaceHeaderControls = ({
   selectedAsset,
   setSelectedTimeframe,
   syncTimeframeUi,
+  linkTimeframeSync,
   setError,
 }) => {
   const assetOptions = useMemo(() => {
@@ -14,12 +15,23 @@ const useChartWorkspaceHeaderControls = ({
 
   const handleTimeframeChange = useCallback(
     (val) => {
-      setSelectedTimeframe(val).catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (setError) setError(`Timeframe change failed: ${msg}`);
-      });
+      (async () => {
+        try {
+          await setSelectedTimeframe(val);
+          if (!linkTimeframeSync) {
+            return;
+          }
+          if (String(val) === 'ticks') {
+            return;
+          }
+          await syncTimeframeUi();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (setError) setError(`Timeframe change failed: ${msg}`);
+        }
+      })();
     },
-    [setSelectedTimeframe, setError]
+    [setSelectedTimeframe, syncTimeframeUi, linkTimeframeSync, setError]
   );
 
   const [isSyncingTimeframe, setIsSyncingTimeframe] = useState(false);

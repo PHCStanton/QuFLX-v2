@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText, RefreshCcw } from 'lucide-react';
+import { X, Layers, Clock, FileText, RefreshCcw, Link2 } from 'lucide-react';
 import ChartActions from './ChartActions';
 
 const ChartHeader = ({
@@ -21,7 +21,8 @@ const ChartHeader = ({
   isCapturing,
   onIndicatorClick,
   onSyncTimeframe,
-  isSyncingTimeframe
+  isSyncingTimeframe,
+  isTimeframeSyncLinked
 }) => {
   const [syncClicked, setSyncClicked] = useState(false);
 
@@ -61,11 +62,28 @@ const ChartHeader = ({
             type="button"
             onClick={handleSyncClick}
             disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
-            title={selectedTimeframe === 'ticks' ? "Sync disabled for 'ticks'" : 'Sync TimeFrame with Platform'}
-            aria-label={selectedTimeframe === 'ticks' ? "Sync disabled for 'ticks'" : 'Sync TimeFrame with Platform'}
-            className={`quflx-neo-icon-btn quflx-neo-icon-btn--sm disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''}`}
+            title={
+              selectedTimeframe === 'ticks'
+                ? "Sync disabled for 'ticks'"
+                : isTimeframeSyncLinked
+                  ? 'Sync TimeFrame with Platform (Linked)'
+                  : 'Sync TimeFrame with Platform'
+            }
+            aria-label={
+              selectedTimeframe === 'ticks'
+                ? "Sync disabled for 'ticks'"
+                : isTimeframeSyncLinked
+                  ? 'Sync TimeFrame with Platform (Linked)'
+                  : 'Sync TimeFrame with Platform'
+            }
+            className={`quflx-neo-icon-btn quflx-neo-icon-btn--sm relative disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''} ${isTimeframeSyncLinked ? 'ring-1 ring-accent-green/50 border-accent-green/50' : ''}`}
           >
             <RefreshCcw className="w-3.5 h-3.5 quflx-neo-btn__icon" />
+            {isTimeframeSyncLinked ? (
+              <span className="absolute -top-1 -right-1 bg-accent-green text-black rounded-full p-0.5 border border-black/40">
+                <Link2 className="w-3 h-3" />
+              </span>
+            ) : null}
           </button>
         )}
 

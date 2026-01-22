@@ -127,6 +127,8 @@ const AskAiModal = ({
   forceImageDataUrl,
 }) => {
   const { settings } = useSettingsStore();
+  const useWhiteModalSurface =
+    settings?.global?.theme === 'system' || settings?.global?.theme === 'black-white';
   const {
     setActiveTab,
     aiDraftPrompt,
@@ -307,22 +309,30 @@ const AskAiModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#1a1f2e] border border-gray-800 rounded-2xl w-full max-w-3xl shadow-2xl">
-        <div className="p-5 border-b border-gray-800 flex items-start justify-between gap-4">
+      <div
+        className={`border rounded-2xl w-full max-w-3xl shadow-2xl ${
+          useWhiteModalSurface ? 'bg-white border-gray-200' : 'bg-[#1a1f2e] border-gray-800'
+        }`}
+      >
+        <div
+          className={`p-5 border-b flex items-start justify-between gap-4 ${
+            useWhiteModalSurface ? 'border-gray-200' : 'border-gray-800'
+          }`}
+        >
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#0f1419] border border-gray-800 flex items-center justify-center text-gray-300">
               <Logo />
             </div>
             <div>
-              <div className="text-white text-lg font-semibold">Ask AI</div>
-              <div className="text-xs text-gray-400 mt-0.5">
+              <div className={`text-lg font-semibold ${useWhiteModalSurface ? 'text-gray-900' : 'text-white'}`}>Ask AI</div>
+              <div className={`text-xs mt-0.5 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>
                 Quick assist now. Continue in AI Insights for deeper, multi-step analysis.
               </div>
-              <div className="text-[11px] text-gray-500 mt-1">
+              <div className={`text-[11px] mt-1 ${useWhiteModalSurface ? 'text-gray-500' : 'text-gray-500'}`}>
                 {asset ? asset : 'No asset'}{timeframe ? ` · ${timeframe}` : ''} · Image: {imageSourceLabel}
               </div>
               {isThinking ? (
-                <div className="mt-2 inline-flex items-center gap-2 text-[11px] text-gray-400">
+                <div className={`mt-2 inline-flex items-center gap-2 text-[11px] ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>
                   <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
                   <span>AI is thinking…</span>
                 </div>
@@ -341,7 +351,9 @@ const AskAiModal = ({
         <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-4">
             <div>
-              <div className="text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">Choose a quick action</div>
+              <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${useWhiteModalSurface ? 'text-gray-700' : 'text-gray-300'}`}>
+                Choose a quick action
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {PRESETS.map((p) => (
                   <OptionCard
@@ -357,7 +369,7 @@ const AskAiModal = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <label className="block text-xs text-gray-400 mb-1">Prompt</label>
+                <label className={`block text-xs mb-1 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>Prompt</label>
                 <textarea
                   value={aiDraftPrompt}
                   onChange={(e) => setAiDraftPrompt(e.target.value)}
@@ -365,12 +377,12 @@ const AskAiModal = ({
                   className="w-full bg-[#0f1419] border border-gray-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/40"
                   placeholder={activePreset.id === 'custom' ? 'Type your question…' : 'Select an option or write a custom question…'}
                 />
-                <div className="text-[11px] text-gray-500 mt-1">Ctrl+Enter to ask</div>
+                <div className={`text-[11px] mt-1 ${useWhiteModalSurface ? 'text-gray-500' : 'text-gray-500'}`}>Ctrl+Enter to ask</div>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Image</label>
+                  <label className={`block text-xs mb-1 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>Image</label>
                   <select
                     value={localImageSource}
                     onChange={(e) => setLocalImageSource(e.target.value)}
@@ -383,7 +395,7 @@ const AskAiModal = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Voice</label>
+                  <label className={`block text-xs mb-1 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>Voice</label>
                   <button
                     type="button"
                     onClick={handleVoiceToggle}
@@ -429,7 +441,9 @@ const AskAiModal = ({
           </div>
 
           <div className="space-y-3">
-            <div className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Response</div>
+            <div className={`text-xs font-semibold uppercase tracking-wider ${useWhiteModalSurface ? 'text-gray-700' : 'text-gray-300'}`}>
+              Response
+            </div>
             <div className="bg-[#0f1419] border border-gray-800 rounded-xl p-4 min-h-[260px] max-h-[420px] overflow-auto">
               {isThinking && !answer ? (
                 <div className="text-sm text-gray-400 flex items-center gap-2">

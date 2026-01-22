@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { validateMarketData } from '../utils/validators';
+import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 
 const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
 
@@ -92,6 +93,8 @@ const createUiSlice = (set) => ({
   captureChartImage: null,
   setCaptureChartImage: (fn) => set({ captureChartImage: typeof fn === 'function' ? fn : null }),
   activeIndicators: [],
+  setActiveIndicators: (indicators) =>
+    set({ activeIndicators: Array.isArray(indicators) ? indicators : [] }),
   addIndicator: (indicator) =>
     set((state) => ({
       activeIndicators: [...state.activeIndicators, indicator]
@@ -151,28 +154,8 @@ const createMarketSlice = (set, get) => ({
       marketData: {} // Clear old data immediately
     });
 
-    // Check if Auto-Select is enabled in Settings
     const { settings } = (await import('./settingsStore')).default.getState();
-    const autoSelect = settings.automation.autoSelectAssets;
     const dataSourceMode = settings.analysis?.dataSourceMode || 'history_and_streaming';
-
-    if (autoSelect) {
-      console.log(`[AutoSelect] Triggering automation for ${asset}...`);
-      try {
-        const res = await fetch('/api/v1/asset-control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'select_asset', asset })
-        });
-        if (!res.ok) {
-          console.warn('[AutoSelect] Automation failed, falling back to manual mode');
-          set({ lastError: 'Auto-select failed. Falling back to manual mode.' });
-        }
-      } catch (err) {
-        console.error('[AutoSelect] Network error during automation:', err);
-        set({ lastError: `Auto-select failed: ${getErrorMessage(err)}. Using manual mode.` });
-      }
-    }
 
     if (dataSourceMode !== 'streaming_only') {
       try {
@@ -459,7 +442,7 @@ const createMarketSlice = (set, get) => ({
 
     // Get dynamic wait time from settings
     const { settings } = (await import('./settingsStore')).default.getState();
-    const waitTime = settings.automation.historyWaitTime || 8;
+    const waitTime = settings.automation.historyWaitTime || 1.5;
     const dataSourceMode = settings.analysis?.dataSourceMode || 'history_and_streaming';
 
     if (tfRaw === 'ticks' || (secondsRaw && secondsRaw.match(/^\d+$/))) {
@@ -905,11 +888,26 @@ const createConnectionSlice = (set, get) => ({
   }
 });
 
-const useMarketStore = create((set, get) => ({
-  ...createUiSlice(set),
-  ...createTickerSlice(),
-  ...createMarketSlice(set, get),
-  ...createConnectionSlice(set, get)
-}));
+const useMarketStore = create(
+  withQuFLXPersist(QFLX_PERSIST_KEYS.market, 1, {
+    partialize: (state) => ({
+      isSidebarOpen: state.isSidebarOpen,
+      activeTab: state.activeTab,
+      automations: state.automations,
+      tickerMaxAssets: state.tickerMaxAssets,
+      assetFilterState: state.assetFilterState,
+      selectedAsset: state.selectedAsset,
+      selectedAssetKey: state.selectedAssetKey,
+      selectedTimeframe: state.selectedTimeframe,
+      panelMode: state.panelMode,
+      activeIndicators: state.activeIndicators
+    })
+  })((set, get) => ({
+    ...createUiSlice(set),
+    ...createTickerSlice(),
+    ...createMarketSlice(set, get),
+    ...createConnectionSlice(set, get)
+  }))
+);
 
 export default useMarketStore;

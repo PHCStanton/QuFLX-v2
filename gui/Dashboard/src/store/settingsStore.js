@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 
 const SETTINGS_VERSION = 3;
 
@@ -59,8 +59,8 @@ const defaultSettings = {
     sidebarSkinDataUrl: null,
   },
   automation: {
-    historyWaitTime: 8,
-    autoSelectAssets: true,
+    historyWaitTime: 1.5,
+    linkTimeframeSync: false,
     retryAttempts: 2,
     retryDelay: 500,
   },
@@ -68,6 +68,7 @@ const defaultSettings = {
     defaultTimeframe: '1m',
     chartPrecision: 5,
     autoLoadIndicators: false,
+    indicatorPresetId: 'custom',
     dataSourceMode: 'history_and_streaming',
   },
   ai: {
@@ -181,8 +182,15 @@ const normalizeSettings = (settings) => {
 };
 
 const useSettingsStore = create(
-  persist(
-    (set, get) => ({
+  withQuFLXPersist(QFLX_PERSIST_KEYS.settings, SETTINGS_VERSION, {
+    migrate: (persistedState) => {
+      const next = { ...persistedState };
+      if (next?.settings) {
+        next.settings = normalizeSettings(next.settings);
+      }
+      return next;
+    }
+  })((set, get) => ({
       settings: defaultSettings,
       
       // Initialize settings from backend if possible
@@ -239,8 +247,8 @@ const useSettingsStore = create(
             merged.automation = {
               ...(merged.automation || {}),
               historyWaitTime: clampNumber(merged.automation?.historyWaitTime, {
-                min: 1,
-                max: 8,
+                min: 0.5,
+                max: 5,
                 fallback: defaultSettings.automation.historyWaitTime,
               }),
             };
@@ -350,20 +358,7 @@ const useSettingsStore = create(
         set({ settings: defaultSettings });
         get().saveSettings(defaultSettings);
       }
-    }),
-    {
-      name: 'quflx-settings',
-      version: SETTINGS_VERSION,
-      storage: createJSONStorage(() => localStorage),
-      migrate: (persistedState) => {
-        const next = { ...persistedState };
-        if (next?.settings) {
-          next.settings = normalizeSettings(next.settings);
-        }
-        return next;
-      }
-    }
-  )
+    }))
 );
 
 export default useSettingsStore;
