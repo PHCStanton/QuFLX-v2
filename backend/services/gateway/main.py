@@ -31,7 +31,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
 from backend.services.ai.service import AIService
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, asset_control, ops, dev_logs
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, ai_voice, asset_control, ops, dev_logs
 from backend.services.gateway.socket_events import register_socket_events
 
 from backend.services.gateway.request_context import ContextFilter, request_id_var
@@ -69,12 +69,19 @@ def configure_logging(*, service_name: str = 'gateway') -> None:
 
     already_configured = any(getattr(h, '_qflx_handler', False) for h in root.handlers)
     if already_configured:
+        for handler in root.handlers:
+            if not getattr(handler, '_qflx_handler', False):
+                continue
+            if any(isinstance(f, ContextFilter) for f in handler.filters):
+                continue
+            handler.addFilter(ContextFilter())
         return
 
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(log_level)
     console.setFormatter(formatter)
     console._qflx_handler = True
+    console.addFilter(ContextFilter())
     root.addHandler(console)
 
     if enable_file_logs:
@@ -88,12 +95,14 @@ def configure_logging(*, service_name: str = 'gateway') -> None:
         app_fh.setLevel(log_level)
         app_fh.setFormatter(formatter)
         app_fh._qflx_handler = True
+        app_fh.addFilter(ContextFilter())
         root.addHandler(app_fh)
 
         err_fh = TimedRotatingFileHandler(str(err_path), when='midnight', interval=1, backupCount=30, utc=True, encoding='utf-8')
         err_fh.setLevel(logging.ERROR)
         err_fh.setFormatter(formatter)
         err_fh._qflx_handler = True
+        err_fh.addFilter(ContextFilter())
         root.addHandler(err_fh)
 
         access_logger = logging.getLogger(f'{service_name}.access')
@@ -104,6 +113,7 @@ def configure_logging(*, service_name: str = 'gateway') -> None:
         access_fh.setLevel(log_level)
         access_fh.setFormatter(formatter)
         access_fh._qflx_handler = True
+        access_fh.addFilter(ContextFilter())
         access_logger.addHandler(access_fh)
 
 
@@ -238,6 +248,7 @@ app.include_router(screenshots.router, prefix="/api/v1/screenshots", tags=["Scre
 app.include_router(indicators.router, prefix="/api/v1/indicators", tags=["Indicators"])
 app.include_router(settings.router, prefix="/api/v1/settings", tags=["Settings"])
 app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
+app.include_router(ai_voice.router, prefix="/api/v1/ai/voice", tags=["AI"])
 app.include_router(asset_control.router, prefix="/api/v1/asset-control", tags=["Asset Control"])
 app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops"])
 app.include_router(dev_logs.router, prefix="/api/v1/dev/logs", tags=["Dev Logs"])

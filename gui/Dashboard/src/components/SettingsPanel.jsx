@@ -12,12 +12,28 @@ import NeomorphicSwitch from './NeomorphicSwitch';
 import { Save, RotateCcw, Download } from 'lucide-react';
 import { QFLX_PERSIST_KEYS } from '../store/persistMiddleware';
 import { indicatorOptions } from '../config/chartOptions';
+import useTextToSpeech from '../utils/useTextToSpeech';
 
 const SettingsPanel = () => {
   const { settings, updateSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
   const { assetFilterState, setAssetFilterState, activeIndicators, setActiveIndicators } = useMarketStore();
   const sidebarSkinFileInputRef = useRef(null);
   const [sidebarSkinError, setSidebarSkinError] = useState('');
+
+  const { supported: ttsSupported, voices: ttsVoices } = useTextToSpeech();
+
+  const ttsVoiceOptions = useMemo(() => {
+    const base = [{ label: 'System default', value: '' }];
+    if (!ttsSupported) return base;
+    if (!Array.isArray(ttsVoices) || !ttsVoices.length) return base;
+    const mapped = ttsVoices
+      .filter((v) => v && typeof v.voiceURI === 'string')
+      .map((v) => ({
+        label: `${v.name || 'Voice'}${v.lang ? ` (${v.lang})` : ''}`,
+        value: v.voiceURI,
+      }));
+    return [...base, ...mapped];
+  }, [ttsSupported, ttsVoices]);
 
   const indicatorPresetOptions = useMemo(
     () => [
@@ -394,6 +410,46 @@ const SettingsPanel = () => {
             <NeomorphicSwitch 
               checked={settings.ai.autoIncludeContext}
               onChange={() => updateSection('ai', { autoIncludeContext: !settings.ai.autoIncludeContext })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Voice Read-Back" description="Read AI answers aloud using your browser">
+            <NeomorphicSwitch
+              checked={settings.ai.voiceReadBackEnabled}
+              onChange={() => updateSection('ai', { voiceReadBackEnabled: !settings.ai.voiceReadBackEnabled })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Voice Rate" description="Speech speed">
+            <SliderInput
+              value={settings.ai.voiceReadBackRate}
+              min={0.5}
+              max={2}
+              step={0.1}
+              unit="x"
+              disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
+              onChange={(val) => updateSection('ai', { voiceReadBackRate: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Voice Pitch" description="Speech pitch">
+            <SliderInput
+              value={settings.ai.voiceReadBackPitch}
+              min={0}
+              max={2}
+              step={0.1}
+              unit=""
+              disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
+              onChange={(val) => updateSection('ai', { voiceReadBackPitch: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Voice" description="Select a system voice">
+            <DropdownInput
+              value={settings.ai.voiceReadBackVoiceURI || ''}
+              options={ttsVoiceOptions}
+              disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
+              onChange={(val) => updateSection('ai', { voiceReadBackVoiceURI: val || null })}
             />
           </SettingRow>
         </SettingsSection>

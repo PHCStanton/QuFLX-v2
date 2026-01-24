@@ -3,6 +3,7 @@
 ## Current Focus
 - **Indicators & Regimes (Next Implementation Wave):** Implement overlays + oscillators on Lightweight Charts using backend-calculated series.
 - **AI Assistant (Incremental Integration):** Keep `/api/v1/ai/ask` usable now while building towards an AI Gateway + TradingContext schema enforcement.
+- **Voice UX (Dictation + Read-Back):** Voice dictation is in place for Ask AI Modal and AI Insights; browser TTS read-back added for AI outputs.
 - **Protocol Robustness:** Maintain explicit HTTP error semantics and consistent API shapes (`candles`) to prevent silent failures.
 
 ## Recent Changes
@@ -14,6 +15,9 @@
   - Orchestration moved into focused hooks and small UI components.
   - `ChartWorkspace.jsx` reduced to ~240 LOC (<250 target met).
 - **Ask AI UX upgraded (Quick Modal + Panel thread):** removed `window.prompt()` from the Dashboard and added an in-app Ask AI modal with a handoff to AI Insights.
+- **Voice dictation wired (Modal + Insights):** realtime WS voice session used for dictation; transcript inserts into prompt flows.
+- **AI speech read-back added (Browser TTS):** AI messages can be read aloud via Web Speech API (SpeechSynthesis) with Settings controls.
+- **Ask AI response shaping improved:** modal vs insights mode and verbosity now influence backend system prompt and max token limits.
 - **Screenshot → AI linkage:** screenshot editor includes an Ask AI action that sends the current canvas (respects crop mode) into Ask AI.
 - **Annotated screenshot persistence:** latest annotated screenshot is persisted across refresh and supports “Image Source: Annotated”.
 - **API base URL is configurable:** Dashboard API clients read `VITE_API_BASE_URL` (fallback `http://localhost:8000`).
@@ -69,6 +73,7 @@
   - Indicator pipeline is implemented and documented; regime mapping doc exists but regime detection logic is not yet wired into runtime.
   - AI integration is partially wired:
     - `/api/v1/ai/ask` exists and is consumed by the Dashboard.
+    - Voice WS relay endpoint exists for realtime voice sessions (currently used for dictation).
     - AI Gateway + TradingContext builder are still pending.
   - Settings architecture foundation implemented:
     - Versioned settings schema with persisted JSON in `data/settings/settings.json`.
@@ -86,8 +91,8 @@
   - ChartWorkspace is now modular and smaller (<250 LOC) to reduce regression risk.
   - Indicator visualization (overlays + oscillator panes) is still the next major feature implementation.
   - Ask AI is implemented with two UX surfaces:
-    - Ask AI modal (quick assist + optional voice transcript + “thinking” indicator).
-    - AI Insights panel (threaded chat + input box).
+    - Ask AI modal (quick assist + voice dictation → transcript insert + “thinking” indicator + optional TTS read-back).
+    - AI Insights panel (threaded chat + input box + voice dictation + Speak buttons).
   - Screenshot editor includes an Ask AI action to analyze annotated screenshots.
   - Latest annotated screenshot is persisted across refresh to support “Annotated” image source.
   - A dedicated `useSettingsStore` (Zustand) and `settingsClient` are in place to manage Global/User/AI + per-tab settings separately from `useMarketStore`.
@@ -102,6 +107,10 @@
 2. **AI Assistant Backend Hardening (Gateway + AI Service)**
    - Enforce strict request schema for `/api/v1/ai/ask` (pydantic model + size limits).
    - Improve structured error responses and reduce sensitive logging.
+
+3. **Voice Conversation (Optional Upgrade)**
+   - If desired, add realtime conversation mode (audio output) in AI Insights.
+   - Keep modal voice as dictation-only; use read-back for modal answers.
 
 3. **AI Gateway + TradingContext (Backend)**
    - Introduce a dedicated AI Gateway module and a TradingContext builder.
@@ -118,6 +127,8 @@
   - `gui/Dashboard/src/components/AssetPanel.jsx`
   - `gui/Dashboard/src/components/TopBar.jsx`
   - `gui/Dashboard/src/components/SettingsPanel.jsx`
+  - `gui/Dashboard/src/utils/useTextToSpeech.js`
+  - `gui/Dashboard/README.md`
   - `gui/Dashboard/src/components/ChartWorkspace.jsx`
   - `gui/Dashboard/src/components/ChartWorkspaceOverlays.jsx`
   - `gui/Dashboard/src/hooks/useChartWorkspaceIndicators.js`
@@ -127,6 +138,7 @@
 
 - Backend:
   - `backend/services/gateway/main.py`
+  - `backend/services/gateway/routes/ai_voice.py`
   - `backend/services/gateway/routes/ops.py`
   - `backend/services/gateway/routes/history.py`
   - `backend/services/gateway/routes/settings.py`

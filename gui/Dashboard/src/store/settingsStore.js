@@ -18,6 +18,13 @@ const normalizeAiImageSource = (value) => {
   return 'live';
 };
 
+const normalizeVoiceReadBackRate = (value) => clampNumber(value, { min: 0.5, max: 2, fallback: 1 });
+const normalizeVoiceReadBackPitch = (value) => clampNumber(value, { min: 0, max: 2, fallback: 1 });
+const normalizeVoiceUri = (value) => {
+  const v = typeof value === 'string' ? value.trim() : '';
+  return v || null;
+};
+
 const normalizeScreenshotTool = (value) => {
   const v = String(value || '').toLowerCase();
   if (v === 'line') return 'line';
@@ -76,6 +83,10 @@ const defaultSettings = {
     autoIncludeChart: true,
     autoIncludeContext: true,
     imageSource: 'live',
+    voiceReadBackEnabled: false,
+    voiceReadBackRate: 1,
+    voiceReadBackPitch: 1,
+    voiceReadBackVoiceURI: null,
   },
   screenshot: {
     defaultTool: 'arrow',
@@ -164,6 +175,10 @@ const normalizeSettings = (settings) => {
   merged.global.theme = normalizeTheme(merged.global.theme);
   merged.ai = { ...(merged.ai || {}) };
   merged.ai.imageSource = normalizeAiImageSource(merged.ai.imageSource);
+  merged.ai.voiceReadBackEnabled = Boolean(merged.ai.voiceReadBackEnabled);
+  merged.ai.voiceReadBackRate = normalizeVoiceReadBackRate(merged.ai.voiceReadBackRate);
+  merged.ai.voiceReadBackPitch = normalizeVoiceReadBackPitch(merged.ai.voiceReadBackPitch);
+  merged.ai.voiceReadBackVoiceURI = normalizeVoiceUri(merged.ai.voiceReadBackVoiceURI);
 
   merged.screenshot = { ...(merged.screenshot || {}) };
   merged.screenshot.defaultTool = normalizeScreenshotTool(merged.screenshot.defaultTool);

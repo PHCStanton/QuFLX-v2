@@ -11,6 +11,7 @@
 - **Pydantic**: Data validation and settings management.
 - **Selenium**: Browser automation for data collection.
 - **xAI API (Grok)**: External AI service for text, vision, and voice assistants.
+- **Web Speech API (Browser)**: SpeechSynthesis for TTS read-back of AI answers.
 
 ## Development Setup
 1. **Backend**:
@@ -29,6 +30,9 @@
 ## Dashboard API Base URL
 - Dashboard API clients support `VITE_API_BASE_URL` (fallback `http://localhost:8000`).
 - Use this to avoid hardcoding localhost in multi-env builds.
+
+## Dashboard Dev Server Ports
+- Vite may move from `5173` to `5174+` if the port is in use. Always use the printed `Local:` URL from the dev server output.
 
 ## Local Ops Controls (Gateway)
 
@@ -49,7 +53,15 @@
 - `xai-sdk` or HTTP client: Integration with xAI chat/vision/voice APIs.
 
 ## AI Keys (Backend)
-- Backend AI service reads `AI_API_KEY` (or `GROK_API_KEY`) and `AI_MODEL` / `AI_BASE_URL`.
+- Backend AI service reads `XAI_API_KEY` (preferred) or `AI_API_KEY` / `GROK_API_KEY` and `AI_MODEL` / `AI_BASE_URL`.
+- Realtime voice WS relay uses the same key source (Authorization bearer) and connects to `wss://api.x.ai/v1/realtime`.
+
+## AI Speech Read-Back (Frontend)
+- AI answer speech uses browser `speechSynthesis` with Settings:
+  - `ai.voiceReadBackEnabled`
+  - `ai.voiceReadBackRate`
+  - `ai.voiceReadBackPitch`
+  - `ai.voiceReadBackVoiceURI`
 
 ## Settings & Configuration
 - Gateway exposes `GET /api/v1/settings` and `PUT /api/v1/settings` as the central API for platform settings, backed by a versioned JSON file in `data/settings/settings.json`.

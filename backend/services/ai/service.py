@@ -79,10 +79,26 @@ class AIService:
             len(prompt or ''),
         )
 
-        # Prepare system message based on context
-        system_content = "You are a helpful trading assistant for QuFLX."
+        verbosity = ''
+        ui_mode = ''
         if context:
-            # Format context into a readable string for the system prompt
+            verbosity = str(context.get('responseVerbosity') or '').strip().lower()
+            ui_mode = str(context.get('uiMode') or '').strip().lower()
+
+        system_content = "You are a helpful trading assistant for QuFLX."
+        if ui_mode == 'modal':
+            system_content += "\n\nThis is a quick Ask AI modal response. Keep it short, actionable, and skimmable."
+        elif ui_mode == 'insights':
+            system_content += "\n\nThis is the AI Insights panel. Provide deeper reasoning and structured follow-ups."
+
+        if verbosity == 'concise':
+            system_content += "\n\nStyle: concise. Use up to 6 bullet points. Include a single recommendation (Enter/Wait/Skip) and one key risk."
+        elif verbosity == 'detailed':
+            system_content += "\n\nStyle: detailed. Use sections and include assumptions, invalidation, and next steps."
+        else:
+            system_content += "\n\nStyle: balanced. Be specific and practical without being verbose."
+
+        if context:
             context_str = json.dumps(context, indent=2)
             system_content += f"\n\nCurrent Market Context:\n{context_str}"
 
@@ -113,11 +129,23 @@ class AIService:
             }
         ]
 
+        max_tokens: Optional[int]
+        if verbosity == 'concise':
+            max_tokens = 250
+        elif verbosity == 'detailed':
+            max_tokens = 900
+        else:
+            max_tokens = 500
+
+        if ui_mode == 'modal':
+            max_tokens = min(max_tokens, 300)
+
         payload = {
             "messages": messages,
             "model": self.model,
             "stream": False,
-            "temperature": 0
+            "temperature": 0,
+            "max_tokens": max_tokens,
         }
 
         try:

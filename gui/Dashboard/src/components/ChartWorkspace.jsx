@@ -65,6 +65,8 @@ const ChartWorkspace = () => {
     lastAnnotatedImage: lastAnnotatedScreenshotDataUrl,
     imageSource: settings?.ai?.imageSource,
     autoIncludeContext: settings?.ai?.autoIncludeContext,
+    responseVerbosity: 'concise',
+    uiMode: 'modal',
     marketData,
     selectedAssetKey,
     indicatorSeries,

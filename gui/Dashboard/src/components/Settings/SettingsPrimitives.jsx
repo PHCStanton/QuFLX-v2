@@ -28,8 +28,8 @@ export const SettingRow = ({ label, description, children }) => (
   </div>
 );
 
-export const SliderInput = ({ value, min, max, step = 1, onChange, unit = '' }) => (
-  <div className="flex items-center gap-3 w-48">
+export const SliderInput = ({ value, min, max, step = 1, onChange, unit = '', disabled = false }) => (
+  <div className={`flex items-center gap-3 w-48 ${disabled ? 'opacity-60' : ''}`}>
     <input
       type="range"
       min={min}
@@ -37,7 +37,10 @@ export const SliderInput = ({ value, min, max, step = 1, onChange, unit = '' }) 
       step={step}
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value))}
-      className="flex-1 h-1.5 bg-section-bg rounded-lg appearance-none cursor-pointer accent-accent-green"
+      disabled={disabled}
+      className={`flex-1 h-1.5 bg-section-bg rounded-lg appearance-none accent-accent-green ${
+        disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+      }`}
     />
     <span className="text-xs font-mono text-accent-green min-w-[3rem] text-right">
       {value}{unit}
@@ -45,11 +48,14 @@ export const SliderInput = ({ value, min, max, step = 1, onChange, unit = '' }) 
   </div>
 );
 
-export const DropdownInput = ({ value, options, onChange }) => (
+export const DropdownInput = ({ value, options, onChange, disabled = false }) => (
   <select
     value={value}
     onChange={(e) => onChange(e.target.value)}
-    className="bg-card-bg border border-border-primary text-text-primary text-xs rounded focus:ring-accent-green focus:border-accent-green block p-1.5 outline-none shadow-sm dark:shadow-none"
+    disabled={disabled}
+    className={`bg-card-bg border border-border-primary text-text-primary text-xs rounded focus:ring-accent-green focus:border-accent-green block p-1.5 outline-none shadow-sm dark:shadow-none ${
+      disabled ? 'opacity-60 cursor-not-allowed' : ''
+    }`}
   >
     {options.map((opt) => (
       <option key={opt.value} value={opt.value}>

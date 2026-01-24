@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import { getAiImageSourceLabel } from '../utils/aiContext';
+import useVoiceAgent from '../hooks/useVoiceAgent';
+import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
+import useTextToSpeech from '../utils/useTextToSpeech';
 
 const PRESETS = [
   {
@@ -41,21 +44,6 @@ const PRESETS = [
     promptTemplate: () => ''
   }
 ];
-
-const supportsSpeechRecognition = () => {
-  if (typeof window === 'undefined') return false;
-  return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-};
-
-const createSpeechRecognition = () => {
-  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Ctor) return null;
-  const recognition = new Ctor();
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-  return recognition;
-};
 
 const Logo = () => (
   <svg width="24" height="24" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -127,13 +115,13 @@ const AskAiModal = ({
   forceImageDataUrl,
 }) => {
   const { settings } = useSettingsStore();
-  const useWhiteModalSurface =
-    settings?.global?.theme === 'system' || settings?.global?.theme === 'black-white';
+  const useWhiteModalSurface = true;
   const {
     setActiveTab,
     aiDraftPrompt,
     setAiDraftPrompt,
     appendAiMessage,
+    setError,
     lastAnnotatedScreenshotDataUrl,
   } = useMarketStore();
 
@@ -141,10 +129,41 @@ const AskAiModal = ({
   const [localImageSource, setLocalImageSource] = useState(settings?.ai?.imageSource || 'live');
   const [answer, setAnswer] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceText, setVoiceText] = useState('');
-  const recognitionRef = useRef(null);
+  const [transcriptDraft, setTranscriptDraft] = useState('');
+  const [readAnswerAloud, setReadAnswerAloud] = useState(false);
+
+  const {
+    supported: ttsSupported,
+    isSpeaking: isTtsSpeaking,
+    isPaused: isTtsPaused,
+    speak: speakTts,
+    stop: stopTts,
+    pause: pauseTts,
+    resume: resumeTts,
+  } = useTextToSpeech({ onError: setError });
+
+  const ttsEnabled = Boolean(settings?.ai?.voiceReadBackEnabled && ttsSupported);
+  const ttsOptions = useMemo(
+    () => ({
+      rate: settings?.ai?.voiceReadBackRate,
+      pitch: settings?.ai?.voiceReadBackPitch,
+      voiceURI: settings?.ai?.voiceReadBackVoiceURI || '',
+    }),
+    [settings?.ai?.voiceReadBackPitch, settings?.ai?.voiceReadBackRate, settings?.ai?.voiceReadBackVoiceURI]
+  );
+
+  const {
+    status: voiceStatus,
+    transcript,
+    partial: partialTranscript,
+    connect: connectVoice,
+    disconnect: disconnectVoice,
+    startRecording,
+    stopRecording,
+    isConnected: isVoiceConnected,
+    isRecording,
+    lastEventType,
+  } = useVoiceAgent({ onError: setError, mode: 'dictation' });
 
   const imageSourceLabel = useMemo(() => {
     return getAiImageSourceLabel({
@@ -159,11 +178,15 @@ const AskAiModal = ({
     if (!isOpen) return;
     setAnswer('');
     setIsThinking(false);
-    setVoiceText('');
-    setIsListening(false);
-    setIsVoiceEnabled(false);
+    setTranscriptDraft('');
     setLocalImageSource(settings?.ai?.imageSource || 'live');
+    setReadAnswerAloud(false);
   }, [isOpen, settings?.ai?.imageSource]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    if (isTtsSpeaking) stopTts();
+  }, [isOpen, isTtsSpeaking, stopTts]);
 
   const handleAsk = useCallback(async () => {
     if (!onAsk) return;
@@ -179,10 +202,33 @@ const AskAiModal = ({
       if (!result) return;
       setAnswer(result.answer);
       appendAiMessage({ role: 'assistant', content: result.answer, meta: { asset, timeframe, imageSource: localImageSource, provider: result.meta?.model || null } });
+
+      if (readAnswerAloud) {
+        if (!ttsEnabled) {
+          setError(ttsSupported ? 'Enable Voice Read-Back in Settings.' : 'Voice Read-Back not supported in this browser.');
+        } else {
+          speakTts(result.answer, ttsOptions);
+        }
+      }
     } finally {
       setIsThinking(false);
     }
-  }, [onAsk, aiDraftPrompt, appendAiMessage, asset, timeframe, localImageSource, forceImageDataUrl, isThinking]);
+  }, [
+    onAsk,
+    aiDraftPrompt,
+    appendAiMessage,
+    asset,
+    timeframe,
+    localImageSource,
+    forceImageDataUrl,
+    isThinking,
+    readAnswerAloud,
+    ttsEnabled,
+    ttsSupported,
+    speakTts,
+    ttsOptions,
+    setError,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -203,61 +249,14 @@ const AskAiModal = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    return () => disconnectVoice();
+  }, [isOpen, disconnectVoice]);
 
-    if (!isVoiceEnabled || !supportsSpeechRecognition()) {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (err) {
-          console.warn('Speech recognition abort failed:', err);
-        }
-      }
-      recognitionRef.current = null;
-      setIsListening(false);
-      return;
-    }
-
-    const recognition = createSpeechRecognition();
-    recognitionRef.current = recognition;
-    if (!recognition) {
-      setIsListening(false);
-      return;
-    }
-
-    recognition.onresult = (event) => {
-      const parts = [];
-      for (let i = 0; i < event.results.length; i += 1) {
-        const result = event.results[i];
-        if (result && result[0] && typeof result[0].transcript === 'string') {
-          parts.push(result[0].transcript);
-        }
-      }
-      const text = parts.join(' ').trim();
-      setVoiceText(text);
-    };
-
-    recognition.onerror = () => {
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      const merged = `${String(aiDraftPrompt || '').trim()} ${String(voiceText || '').trim()}`.trim();
-      if (merged) {
-        setAiDraftPrompt(merged);
-      }
-      setVoiceText('');
-    };
-
-    return () => {
-      try {
-        recognition.abort();
-      } catch (err) {
-        console.warn('Speech recognition abort failed:', err);
-      }
-      recognitionRef.current = null;
-    };
-  }, [isOpen, isVoiceEnabled, aiDraftPrompt, voiceText, setAiDraftPrompt]);
+  useEffect(() => {
+    const text = String(transcript || '').trim();
+    if (!text) return;
+    setTranscriptDraft(text);
+  }, [transcript]);
 
   const applyPreset = (presetId) => {
     setSelectedPresetId(presetId);
@@ -277,32 +276,16 @@ const AskAiModal = ({
     onClose();
   };
 
-  const handleVoiceToggle = () => {
-    if (!supportsSpeechRecognition()) return;
-    setIsVoiceEnabled((v) => !v);
+  const handleIntroduction = () => {
+    setAnswer(AI_INTRODUCTION_TEXT);
+    appendAiMessage({ role: 'assistant', content: AI_INTRODUCTION_TEXT, meta: { kind: 'introduction' } });
   };
 
-  const handleVoiceListen = () => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-    if (isListening) {
-      try {
-        recognition.stop();
-      } catch (err) {
-        console.warn('Speech recognition stop failed:', err);
-      }
-      setIsListening(false);
-      return;
-    }
-
-    setVoiceText('');
-    try {
-      recognition.start();
-      setIsListening(true);
-    } catch (err) {
-      console.warn('Speech recognition start failed:', err);
-      setIsListening(false);
-    }
+  const handleInsertTranscript = () => {
+    const merged = `${String(aiDraftPrompt || '').trim()} ${String(transcriptDraft || '').trim()}`.trim();
+    if (!merged) return;
+    setAiDraftPrompt(merged);
+    setTranscriptDraft('');
   };
 
   if (!isOpen) return null;
@@ -324,7 +307,16 @@ const AskAiModal = ({
               <Logo />
             </div>
             <div>
-              <div className={`text-lg font-semibold ${useWhiteModalSurface ? 'text-gray-900' : 'text-white'}`}>Ask AI</div>
+              <div className="flex items-center gap-2">
+                <div className={`text-lg font-semibold ${useWhiteModalSurface ? 'text-gray-900' : 'text-white'}`}>Ask AI</div>
+                <button
+                  type="button"
+                  onClick={handleIntroduction}
+                  className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
+                >
+                  Introduction
+                </button>
+              </div>
               <div className={`text-xs mt-0.5 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>
                 Quick assist now. Continue in AI Insights for deeper, multi-step analysis.
               </div>
@@ -398,23 +390,52 @@ const AskAiModal = ({
                   <label className={`block text-xs mb-1 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>Voice</label>
                   <button
                     type="button"
-                    onClick={handleVoiceToggle}
-                    disabled={!supportsSpeechRecognition()}
-                    className="w-full px-3 py-2 text-sm rounded-xl bg-[#0f1419] border border-gray-800 text-gray-300 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={isVoiceConnected ? disconnectVoice : connectVoice}
+                    className={`w-full px-3 py-2 text-sm rounded-xl border transition-colors ${
+                      isVoiceConnected
+                        ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
+                        : voiceStatus === 'connecting'
+                          ? 'bg-[#0f1419] text-gray-200 border-gray-800 opacity-80'
+                          : 'bg-[#0f1419] text-gray-200 border-gray-800 hover:bg-gray-800'
+                    }`}
                   >
-                    {isVoiceEnabled ? 'Voice: On' : 'Voice: Off'}
+                    {isVoiceConnected ? 'Voice: Connected' : voiceStatus === 'connecting' ? 'Voice: Connecting…' : 'Voice: Connect'}
                   </button>
                   <button
                     type="button"
-                    onClick={handleVoiceListen}
-                    disabled={!isVoiceEnabled || !supportsSpeechRecognition()}
-                    className="w-full mt-2 px-3 py-2 text-sm rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-200 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={!isVoiceConnected}
+                    className={`w-full mt-2 px-3 py-2 text-sm rounded-xl border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isRecording
+                        ? 'bg-red-600 text-white border-red-700 hover:bg-red-700'
+                        : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700'
+                    }`}
                   >
-                    {isListening ? 'Stop Listening' : 'Start Listening'}
+                    {isRecording ? 'Stop Recording' : 'Start Recording'}
                   </button>
-                  {voiceText ? (
+
+                  <div className="mt-2 text-[11px] text-gray-500">
+                    Status: {voiceStatus}{lastEventType ? ` · ${lastEventType}` : ''}
+                  </div>
+
+                  {partialTranscript ? (
                     <div className="mt-2 text-[11px] text-gray-400 bg-[#0f1419] border border-gray-800 rounded-lg px-2 py-1">
-                      {voiceText}
+                      {partialTranscript}
+                    </div>
+                  ) : null}
+
+                  {transcriptDraft ? (
+                    <div className="mt-2">
+                      <div className="text-[11px] text-gray-400 bg-[#0f1419] border border-gray-800 rounded-lg px-2 py-1">
+                        {transcriptDraft}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleInsertTranscript}
+                        className="w-full mt-2 px-3 py-2 text-sm rounded-xl bg-[#0f1419] border border-gray-800 text-gray-300 hover:bg-gray-800"
+                      >
+                        Insert Transcript
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -444,6 +465,38 @@ const AskAiModal = ({
             <div className={`text-xs font-semibold uppercase tracking-wider ${useWhiteModalSurface ? 'text-gray-700' : 'text-gray-300'}`}>
               Response
             </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-[12px] text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={readAnswerAloud}
+                  onChange={(e) => setReadAnswerAloud(e.target.checked)}
+                  disabled={!ttsEnabled}
+                />
+                Read answer aloud
+              </label>
+
+              {isTtsSpeaking ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={isTtsPaused ? resumeTts : pauseTts}
+                    className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
+                  >
+                    {isTtsPaused ? 'Resume' : 'Pause'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopTts}
+                    className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
+                  >
+                    Stop
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
             <div className="bg-[#0f1419] border border-gray-800 rounded-xl p-4 min-h-[260px] max-h-[420px] overflow-auto">
               {isThinking && !answer ? (
                 <div className="text-sm text-gray-400 flex items-center gap-2">

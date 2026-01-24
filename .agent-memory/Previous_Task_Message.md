@@ -1,15 +1,16 @@
-I have completed the History + Assets + Indicators alignment hardening work and refactored the Dashboard ChartWorkspace for long-term maintainability.
+I have completed the Voice Dictation + AI Read-Back (TTS) work and hardened the AI/Voice UX across the Dashboard.
 
-**Recent Major Tasks (2026-01-18):**
-- Backend history bootstrap now returns correct HTTP status codes (4xx/5xx) with structured error bodies (no semantic 200 failures).
-- History API response shape unified around `candles` (GET includes `candles` and keeps legacy `data` for compatibility).
-- Crosshair sync is now unidirectional (Main → Oscillators); removed oscillator → main feedback path.
-- Dashboard UI messaging standardized (removed all `window.alert()` calls); AI answers display via an in-app modal.
-- `ChartWorkspace.jsx` refactored into smaller hooks/components and reduced to ~240 LOC (<250 target met).
-- Vite build chunk-size warning eliminated via manual chunking.
+**Recent Major Tasks (2026-01-23):**
+- Voice dictation works in both the Ask AI Modal and AI Insights Panel via the realtime voice WS relay.
+- Added browser TTS read-back (SpeechSynthesis) so AI answers can be spoken:
+  - AI Insights: Speak per-message + Pause/Resume/Stop controls.
+  - Ask AI Modal: optional auto “Read answer aloud”.
+- Added Settings controls for read-back (enable, rate, pitch, voice selection).
+- Hardened Ask AI response shaping (modal vs insights + verbosity influences backend system prompt + max token limits).
+- Fixed gateway logging robustness for `run_id` formatter issues and improved voice WS close reason reporting.
 - Verification run and passing:
   - Backend: `python -m pytest -q`
-  - Dashboard: `npm run lint`, `npm run build`, `npm run test:qa`
+  - Dashboard: `npm run lint`, `npm run build`
 
 **Summary of Current Direction:**
 - Keep backend as the canonical source of indicator series and regimes.
@@ -18,14 +19,15 @@ I have completed the History + Assets + Indicators alignment hardening work and 
   - Non-200 for failures.
   - Stable, unified response shapes (`candles`).
 - Continue AI integration incrementally:
-  - `/api/v1/ai/ask` is usable today.
+  - `/api/v1/ai/ask` remains the canonical answer generator (text + vision context).
+  - Voice is treated as an input modality (dictation) plus optional read-back, without turning the modal into a chat surface.
   - AI Gateway + TradingContext builder remain the intended end-state.
 
 **Next Steps (high level):**
 1. Implement overlay indicators on main chart (EMA, Bollinger Bands, SuperTrend).
 2. Implement oscillator panes (RSI, MACD histogram) synchronized with main time scale.
-3. Replace `window.prompt()` with an in-app Ask-AI panel (include context/screenshot toggles).
-4. Build AI Gateway skeleton + TradingContext builder so `/api/v1/ai/ask` becomes a thin adapter.
+3. Harden `/api/v1/ai/ask` contract (schema validation, size limits, safe logging).
+4. (Optional) Add realtime conversation mode in AI Insights; keep modal as quick-response.
 
 **Additional Task Completed – Settings Architecture Foundation:**
 - Introduced a dedicated settings architecture aligned with `v2_Dev_Docs/Settings_Architecture_Endpoints.md`, including:

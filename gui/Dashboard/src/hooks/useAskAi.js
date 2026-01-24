@@ -12,6 +12,8 @@ const useAskAi = ({
   lastAnnotatedImage,
   imageSource,
   autoIncludeContext,
+  responseVerbosity,
+  uiMode,
   marketData,
   selectedAssetKey,
   indicatorSeries,
@@ -38,6 +40,13 @@ const useAskAi = ({
       selectedAsset,
       selectedTimeframe,
     });
+
+    if (responseVerbosity) {
+      context.responseVerbosity = String(responseVerbosity);
+    }
+    if (uiMode) {
+      context.uiMode = String(uiMode);
+    }
 
     const src = imageSourceOverride || imageSource;
 
@@ -78,6 +87,8 @@ const useAskAi = ({
     lastAnnotatedImage,
     imageSource,
     autoIncludeContext,
+    responseVerbosity,
+    uiMode,
     marketData,
     selectedAssetKey,
     indicatorSeries,
@@ -91,4 +102,3 @@ const useAskAi = ({
 };
 
 export default useAskAi;
-

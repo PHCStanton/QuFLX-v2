@@ -64,13 +64,13 @@
 - [x] Add clear "AI thinking" indicator in the Ask AI modal.
 - [ ] Implement TradingContext contract enforcement (backend schema + size limits).
 
-## Phase 5.3: Voice Agent (xAI Voice API) (Planning)
-- [ ] Design backend voice gateway (WebSocket proxy to xAI Voice Agent API).
-- [ ] Design frontend voice assistant UI (mic control, transcripts, session state).
-- [ ] Define shared session model between text and voice assistants.
-  
-### Voice (Browser)
-- [x] Add best-effort voice input in Ask AI modal using Web Speech API (browser dependent).
+## Phase 5.3: Voice Agent (Dictation + Read-Back) (In Progress)
+- [x] Implement backend voice gateway (WebSocket proxy to xAI realtime endpoint).
+- [x] Implement frontend mic controls and transcript handling for dictation (Modal + AI Insights).
+- [x] Prevent audio payloads from being rendered as text in the UI.
+- [x] Add browser TTS read-back for AI outputs (Speak buttons + modal auto-read).
+- [x] Add settings for TTS enable/rate/pitch/voice selection.
+- [ ] (Optional) Add realtime conversation mode (AI audio output) in AI Insights.
 
 ## Phase 5.4: Settings & Configuration Architecture (Foundation & Scaffolding Complete)
 - [x] Define settings architecture across Global, User Profile, AI Assistant, and each Sidebar tab section in `v2_Dev_Docs/Settings_Architecture_Endpoints.md`.

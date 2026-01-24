@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, Set
 
@@ -18,6 +19,11 @@ try:
     from selenium.webdriver.common.by import By
 except Exception:
     By = None  # type: ignore
+
+try:
+    from selenium.webdriver.common.keys import Keys
+except Exception:
+    Keys = None  # type: ignore
 
 try:
     from selenium_ui_controls import HighPriorityControls
@@ -204,6 +210,100 @@ class TimeframeMenu(Capability):
     def _try_select_in_current_context(self, ctx: Ctx, aliases: Set[str]) -> tuple[bool, Dict[str, Any]]:
         drv = ctx.driver
 
+        js_meta: Dict[str, Any] = {}
+        try:
+            js_meta = drv.execute_script(
+                """
+                const normalize = (s) => (s || '').trim().toLowerCase().replace(/\s+/g,' ');
+                const aliases = arguments[0];
+
+                const visible = (el) => {
+                  try {
+                    const r = el.getBoundingClientRect();
+                    const cs = getComputedStyle(el);
+                    return r.width > 5 && r.height > 5 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0';
+                  } catch (e) { return false; }
+                };
+
+                const getText = (el) => {
+                  try {
+                    return (el.innerText || el.textContent || '').trim();
+                  } catch (e) {
+                    return '';
+                  }
+                };
+
+                const containers = Array.from(document.querySelectorAll('.items__list'))
+                  .filter((c) => visible(c));
+                const roots = containers.length ? containers : [document];
+
+                const selectors = [
+                  '.item',
+                  '.items__item',
+                  'a',
+                  'button',
+                  '[role="option"]',
+                  '.tf-option',
+                  '.timeframe-options button'
+                ];
+
+                const nodes = [];
+                for (const root of roots) {
+                  for (const sel of selectors) {
+                    try {
+                      const found = root.querySelectorAll ? Array.from(root.querySelectorAll(sel)) : [];
+                      for (const el of found) nodes.push(el);
+                    } catch (e) {}
+                  }
+                }
+
+                const seen = new Set();
+                const deduped = [];
+                for (const el of nodes) {
+                  if (!el) continue;
+                  if (seen.has(el)) continue;
+                  seen.add(el);
+                  deduped.push(el);
+                }
+
+                const options = [];
+                for (const el of deduped) {
+                  if (!visible(el)) continue;
+                  const t = getText(el);
+                  if (t) options.push(t);
+                  if (options.length >= 60) break;
+                }
+
+                for (const el of deduped) {
+                  if (!visible(el)) continue;
+                  const t = getText(el);
+                  const n = normalize(t);
+                  if (!t || !n) continue;
+                  if (aliases.includes(n)) {
+                    let target = el;
+                    if (target && target.closest) {
+                      const a = target.closest('a');
+                      if (a) target = a;
+                    }
+                    target.click();
+                    return { ok: true, clicked_text: t, options: options.slice(0, 40), scoped: containers.length > 0 };
+                  }
+                }
+
+                return { ok: false, options: options.slice(0, 40), scoped: containers.length > 0 };
+                """,
+                sorted(list(aliases)),
+            )
+        except Exception:
+            js_meta = {"ok": False}
+
+        if bool(js_meta.get("ok")):
+            return True, {
+                "method": "js_scoped" if js_meta.get("scoped") else "js",
+                "clicked_text": js_meta.get("clicked_text"),
+                "options": js_meta.get("options", []),
+            }
+
         opts = []
         try:
             # PO primary selector for items in the timeframe menu
@@ -212,7 +312,7 @@ class TimeframeMenu(Capability):
             opts = []
         if not opts:
             try:
-                opts = drv.find_elements(By.CSS_SELECTOR, "[role='option'], .tf-option, .timeframe-options button, a span, a")
+                opts = drv.find_elements(By.CSS_SELECTOR, "[role='option'], .tf-option, .timeframe-options button")
             except Exception:
                 opts = []
 
@@ -220,7 +320,7 @@ class TimeframeMenu(Capability):
         for el in opts:
             try:
                 txt = (el.text or "").strip()
-                if txt:
+                if txt and len(option_texts) < 40:
                     option_texts.append(txt)
                 
                 norm_txt = self._normalize_label(txt)
@@ -259,61 +359,7 @@ class TimeframeMenu(Capability):
             except Exception:
                 continue
 
-        js_meta: Dict[str, Any] = {}
-        try:
-            js_meta = drv.execute_script(
-                """
-                const normalize = (s) => (s || '').trim().toLowerCase().replace(/\\s+/g,' ');
-                const aliases = arguments[0];
-                const selectors = [
-                  '.items__list .item',
-                  '.items__list a',
-                  '.items__list button',
-                  '[role="option"]',
-                  '.tf-option',
-                  '.timeframe-options button',
-                  'a span',
-                  'a'
-                ];
-                const nodes = selectors.flatMap(sel => Array.from(document.querySelectorAll(sel)));
-                const visible = (el) => {
-                  try {
-                    const r = el.getBoundingClientRect();
-                    const cs = getComputedStyle(el);
-                    return r.width > 5 && r.height > 5 && cs.visibility !== 'hidden' && cs.display !== 'none' && cs.opacity !== '0';
-                  } catch (e) { return false; }
-                };
-                const options = [];
-                for (const el of nodes) {
-                  if (!visible(el)) continue;
-                  const t = (el.innerText || el.textContent || '').trim();
-                  if (t) options.push(t);
-                }
-                for (const el of nodes) {
-                  if (!visible(el)) continue;
-                  const t = (el.innerText || el.textContent || '').trim();
-                  const n = normalize(t);
-                  if (aliases.includes(n)) {
-                    let target = el;
-                    if (target && target.closest) {
-                      const a = target.closest('a');
-                      if (a) target = a;
-                    }
-                    target.click();
-                    return { ok: true, clicked_text: t, options: options.slice(0, 40) };
-                  }
-                }
-                return { ok: false, options: options.slice(0, 40) };
-                """,
-                sorted(list(aliases)),
-            )
-        except Exception:
-            js_meta = {"ok": False}
-
-        if bool(js_meta.get("ok")):
-            return True, {"method": "js", "clicked_text": js_meta.get("clicked_text"), "options": js_meta.get("options", [])}
-
-        return False, {"method": "none", "options": option_texts[:40] or js_meta.get("options", [])}
+        return False, {"method": "none", "options": option_texts[:40]}
 
     def _attempt_close(self, ctx: Ctx) -> None:
         drv = ctx.driver
@@ -326,6 +372,30 @@ class TimeframeMenu(Capability):
             )
         except Exception:
             pass
+
+        if not self._is_open(ctx):
+            return
+
+        if Keys is not None:
+            try:
+                body = drv.find_element(By.TAG_NAME, "body")
+                body.send_keys(Keys.ESCAPE)
+                time.sleep(0.05)
+            except Exception:
+                pass
+
+        if not self._is_open(ctx):
+            return
+
+        try:
+            el = drv.find_element(By.CSS_SELECTOR, "canvas, .chart, .trading-chart")
+            el.click()
+            time.sleep(0.05)
+        except Exception:
+            pass
+
+        if not self._is_open(ctx):
+            return
         try:
             drv.execute_script("document.body && document.body.click && document.body.click();")
         except Exception:
