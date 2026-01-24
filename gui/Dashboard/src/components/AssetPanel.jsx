@@ -39,9 +39,9 @@ const parseSpecificAssets = (value) => {
 };
 
 const AssetPanel = () => {
-  const { 
-    payoutAssets, 
-    selectedAsset, 
+  const {
+    payoutAssets,
+    selectedAsset,
     setSelectedAsset,
     selectedAssetLoading,
     removePayoutAsset,
@@ -184,18 +184,13 @@ const AssetPanel = () => {
       return;
     }
 
-    setIgnoreAssets((prev) => {
-      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
-      return current.join(', ');
-    });
+    const currentIgnore = parseSpecificAssets(ignoreAssets).filter((a) => a !== normalized);
+    setIgnoreAssets(currentIgnore.join(', '));
 
-    setIncludeAssets((prev) => {
-      const current = parseSpecificAssets(prev);
-      if (!current.includes(normalized)) {
-        return [...current, normalized].join(', ');
-      }
-      return current.join(', ');
-    });
+    const currentInclude = parseSpecificAssets(includeAssets);
+    if (!currentInclude.includes(normalized)) {
+      setIncludeAssets([...currentInclude, normalized].join(', '));
+    }
   };
 
   const addToIgnoreAssets = (asset) => {
@@ -204,18 +199,13 @@ const AssetPanel = () => {
       return;
     }
 
-    setIncludeAssets((prev) => {
-      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
-      return current.join(', ');
-    });
+    const currentInclude = parseSpecificAssets(includeAssets).filter((a) => a !== normalized);
+    setIncludeAssets(currentInclude.join(', '));
 
-    setIgnoreAssets((prev) => {
-      const current = parseSpecificAssets(prev);
-      if (!current.includes(normalized)) {
-        return [...current, normalized].join(', ');
-      }
-      return current.join(', ');
-    });
+    const currentIgnore = parseSpecificAssets(ignoreAssets);
+    if (!currentIgnore.includes(normalized)) {
+      setIgnoreAssets([...currentIgnore, normalized].join(', '));
+    }
   };
 
   const removeFromIncludeAssets = (asset) => {
@@ -224,10 +214,8 @@ const AssetPanel = () => {
       return;
     }
 
-    setIncludeAssets((prev) => {
-      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
-      return current.join(', ');
-    });
+    const current = parseSpecificAssets(includeAssets).filter((a) => a !== normalized);
+    setIncludeAssets(current.join(', '));
   };
 
   const removeFromIgnoreAssets = (asset) => {
@@ -236,10 +224,8 @@ const AssetPanel = () => {
       return;
     }
 
-    setIgnoreAssets((prev) => {
-      const current = parseSpecificAssets(prev).filter((a) => a !== normalized);
-      return current.join(', ');
-    });
+    const current = parseSpecificAssets(ignoreAssets).filter((a) => a !== normalized);
+    setIgnoreAssets(current.join(', '));
   };
 
   const isAssetIncluded = (asset) => includeAssetSet.has(normalizeSpecificAsset(asset));
