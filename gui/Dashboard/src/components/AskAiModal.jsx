@@ -199,7 +199,10 @@ const AskAiModal = ({
       setIsThinking(true);
       appendAiMessage({ role: 'user', content: prompt, meta: { asset, timeframe, imageSource: localImageSource } });
       const result = await onAsk({ prompt, imageSourceOverride: localImageSource, forceImageDataUrl });
-      if (!result) return;
+      if (!result) {
+        setAnswer('⚠️ System Error: The AI request timed out or failed.\n\nPlease close and reopen this "Ask AI" modal, then try again.');
+        return;
+      }
       setAnswer(result.answer);
       appendAiMessage({ role: 'assistant', content: result.answer, meta: { asset, timeframe, imageSource: localImageSource, provider: result.meta?.model || null } });
 
@@ -293,14 +296,12 @@ const AskAiModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
       <div
-        className={`border rounded-2xl w-full max-w-3xl shadow-2xl ${
-          useWhiteModalSurface ? 'bg-white border-gray-200' : 'bg-[#1a1f2e] border-gray-800'
-        }`}
+        className={`border rounded-2xl w-full max-w-3xl shadow-2xl ${useWhiteModalSurface ? 'bg-white border-gray-200' : 'bg-[#1a1f2e] border-gray-800'
+          }`}
       >
         <div
-          className={`p-5 border-b flex items-start justify-between gap-4 ${
-            useWhiteModalSurface ? 'border-gray-200' : 'border-gray-800'
-          }`}
+          className={`p-5 border-b flex items-start justify-between gap-4 ${useWhiteModalSurface ? 'border-gray-200' : 'border-gray-800'
+            }`}
         >
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#0f1419] border border-gray-800 flex items-center justify-center text-gray-300">
@@ -391,13 +392,12 @@ const AskAiModal = ({
                   <button
                     type="button"
                     onClick={isVoiceConnected ? disconnectVoice : connectVoice}
-                    className={`w-full px-3 py-2 text-sm rounded-xl border transition-colors ${
-                      isVoiceConnected
+                    className={`w-full px-3 py-2 text-sm rounded-xl border transition-colors ${isVoiceConnected
                         ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
                         : voiceStatus === 'connecting'
                           ? 'bg-[#0f1419] text-gray-200 border-gray-800 opacity-80'
                           : 'bg-[#0f1419] text-gray-200 border-gray-800 hover:bg-gray-800'
-                    }`}
+                      }`}
                   >
                     {isVoiceConnected ? 'Voice: Connected' : voiceStatus === 'connecting' ? 'Voice: Connecting…' : 'Voice: Connect'}
                   </button>
@@ -405,11 +405,10 @@ const AskAiModal = ({
                     type="button"
                     onClick={isRecording ? stopRecording : startRecording}
                     disabled={!isVoiceConnected}
-                    className={`w-full mt-2 px-3 py-2 text-sm rounded-xl border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                      isRecording
+                    className={`w-full mt-2 px-3 py-2 text-sm rounded-xl border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRecording
                         ? 'bg-red-600 text-white border-red-700 hover:bg-red-700'
                         : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700'
-                    }`}
+                      }`}
                   >
                     {isRecording ? 'Stop Recording' : 'Start Recording'}
                   </button>
