@@ -32,6 +32,7 @@ QuFLX v2 is a sophisticated automated trading and decision-support platform for 
 - History API shapes are converging on `candles` as the canonical list key.
 - Dashboard Ask AI is implemented with a Quick Modal + AI Insights panel thread, including screenshot-to-AI handoff and annotated screenshot persistence.
 - Backend AI is operational via `/api/v1/ai/ask`, pending a dedicated AI Gateway + TradingContext builder with strict schema enforcement.
+- Real-time overlay indicators (SuperTrend, Bollinger Bands, EMA Cross-Over, Support/Resistance) are now visualized on the main chart.
 
 ## Success Metrics
 - **Modularity**: Components (Collector, Strategy, Gateway, AI Gateway) can be restarted independently without system failure.

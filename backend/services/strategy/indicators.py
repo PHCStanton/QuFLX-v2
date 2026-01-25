@@ -46,6 +46,9 @@ class IndicatorSet:
     sma_20: Optional[float] = None
     ema_16: Optional[float] = None
     ema_165: Optional[float] = None
+    ema_21: Optional[float] = None
+    ema_50: Optional[float] = None
+    ema_100: Optional[float] = None
     wma_20: Optional[float] = None
     
     # Momentum Indicators
@@ -100,7 +103,11 @@ class TechnicalIndicatorsPipeline:
             'rsi_period_2': 21,
             'sma_period': 20,
             'ema_fast': 16,
+            'ema_fast': 16,
             'ema_slow': 165,
+            'ema_cross_fast': 21,
+            'ema_cross_med': 50,
+            'ema_cross_slow': 100,
             'wma_period': 20,
             'macd_fast': 12,
             'macd_slow': 26,
@@ -149,6 +156,8 @@ class TechnicalIndicatorsPipeline:
             result_df = self._calculate_momentum_indicators(result_df)
             result_df = self._calculate_volatility_indicators(result_df)
             result_df = self._calculate_custom_indicators(result_df)
+            result_df = self._calculate_ema_crossover(result_df)
+            result_df = self._calculate_support_resistance(result_df)
             
             return result_df
             
@@ -466,6 +475,84 @@ class TechnicalIndicatorsPipeline:
         
         return df
     
+    def _calculate_ema_crossover(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            fast = self.params.get('ema_cross_fast', 21)
+            med = self.params.get('ema_cross_med', 50)
+            slow = self.params.get('ema_cross_slow', 100)
+            
+            df['ema_21'] = df['close'].ewm(span=fast, adjust=False).mean()
+            df['ema_50'] = df['close'].ewm(span=med, adjust=False).mean()
+            df['ema_100'] = df['close'].ewm(span=slow, adjust=False).mean()
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating EMA Cross-Over: {str(e)}")
+            df['ema_21'] = np.nan
+            df['ema_50'] = np.nan
+            df['ema_100'] = np.nan
+        
+        return df
+
+    def _calculate_support_resistance(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            # Pivot Point / Local Extrema approach
+            # We look for highs that are higher than N neighbors on both sides
+            # and lows that are lower than N neighbors on both sides.
+            n = self.params.get('support_resistance_period', 5)
+            
+            # Note: This is a "lagging" valid pivot detection if we strictily wait for future bars.
+            # To avoid repainting strictly, we can only confirm a pivot at index t after we have seen t+n.
+            # So the pivot value at t is only known at t+n. 
+            # We will project the LAST confirmed pivot forward.
+
+            df['resistance_level'] = np.nan
+            df['support_level'] = np.nan
+
+            # Find local maxima and minima
+            # rolling(2*n+1, center=True).max() == current value
+            # But we can't use center=True if we want to simulate real-time without looking ahead indefinitely.
+            # Actually, standard pivot points in TA often just look back, or if they look forward, they repaint.
+            # A common robust way for real-time:
+            # A level is "active" if it was a Swing High/Low in the past.
+            
+            # Using simple window approach for "Fractals":
+            # High[i] is a fractal top if High[i] > High[i-2], i-1, i+1, i+2
+            
+            # We will iterate to fill "resistance" and "support" columns with the *active* levels.
+            # Active level = the most recent confirmed fractal.
+            
+            # Optimization: Vectorized approach for Fractals
+            # Shifted comparisons
+            # To confirm a fractal at `i`, we need confirmed data up to `i+n`.
+            # So at index `current`, the most recent confirmed fractal is at `current - n`.
+            
+            # 1. Identify potential pivots (all historical)
+            window = 2 * n + 1
+            
+            # Highs
+            rolling_max = df['high'].rolling(window=window, center=True).max()
+            is_pivot_high = (df['high'] == rolling_max)
+            
+            # Lows
+            rolling_min = df['low'].rolling(window=window, center=True).min()
+            is_pivot_low = (df['low'] == rolling_min)
+            
+            # 2. Propagate forward
+            # Since rolling(center=True) uses future data, we must shift the signal forward by n
+            # so that at time t, we only see the pivot that happened at t-n.
+            confirmed_highs = df['high'].where(is_pivot_high).shift(n)
+            confirmed_lows = df['low'].where(is_pivot_low).shift(n)
+            
+            df['resistance_level'] = confirmed_highs.ffill()
+            df['support_level'] = confirmed_lows.ffill()
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating Support/Resistance: {str(e)}")
+            df['resistance_level'] = np.nan
+            df['support_level'] = np.nan
+        
+        return df
+
     def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
             period = self.params.get('cci_period', 14)
@@ -502,6 +589,9 @@ class TechnicalIndicatorsPipeline:
                 sma_20=self._safe_float(df_row.get('sma_20')),
                 ema_16=self._safe_float(df_row.get('ema_16')),
                 ema_165=self._safe_float(df_row.get('ema_165')),
+                ema_21=self._safe_float(df_row.get('ema_21')),
+                ema_50=self._safe_float(df_row.get('ema_50')),
+                ema_100=self._safe_float(df_row.get('ema_100')),
                 wma_20=self._safe_float(df_row.get('wma_20')),
                 
                 rsi_14=self._safe_float(df_row.get('rsi_14')),

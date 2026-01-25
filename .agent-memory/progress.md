@@ -48,7 +48,7 @@
 - [x] Backend indicator pipeline validated (`backend/services/strategy/indicators.py`).
 - [x] Strategy documentation created: `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md` mapping indicators to regimes.
 - [x] Frontend/indicator integration research: `Research/research_lightweight-charts-indicators_2025-12-23.md`.
-- [ ] Implement overlay indicators on main chart using Lightweight Charts helpers.
+- [x] Implement overlay indicators on main chart using Lightweight Charts helpers.
 - [ ] Implement oscillator pane(s) for RSI/Stoch/MACD/etc., time-synchronized with main chart.
 
 ## Phase 5.2: AI Integration (Text + Vision) (Research Completed, Implementation Pending)
@@ -100,7 +100,7 @@
 - [x] Eliminated Vite chunk-size warning via manual chunking.
 
 ### In Progress
-- [ ] Implement overlay indicators on main chart (EMA, BBands, SuperTrend).
+- [x] Implement overlay indicators on main chart (EMA, BBands, SuperTrend, Support/Resistance, EMA Cross-Over).
 - [ ] Implement oscillator panes (RSI, MACD histogram) synchronized with main time scale.
 - [ ] Harden `/api/v1/ai/ask` contract (schema validation, structured errors, size limits).
 

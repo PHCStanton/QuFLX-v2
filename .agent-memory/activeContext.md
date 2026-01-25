@@ -20,21 +20,10 @@
 - **Ask AI response shaping improved:** modal vs insights mode and verbosity now influence backend system prompt and max token limits.
 - **Screenshot → AI linkage:** screenshot editor includes an Ask AI action that sends the current canvas (respects crop mode) into Ask AI.
 - **Annotated screenshot persistence:** latest annotated screenshot is persisted across refresh and supports “Image Source: Annotated”.
-- **API base URL is configurable:** Dashboard API clients read `VITE_API_BASE_URL` (fallback `http://localhost:8000`).
-- **Bundle optimization**: Vite manual chunking added; build no longer emits the >500kB chunk-size warning.
-- **Local Ops controls added (Chrome + Stream)**:
-  - Gateway exposes dev-gated endpoints under `/api/v1/ops/*` to start Chrome and start/pause the Collector.
-  - Dashboard TopBar **Chrome** and **Stream** badges are now safe, idempotent buttons.
-  - Stream toggle uses tick-driven health state for correct restart behavior after pause.
-- **Settings: History Wait Time normalized**:
-  - Frontend default reduced and UI slider bounds changed to 1–8 seconds.
-  - Backend validation now enforces 1–8 seconds to match the UI.
-
-## Recent Accomplishments
-- **Streaming & UI Foundation** (Phase 5 baseline):
-  - `Dashboard.jsx` orchestrates `Sidebar`, `TopBar`, `AssetPanel`, `ChartWorkspace` cleanly.
-  - Zustand store (`marketStore.js`) centralizes UI + market + connection state.
-  - Socket.IO integration is stable; intraday candles use UNIX timestamps and tick aggregation by timeframe.
+- **Indicators Implemented**:
+  - **Support & Resistance**: Pivot-based levels (fractals) rendered as stepped lines (Red/Green).
+  - **EMA Cross-Over**: 3-EMA system (21/50/100) with colored lines (Blue/White/Red) for trend identification.
+  - Infrastructure in place for further overlays and oscillators.
   - OTC ticker panel and 92% payout assets panel are wired to live data.
   - Stream status and health badges are driven by tick recency and backend `backend_status` events.
 
@@ -101,8 +90,8 @@
 
 ## Next Steps
 1. **Indicator Visualization Implementation (Frontend + Gateway)**
-   - Implement overlay indicators on the main chart (start with EMA + Bollinger + SuperTrend).
-   - Keep oscillators in separate panes (RSI, MACD histogram) synchronized with main time scale.
+   - Implement oscillator panes (RSI, MACD histogram, Stochastic, CCI) synchronized with main time scale.
+   - Refine overlay interactions (e.g., toggle visibility per series).
 
 2. **AI Assistant Backend Hardening (Gateway + AI Service)**
    - Enforce strict request schema for `/api/v1/ai/ask` (pydantic model + size limits).

@@ -94,6 +94,12 @@ class IndicatorCalculator:
                     if 'period' in p: pipeline_params['bb_period'] = p['period']
                     if 'stdDev' in p: pipeline_params['bb_std'] = p['stdDev']
                     elif 'std' in p: pipeline_params['bb_std'] = p['std']
+                elif ind_key == 'support_resistance':
+                    if 'period' in p: pipeline_params['support_resistance_period'] = p['period']
+                elif ind_key == 'ema_cross':
+                    if 'fast' in p: pipeline_params['ema_cross_fast'] = p['fast']
+                    if 'med' in p: pipeline_params['ema_cross_med'] = p['med']
+                    if 'slow' in p: pipeline_params['ema_cross_slow'] = p['slow']
                 # Add more mappings as needed
 
             # 4. Calculate indicators
@@ -123,7 +129,9 @@ class IndicatorCalculator:
                 'macd', 'macd_signal', 'macd_histogram',
                 'bb_upper', 'bb_middle', 'bb_lower', 'bb_width', 'bb_percent',
                 'atr_14', 'atr_21', 'adx', 'plus_di', 'minus_di', 'schaff_tc', 'demarker', 'cci',
-                'supertrend', 'supertrend_direction'
+                'supertrend', 'supertrend_direction',
+                'support_level', 'resistance_level',
+                'ema_21', 'ema_50', 'ema_100'
             ]
 
             for name in indicator_names:

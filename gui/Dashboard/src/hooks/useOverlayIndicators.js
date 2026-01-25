@@ -116,6 +116,38 @@ const useOverlayIndicators = ({
             lineWidth: 2,
             title: `EMA ${ind.params?.period || 16}`
           });
+        } else if (type === 'support_resistance') {
+          upper = mainChart.addSeries(LineSeries, {
+            color: '#ef4444', // Red for resistance
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            title: 'Resistance'
+          });
+          lower = mainChart.addSeries(LineSeries, {
+            color: '#22c55e', // Green for support
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            title: 'Support'
+          });
+        } else if (type === 'ema_cross') {
+          // 21 (Blue)
+          series = mainChart.addSeries(LineSeries, {
+            color: '#3b82f6',
+            lineWidth: 2,
+            title: `EMA ${ind.params?.fast || 21}`
+          });
+          // 50 (White)
+          upper = mainChart.addSeries(LineSeries, {
+            color: '#ffffff',
+            lineWidth: 2,
+            title: `EMA ${ind.params?.med || 50}`
+          });
+          // 100 (Red)
+          lower = mainChart.addSeries(LineSeries, {
+            color: '#ef4444',
+            lineWidth: 2,
+            title: `EMA ${ind.params?.slow || 100}`
+          });
         } else {
           series = mainChart.addSeries(LineSeries, {
             color: '#3b82f6',
@@ -155,6 +187,13 @@ const useOverlayIndicators = ({
             }
             if (seriesObj.upSeries) seriesObj.upSeries.applyOptions({ title: 'SuperTrend Up' });
             if (seriesObj.downSeries) seriesObj.downSeries.applyOptions({ title: 'SuperTrend Down' });
+          } else if (type === 'support_resistance') {
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'Resistance' });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'Support' });
+          } else if (type === 'ema_cross') {
+            if (seriesObj.series) seriesObj.series.applyOptions({ title: `EMA ${ind.params?.fast || 21}` });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: `EMA ${ind.params?.med || 50}` });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: `EMA ${ind.params?.slow || 100}` });
           }
         } catch (err) {
           if (onError) onError(`Overlay options update failed: ${getErrorMessage(err)}`);
@@ -243,6 +282,34 @@ const useOverlayIndicators = ({
 
             if (seriesObj.upSeries) seriesObj.upSeries.setData(upData);
             if (seriesObj.downSeries) seriesObj.downSeries.setData(downData);
+            seriesObj.lastDataHash = dataHash;
+          }
+          return;
+        }
+
+        if (type === 'support_resistance') {
+          const resistanceData = seriesForKey['resistance_level'] || [];
+          const supportData = seriesForKey['support_level'] || [];
+          const dataHash = JSON.stringify([resistanceData.slice(-1), supportData.slice(-1)]);
+
+          if (seriesObj.lastDataHash !== dataHash) {
+            if (seriesObj.upper) seriesObj.upper.setData(resistanceData);
+            if (seriesObj.lower) seriesObj.lower.setData(supportData);
+            seriesObj.lastDataHash = dataHash;
+          }
+          return;
+        }
+
+        if (type === 'ema_cross') {
+          const ema21 = seriesForKey['ema_21'] || [];
+          const ema50 = seriesForKey['ema_50'] || [];
+          const ema100 = seriesForKey['ema_100'] || [];
+          const dataHash = JSON.stringify([ema21.slice(-1), ema50.slice(-1), ema100.slice(-1)]);
+
+          if (seriesObj.lastDataHash !== dataHash) {
+            if (seriesObj.series) seriesObj.series.setData(ema21);
+            if (seriesObj.upper) seriesObj.upper.setData(ema50);
+            if (seriesObj.lower) seriesObj.lower.setData(ema100);
             seriesObj.lastDataHash = dataHash;
           }
           return;

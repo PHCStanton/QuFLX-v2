@@ -137,4 +137,30 @@ export const indicatorOptions = [
       { name: 'stdDev', label: 'Std Dev', type: 'number', min: 0.1, max: 5.0, step: 0.1, default: 2.0 },
     ],
   },
+  {
+    label: 'Support & Resistance',
+    value: 'support_resistance',
+    key: 'support_level', // Key for data lookup (one of them)
+    kind: 'overlay',
+    displayValue: '5',
+    source: 'backend',
+    params: { period: 5 },
+    paramConfig: [
+      { name: 'period', label: 'Pivot Period (L/R)', type: 'number', min: 1, max: 50, default: 5 },
+    ],
+  },
+  {
+    label: 'EMA Cross-Over',
+    value: 'ema_cross',
+    key: 'ema_21', // Primary key
+    kind: 'overlay',
+    displayValue: '21,50,100',
+    source: 'backend',
+    params: { fast: 21, med: 50, slow: 100 },
+    paramConfig: [
+      { name: 'fast', label: 'Fast EMA (Blue)', type: 'number', min: 1, max: 500, default: 21 },
+      { name: 'med', label: 'Med EMA (White)', type: 'number', min: 1, max: 500, default: 50 },
+      { name: 'slow', label: 'Slow EMA (Red)', type: 'number', min: 1, max: 500, default: 100 },
+    ],
+  },
 ];
