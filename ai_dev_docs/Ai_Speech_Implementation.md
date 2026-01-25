@@ -142,9 +142,10 @@ Chunking guidance:
 - Transcript remains visible and accurate
 - Interruptions handled cleanly
 
-## Implementation Order
-1) Add backend WebSocket voice relay endpoint
-2) Add frontend mic capture + WS client + transcript UI
-3) Add Introduction header action
-4) Phase 1 validation in-browser
-5) Phase 2 audio playback + interruptions (optional next)
+## Implementation Order & Status
+
+- [x] 1) Add backend WebSocket voice relay endpoint (Verified)
+- [x] 2) Add frontend mic capture + WS client + transcript UI
+- [x] 3) Add Introduction header action
+- [x] 4) Phase 1 validation (Browser TTS implemented)
+- [~] 5) Phase 2 audio playback + interruptions (Infrastructure ready, using mock relay)
