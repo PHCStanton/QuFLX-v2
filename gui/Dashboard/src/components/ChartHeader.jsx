@@ -58,6 +58,17 @@ const ChartHeader = ({
           />
         </div>
 
+        {onSyncTimeframe && (
+          <div className="ml-1">
+            <NeoSyncButton
+              onClick={handleSyncClick}
+              disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
+              active={syncClicked}
+              size={38}
+            />
+          </div>
+        )}
+
 
 
         <div className="w-32">
@@ -100,16 +111,15 @@ const ChartHeader = ({
           />
         </div>
 
-        {onSyncTimeframe && (
-          <div className="ml-1">
-            <NeoSyncButton
-              onClick={handleSyncClick}
-              disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
-              active={syncClicked}
-              size={38}
-            />
-          </div>
-        )}
+        {/* Placeholder for future Refresh Feature */}
+        <button
+          type="button"
+          className="quflx-neo-icon-btn quflx-neo-icon-btn--sm relative opacity-50 cursor-not-allowed"
+          disabled
+          title="Refresh Feature (Coming Soon)"
+        >
+          <span className="text-xs font-bold text-gray-400">REF</span>
+        </button>
       </div>
 
       <div className="ml-auto flex items-center gap-3 px-2">
