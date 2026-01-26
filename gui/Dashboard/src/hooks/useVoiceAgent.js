@@ -102,8 +102,12 @@ const extractTextDelta = (msg) => {
   if (type === 'response.text.delta' && typeof msg.delta === 'string') {
     return { kind: 'ai_delta', text: msg.delta };
   }
-  if (type === 'response.audio_transcript.delta' && typeof msg.delta === 'string') {
-    return { kind: 'ai_delta', text: msg.delta };
+  // Check both 'delta' and 'transcript' for audio_transcript.delta to be safe
+  if (type === 'response.audio_transcript.delta') {
+    const txt = msg.delta || msg.transcript;
+    if (typeof txt === 'string') {
+      return { kind: 'ai_delta', text: txt };
+    }
   }
 
   if (type === 'response.text.done' && typeof msg.text === 'string') {
