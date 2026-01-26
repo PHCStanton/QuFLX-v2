@@ -141,7 +141,7 @@ const extractAudioBase64 = (msg) => {
   return null;
 };
 
-const buildSessionUpdate = ({ mode, voice, sampleRate }) => {
+const buildSessionUpdate = ({ mode, voice, sampleRate, instructions }) => {
   const isConversation = mode === 'conversation' || mode === 'server'; // 'server' mode can now be conversational if configured
 
   if (isConversation) {
@@ -149,7 +149,7 @@ const buildSessionUpdate = ({ mode, voice, sampleRate }) => {
       type: 'session.update',
       session: {
         voice,
-        instructions:
+        instructions: instructions ||
           'You are the QuFLX AI Trading Assistant. Respond briefly and conversationally. If the user asks for analysis, provide a concise summary. Do not use markdown formatting in speech.',
         turn_detection: { type: 'server_vad' }, // Enable VAD for natural turn-taking
         audio: {
@@ -207,7 +207,7 @@ const VoiceStatus = {
   error: 'error',
 };
 
-const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate = 24000, enableAudioResponse = false } = {}) => {
+const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate = 24000, enableAudioResponse = false, instructions } = {}) => {
   const wsUrl = useMemo(() => {
     const base = toWsBaseUrl(getApiBaseUrl());
     return base ? `${base}/api/v1/ai/voice/ws` : '';
@@ -220,7 +220,7 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
   // If enableAudioResponse is true, we treat 'server' mode as 'conversation' for the session config
   const effectiveMode = enableAudioResponse && mode === 'server' ? 'conversation' : mode;
 
-  const sessionUpdateMessage = useMemo(() => buildSessionUpdate({ mode: effectiveMode, voice, sampleRate }), [effectiveMode, voice, sampleRate]);
+  const sessionUpdateMessage = useMemo(() => buildSessionUpdate({ mode: effectiveMode, voice, sampleRate, instructions }), [effectiveMode, voice, sampleRate, instructions]);
   const responseCreateMessage = useMemo(() => buildResponseCreate({ mode: effectiveMode }), [effectiveMode]);
 
   const wsRef = useRef(null);
