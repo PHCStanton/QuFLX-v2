@@ -98,16 +98,20 @@ const extractTextDelta = (msg) => {
   if (!msg || typeof msg !== 'object') return null;
   const type = typeof msg.type === 'string' ? msg.type : '';
 
-  // AI Response (Text Delta)
+  // AI Response (Text/Audio Transcript)
   if (type === 'response.text.delta' && typeof msg.delta === 'string') {
     return { kind: 'ai_delta', text: msg.delta };
   }
-  // Ignore audio_transcript.delta to avoid duplication with text.delta when both modalities are active.
+  if (type === 'response.audio_transcript.delta' && typeof msg.delta === 'string') {
+    return { kind: 'ai_delta', text: msg.delta };
+  }
 
   if (type === 'response.text.done' && typeof msg.text === 'string') {
     return { kind: 'ai_final', text: msg.text };
   }
-  // Ignore audio_transcript.done for the same reason.
+  if (type === 'response.audio_transcript.done' && typeof msg.transcript === 'string') {
+    return { kind: 'ai_final', text: msg.transcript };
+  }
 
   // User Transcription
   if (type === 'conversation.item.input_audio_transcription.completed' && typeof msg.transcript === 'string') {
