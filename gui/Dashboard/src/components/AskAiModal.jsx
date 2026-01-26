@@ -486,7 +486,9 @@ const AskAiModal = ({
                         : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700'
                         }`}
                     >
-                      {isRecording ? 'Stop Recording' : 'Start Recording'}
+                      {isRecording
+                        ? (conversationMode ? 'Stop Conversation' : 'Stop Dictation')
+                        : (conversationMode ? 'Start Conversation (Mic)' : 'Start Dictation (Mic)')}
                     </button>
 
                     <div className="mt-2 text-[11px] text-gray-500">
