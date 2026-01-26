@@ -152,10 +152,12 @@ const buildSessionUpdate = ({ mode, voice, sampleRate, instructions }) => {
         instructions: instructions ||
           'You are the QuFLX AI Trading Assistant. Respond briefly and conversationally. If the user asks for analysis, provide a concise summary. Do not use markdown formatting in speech.',
         turn_detection: { type: 'server_vad' }, // Enable VAD for natural turn-taking
+        modalities: ['text', 'audio'],
         audio: {
           input: { format: { type: 'audio/pcm', rate: sampleRate } },
           output: { format: { type: 'audio/pcm', rate: sampleRate } },
         },
+        input_audio_transcription: { model: 'whisper-1' },
       },
     };
   }
@@ -168,10 +170,12 @@ const buildSessionUpdate = ({ mode, voice, sampleRate, instructions }) => {
       instructions:
         'You are a dictation engine. Transcribe the user input exactly. Do not respond. Output only the text.',
       turn_detection: { type: 'server_vad' },
+      modalities: ['text'],
       audio: {
         input: { format: { type: 'audio/pcm', rate: sampleRate } },
         output: { format: { type: 'audio/pcm', rate: sampleRate } },
       },
+      input_audio_transcription: { model: 'whisper-1' },
     },
   };
 };
