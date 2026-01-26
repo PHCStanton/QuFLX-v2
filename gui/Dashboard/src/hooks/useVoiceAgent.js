@@ -98,21 +98,36 @@ const extractTextDelta = (msg) => {
   if (!msg || typeof msg !== 'object') return null;
   const type = typeof msg.type === 'string' ? msg.type : '';
 
+  // AI Response (Text/Audio Transcript)
+  if (type === 'response.text.delta' && typeof msg.delta === 'string') {
+    return { kind: 'ai_delta', text: msg.delta };
+  }
+  if (type === 'response.audio_transcript.delta' && typeof msg.delta === 'string') {
+    return { kind: 'ai_delta', text: msg.delta };
+  }
+  if (type === 'response.text.done' && typeof msg.text === 'string') {
+    return { kind: 'ai_final', text: msg.text };
+  }
+  if (type === 'response.audio_transcript.done' && typeof msg.transcript === 'string') {
+    return { kind: 'ai_final', text: msg.transcript };
+  }
+
+  // User Transcription
+  if (type === 'conversation.item.input_audio_transcription.completed' && typeof msg.transcript === 'string') {
+    return { kind: 'user_final', text: msg.transcript };
+  }
+  // Note: xAI often sends the transcription as a 'transcript' property in other events or via item creation
+  // We'll stick to specific event types to be safe.
+
+  // Method 2: Generic Delta (Fallback) - Checks if it's NOT audio
   if (typeof msg.delta === 'string') {
     if (isAudioDeltaType(type)) return null;
-    if (!isTextDeltaType(type)) return null;
-    return { kind: 'delta', text: msg.delta, type };
-  }
-  if (typeof msg.text === 'string') return { kind: 'final', text: msg.text, type };
-  if (typeof msg.transcript === 'string') return { kind: 'final', text: msg.transcript, type };
-
-  if (msg.response && typeof msg.response === 'object') {
-    if (typeof msg.response.text === 'string') return { kind: 'final', text: msg.response.text, type };
-    if (typeof msg.response.transcript === 'string') return { kind: 'final', text: msg.response.transcript, type };
-  }
-
-  if (type.endsWith('.done')) {
-    if (typeof msg.output_text === 'string') return { kind: 'final', text: msg.output_text, type };
+    if (isTextDeltaType(type)) {
+      // Heuristic: If we are in the middle of a response, it's likely AI. 
+      // But safe to ignore generic deltas if we rely on specific types above.
+      // actually, response.text.delta IS the generic delta for AI. 
+      return null;
+    }
   }
 
   return null;
@@ -127,14 +142,16 @@ const extractAudioBase64 = (msg) => {
 };
 
 const buildSessionUpdate = ({ mode, voice, sampleRate }) => {
-  if (mode === 'conversation') {
+  const isConversation = mode === 'conversation' || mode === 'server'; // 'server' mode can now be conversational if configured
+
+  if (isConversation) {
     return {
       type: 'session.update',
       session: {
         voice,
         instructions:
-          'You are the QuFLX AI Trading Assistant. Respond clearly and concisely for live trading. Do not mention any external platforms or providers.',
-        turn_detection: { type: 'server_vad' },
+          'You are the QuFLX AI Trading Assistant. Respond briefly and conversationally. If the user asks for analysis, provide a concise summary. Do not use markdown formatting in speech.',
+        turn_detection: { type: 'server_vad' }, // Enable VAD for natural turn-taking
         audio: {
           input: { format: { type: 'audio/pcm', rate: sampleRate } },
           output: { format: { type: 'audio/pcm', rate: sampleRate } },
@@ -143,12 +160,13 @@ const buildSessionUpdate = ({ mode, voice, sampleRate }) => {
     };
   }
 
+  // Dictation Mode
   return {
     type: 'session.update',
     session: {
       voice,
       instructions:
-        'You are the QuFLX dictation agent. Transcribe the user\'s speech to plain text only. Output only the transcript.',
+        'You are a dictation engine. Transcribe the user input exactly. Do not respond. Output only the text.',
       turn_detection: { type: 'server_vad' },
       audio: {
         input: { format: { type: 'audio/pcm', rate: sampleRate } },
@@ -159,22 +177,24 @@ const buildSessionUpdate = ({ mode, voice, sampleRate }) => {
 };
 
 const buildResponseCreate = ({ mode }) => {
-  if (mode === 'conversation') {
+  // In VAD mode (server_vad), the server triggers responses automatically.
+  // We only need to send response.create if we want to force a response (e.g. text input).
+  // For voice-driven conversation, we generally let VAD handle it.
+  // But if we do trigger it:
+  if (mode === 'conversation' || mode === 'server') {
     return {
       type: 'response.create',
       response: {
         modalities: ['text', 'audio'],
-        instructions:
-          'Answer the user as QuFLX. Be brief, practical, and risk-aware. If the user asks for chart-specific confirmation, ask them to use Ask AI with chart context.',
+        instructions: 'Respond naturally.',
       },
     };
   }
-
   return {
     type: 'response.create',
     response: {
       modalities: ['text'],
-      instructions: 'Return only the transcript of the last user audio. No extra words.',
+      instructions: 'Transcribe only.',
     },
   };
 };
@@ -187,15 +207,21 @@ const VoiceStatus = {
   error: 'error',
 };
 
-const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate = 24000 } = {}) => {
+const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate = 24000, enableAudioResponse = false } = {}) => {
   const wsUrl = useMemo(() => {
     const base = toWsBaseUrl(getApiBaseUrl());
     return base ? `${base}/api/v1/ai/voice/ws` : '';
   }, []);
 
-  const shouldPlayAudio = mode === 'conversation';
-  const sessionUpdateMessage = useMemo(() => buildSessionUpdate({ mode, voice, sampleRate }), [mode, voice, sampleRate]);
-  const responseCreateMessage = useMemo(() => buildResponseCreate({ mode }), [mode]);
+  const shouldUseBrowser = mode === 'browser';
+  // Enable audio playback if explicitly requested OR if we are in conversation mode
+  const shouldPlayAudio = enableAudioResponse || mode === 'conversation';
+
+  // If enableAudioResponse is true, we treat 'server' mode as 'conversation' for the session config
+  const effectiveMode = enableAudioResponse && mode === 'server' ? 'conversation' : mode;
+
+  const sessionUpdateMessage = useMemo(() => buildSessionUpdate({ mode: effectiveMode, voice, sampleRate }), [effectiveMode, voice, sampleRate]);
+  const responseCreateMessage = useMemo(() => buildResponseCreate({ mode: effectiveMode }), [effectiveMode]);
 
   const wsRef = useRef(null);
   const closingRef = useRef(false);
@@ -206,13 +232,20 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
   const sourceRef = useRef(null);
   const processorRef = useRef(null);
   const streamRef = useRef(null);
-  const textAccumulatorRef = useRef('');
+
+  const userTextAccumulator = useRef('');
+  const aiTextAccumulator = useRef('');
+
   const statusRef = useRef(VoiceStatus.idle);
   const speakingRef = useRef(false);
+  const recognitionRef = useRef(null);
 
   const [status, setStatus] = useState(VoiceStatus.idle);
-  const [transcript, setTranscript] = useState('');
-  const [partial, setPartial] = useState('');
+  const [transcript, setTranscript] = useState(''); // User transcript
+  const [aiTranscript, setAiTranscript] = useState(''); // AI Response text
+  const [partial, setPartial] = useState(''); // User partial
+  const [aiPartial, setAiPartial] = useState(''); // AI partial
+
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastEventType, setLastEventType] = useState('');
   const [audioChunks, setAudioChunks] = useState(0);
@@ -312,6 +345,15 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
   );
 
   const disconnect = useCallback(() => {
+    // 1. Clean up Browser Speech
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch { /* ignore */ }
+      recognitionRef.current = null;
+    }
+
+    // 2. Clean up Server WS
     const ws = wsRef.current;
     wsRef.current = null;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
@@ -383,6 +425,28 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
   }, []);
 
   const connect = useCallback(async () => {
+    setStatus(VoiceStatus.connecting);
+    setTranscript('');
+    setAiTranscript('');
+    setPartial('');
+    setAiPartial('');
+    setLastEventType('');
+    setAudioChunks(0);
+    userTextAccumulator.current = '';
+    aiTextAccumulator.current = '';
+
+    // --- Browser Mode ---
+    if (shouldUseBrowser) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        reportError('Browser Speech Recognition not supported.');
+        return;
+      }
+      setStatus(VoiceStatus.ready);
+      return;
+    }
+
+    // --- Server Mode ---
     if (!wsUrl) {
       reportError('Voice WebSocket URL is not configured.');
       return;
@@ -391,13 +455,6 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
       setStatus(VoiceStatus.ready);
       return;
     }
-
-    setStatus(VoiceStatus.connecting);
-    setTranscript('');
-    setPartial('');
-    setLastEventType('');
-    setAudioChunks(0);
-    textAccumulatorRef.current = '';
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -428,7 +485,14 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
 
       if (msg.type === 'input_audio_buffer.speech_started') {
         if (speakingRef.current) stopAudioPlayback();
+        // Clear previous AI response when user starts speaking
+        setAiTranscript('');
+        setAiPartial('');
+        aiTextAccumulator.current = '';
       }
+
+      // Handle User finished speaking event to commit transcript?
+      // xAI usually sends 'conversation.item.input_audio_transcription.completed' automatically for VAD
 
       if (shouldPlayAudio) {
         const audio = extractAudioBase64(msg);
@@ -440,20 +504,29 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
 
       const extracted = extractTextDelta(msg);
       if (!extracted) return;
+
       const text = String(extracted.text || '').trim();
       if (!text) return;
 
-      if (extracted.kind === 'delta') {
-        textAccumulatorRef.current += extracted.text;
-        setPartial(textAccumulatorRef.current.trim());
-        return;
+      // Handle AI Response Text
+      if (extracted.kind === 'ai_delta') {
+        aiTextAccumulator.current += extracted.text;
+        setAiPartial(aiTextAccumulator.current.trim());
+      } else if (extracted.kind === 'ai_final') {
+        const next = aiTextAccumulator.current ? `${aiTextAccumulator.current}` : extracted.text;
+        // Note: 'ai_final' might allow us to just set the final text, but accumulating deltas is safer for realtime UI
+        // We'll trust the accumulator + final
+        setAiTranscript(next);
+        setAiPartial('');
+        aiTextAccumulator.current = next; // Keep it as context
       }
 
-      if (extracted.kind === 'final') {
-        const next = textAccumulatorRef.current ? `${textAccumulatorRef.current}${extracted.text}` : extracted.text;
-        textAccumulatorRef.current = '';
+      // Handle User Transcription
+      else if (extracted.kind === 'user_final') {
+        const next = userTextAccumulator.current ? `${userTextAccumulator.current} ${extracted.text}` : extracted.text;
+        userTextAccumulator.current = next;
+        setTranscript(next);
         setPartial('');
-        setTranscript(String(next || extracted.text).trim());
       }
     };
 
@@ -477,20 +550,112 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
         setStatus(VoiceStatus.idle);
       }
     };
-  }, [wsUrl, reportError, stopAudioPlayback, schedulePcm16Audio, sessionUpdateMessage, shouldPlayAudio]);
+  }, [wsUrl, reportError, stopAudioPlayback, schedulePcm16Audio, sessionUpdateMessage, shouldPlayAudio, shouldUseBrowser]);
 
   const startRecording = useCallback(async () => {
+    if (speakingRef.current) stopAudioPlayback();
+    // Clear user transcript on new recording start (if desired, or keep history?)
+    // Usually clear it for new turn
+    setTranscript('');
+    setPartial('');
+    userTextAccumulator.current = '';
+
+    // Also clear AI part? No, keep it until user speaks
+
+    // ... rest of startRecording (same as before) ...
+    // --- Browser Mode ---
+    if (shouldUseBrowser) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        reportError('Browser Speech Recognition not supported.');
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = false; // Dictation usage
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setStatus(VoiceStatus.recording);
+      };
+
+      recognition.onerror = (e) => {
+        reportError(`Speech error: ${e.error}`);
+        setStatus(VoiceStatus.ready); // Reset to ready on error
+      };
+
+      recognition.onend = () => {
+        if (statusRef.current === VoiceStatus.recording) {
+          setStatus(VoiceStatus.ready);
+        }
+      };
+
+      recognition.onresult = (e) => {
+        let finalTrans = '';
+        let interimTrans = '';
+        for (let i = e.resultIndex; i < e.results.length; ++i) {
+          if (e.results[i].isFinal) {
+            finalTrans += e.results[i][0].transcript;
+          } else {
+            interimTrans += e.results[i][0].transcript;
+          }
+        }
+        if (interimTrans) setPartial(interimTrans);
+        if (finalTrans) {
+          const next = `${userTextAccumulator.current} ${finalTrans}`.trim();
+          userTextAccumulator.current = next;
+          setTranscript(next);
+          setPartial('');
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch {
+        reportError('Failed to start recognition');
+      }
+      return;
+    }
+
+    // --- Server Mode ---
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       reportError('Voice is not connected.');
       return;
     }
 
-    if (speakingRef.current) stopAudioPlayback();
+    // HYBRID MODE: Start Browser Recognition for Visual Feedback
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-    setTranscript('');
-    setPartial('');
-    textAccumulatorRef.current = '';
+      recognition.onresult = (e) => {
+        let finalTrans = '';
+        let interimTrans = '';
+        for (let i = e.resultIndex; i < e.results.length; ++i) {
+          if (e.results[i].isFinal) {
+            finalTrans += e.results[i][0].transcript;
+          } else {
+            interimTrans += e.results[i][0].transcript;
+          }
+        }
+        if (interimTrans) setPartial(interimTrans);
+        // In Server Hybrid mode, we use browser ONLY for partials/interim. We rely on Server for final.
+        // But we can fallback to it if needed. For now let's just show partials.
+      };
+
+      try {
+        recognition.start();
+      } catch {
+        console.warn('Hybrid dictation failed to start');
+      }
+    }
 
     let stream;
     try {
@@ -542,13 +707,39 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
     src.connect(processor);
     processor.connect(ctx.destination);
     setStatus(VoiceStatus.recording);
-  }, [reportError, stopAudioPlayback]);
+  }, [reportError, stopAudioPlayback, shouldUseBrowser]);
 
   const stopRecording = useCallback(() => {
+    // --- Browser Mode ---
+    if (shouldUseBrowser) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        // Don't null it immediately if we want to restart, but here we null it as logic is one-shot
+        recognitionRef.current = null;
+      }
+      setStatus(VoiceStatus.ready);
+      return;
+    }
+
+    // --- Server Mode ---
     const ws = wsRef.current;
+
+    // Stop Hybrid Dictation if active
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch { /* ignore */ }
+      recognitionRef.current = null;
+    }
+
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+        // Only send response.create if we are managing turns manually. 
+        // With VAD (Conversation), usually not needed, but safe to send to imply "end of turn"
+        // ws.send(JSON.stringify(responseCreateMessage)); 
+        // Actually, if we use VAD, commit logic might trigger it. 
+        // But for safe measure in push-to-talk:
         ws.send(JSON.stringify(responseCreateMessage));
       } catch {
         console.warn('Voice commit/send failed');
@@ -598,7 +789,8 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
     }
 
     setStatus(VoiceStatus.ready);
-  }, [responseCreateMessage]);
+  }, [responseCreateMessage, shouldUseBrowser]);
+
 
   useEffect(() => {
     return () => disconnect();
@@ -606,8 +798,10 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
 
   return {
     status,
-    transcript,
-    partial,
+    transcript, // User Transcript
+    aiTranscript, // AI Response (Final)
+    partial, // User Partial
+    aiPartial, // AI Partial
     connect,
     disconnect,
     startRecording,

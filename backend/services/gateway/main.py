@@ -31,7 +31,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
 from backend.services.ai.service import AIService
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, voice as ai_voice, asset_control, ops, dev_logs
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, ai_voice, asset_control, ops, dev_logs
 from backend.services.gateway.socket_events import register_socket_events
 
 from backend.services.gateway.request_context import ContextFilter, request_id_var

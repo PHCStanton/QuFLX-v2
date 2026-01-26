@@ -5,6 +5,8 @@ import { getAiImageSourceLabel } from '../utils/aiContext';
 import useVoiceAgent from '../hooks/useVoiceAgent';
 import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
 import useTextToSpeech from '../utils/useTextToSpeech';
+import useNaturalVoice from '../hooks/useNaturalVoice';
+import NeomorphicSwitch from './NeomorphicSwitch';
 
 const PRESETS = [
   {
@@ -131,6 +133,7 @@ const AskAiModal = ({
   const [isThinking, setIsThinking] = useState(false);
   const [transcriptDraft, setTranscriptDraft] = useState('');
   const [readAnswerAloud, setReadAnswerAloud] = useState(false);
+  const [conversationMode, setConversationMode] = useState(false);
 
   const {
     supported: ttsSupported,
@@ -142,7 +145,23 @@ const AskAiModal = ({
     resume: resumeTts,
   } = useTextToSpeech({ onError: setError });
 
-  const ttsEnabled = Boolean(settings?.ai?.voiceReadBackEnabled && ttsSupported);
+  // xAI Natural Voice TTS
+  const {
+    isSpeaking: isNaturalSpeaking,
+    speak: speakNatural,
+    stop: stopNatural,
+  } = useNaturalVoice({
+    onError: setError,
+    voice: settings?.ai?.voiceReadBackVoice || 'Ara',
+  });
+
+  const readBackMode = settings?.ai?.voiceReadBackMode || 'browser';
+  const readBackEnabled = Boolean(settings?.ai?.voiceReadBackEnabled);
+
+  // Unified speaking state
+  // Unified speaking state handled after voice agent hook
+
+  const ttsEnabled = readBackEnabled && (readBackMode === 'server' || ttsSupported);
   const ttsOptions = useMemo(
     () => ({
       rate: settings?.ai?.voiceReadBackRate,
@@ -152,18 +171,50 @@ const AskAiModal = ({
     [settings?.ai?.voiceReadBackPitch, settings?.ai?.voiceReadBackRate, settings?.ai?.voiceReadBackVoiceURI]
   );
 
+  const stopSpeaking = useCallback(() => {
+    if (readBackMode === 'server') {
+      stopNatural();
+    } else {
+      stopTts();
+    }
+  }, [readBackMode, stopNatural, stopTts]);
+
+  const speakText = useCallback((text) => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return;
+    if (readBackMode === 'server') {
+      speakNatural(trimmed);
+    } else {
+      speakTts(trimmed, ttsOptions);
+    }
+  }, [readBackMode, speakNatural, speakTts, ttsOptions]);
+
+  const contextInstructions = useMemo(() => {
+    return `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}. Respond concisely relative to the user's trading context.`;
+  }, [asset, timeframe]);
+
   const {
     status: voiceStatus,
     transcript,
     partial: partialTranscript,
+    aiTranscript,
+    aiPartial,
     connect: connectVoice,
     disconnect: disconnectVoice,
     startRecording,
     stopRecording,
     isConnected: isVoiceConnected,
     isRecording,
+    isSpeaking: isVoiceAgentSpeaking,
     lastEventType,
-  } = useVoiceAgent({ onError: setError, mode: 'dictation' });
+  } = useVoiceAgent({
+    onError: setError,
+    mode: conversationMode ? 'server' : (settings?.ai?.voiceInputMode || 'off'),
+    enableAudioResponse: conversationMode,
+    instructions: conversationMode ? contextInstructions : undefined
+  });
+
+  const isSpeaking = conversationMode ? isVoiceAgentSpeaking : (readBackMode === 'server' ? isNaturalSpeaking : isTtsSpeaking);
 
   const imageSourceLabel = useMemo(() => {
     return getAiImageSourceLabel({
@@ -185,8 +236,8 @@ const AskAiModal = ({
 
   useEffect(() => {
     if (isOpen) return;
-    if (isTtsSpeaking) stopTts();
-  }, [isOpen, isTtsSpeaking, stopTts]);
+    if (isSpeaking) stopSpeaking();
+  }, [isOpen, isSpeaking, stopSpeaking]);
 
   const handleAsk = useCallback(async () => {
     if (!onAsk) return;
@@ -208,9 +259,9 @@ const AskAiModal = ({
 
       if (readAnswerAloud) {
         if (!ttsEnabled) {
-          setError(ttsSupported ? 'Enable Voice Read-Back in Settings.' : 'Voice Read-Back not supported in this browser.');
+          setError(readBackEnabled ? 'Voice Read-Back not supported.' : 'Enable Voice Read-Back in Settings.');
         } else {
-          speakTts(result.answer, ttsOptions);
+          speakText(result.answer);
         }
       }
     } finally {
@@ -227,9 +278,8 @@ const AskAiModal = ({
     isThinking,
     readAnswerAloud,
     ttsEnabled,
-    ttsSupported,
-    speakTts,
-    ttsOptions,
+    readBackEnabled,
+    speakText,
     setError,
   ]);
 
@@ -260,6 +310,19 @@ const AskAiModal = ({
     if (!text) return;
     setTranscriptDraft(text);
   }, [transcript]);
+
+  useEffect(() => {
+    if (!conversationMode) return;
+    if (aiPartial) {
+      setAnswer(aiPartial);
+    } else if (aiTranscript) {
+      setAnswer(aiTranscript);
+      // Optional: Append to chat history automatically?
+      // Let's do it to keep record, but debounce it or ensure it's final.
+      // aiTranscript is final.
+      appendAiMessage({ role: 'assistant', content: aiTranscript, meta: { asset, timeframe, mode: 'voice_conversation' } });
+    }
+  }, [conversationMode, aiPartial, aiTranscript, appendAiMessage, asset, timeframe]);
 
   const applyPreset = (presetId) => {
     setSelectedPresetId(presetId);
@@ -387,57 +450,40 @@ const AskAiModal = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className={`block text-xs mb-1 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>Voice</label>
-                  <button
-                    type="button"
-                    onClick={isVoiceConnected ? disconnectVoice : connectVoice}
-                    className={`w-full px-3 py-2 text-sm rounded-xl border transition-colors ${isVoiceConnected
+                {settings?.ai?.voiceInputMode !== 'off' && (
+                  <div>
+                    <label className={`block text-xs mb-1 ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>
+                      Voice ({settings?.ai?.voiceInputMode === 'browser' ? 'Browser' : 'Server'})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={isVoiceConnected ? disconnectVoice : connectVoice}
+                      className={`w-full px-3 py-2 text-sm rounded-xl border transition-colors ${isVoiceConnected
                         ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
                         : voiceStatus === 'connecting'
                           ? 'bg-[#0f1419] text-gray-200 border-gray-800 opacity-80'
                           : 'bg-[#0f1419] text-gray-200 border-gray-800 hover:bg-gray-800'
-                      }`}
-                  >
-                    {isVoiceConnected ? 'Voice: Connected' : voiceStatus === 'connecting' ? 'Voice: Connecting…' : 'Voice: Connect'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={isRecording ? stopRecording : startRecording}
-                    disabled={!isVoiceConnected}
-                    className={`w-full mt-2 px-3 py-2 text-sm rounded-xl border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRecording
+                        }`}
+                    >
+                      {isVoiceConnected ? 'Voice: Connected' : voiceStatus === 'connecting' ? 'Voice: Connecting…' : 'Voice: Connect'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : startRecording}
+                      disabled={!isVoiceConnected}
+                      className={`w-full mt-2 px-3 py-2 text-sm rounded-xl border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRecording
                         ? 'bg-red-600 text-white border-red-700 hover:bg-red-700'
                         : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700'
-                      }`}
-                  >
-                    {isRecording ? 'Stop Recording' : 'Start Recording'}
-                  </button>
+                        }`}
+                    >
+                      {isRecording ? 'Stop Recording' : 'Start Recording'}
+                    </button>
 
-                  <div className="mt-2 text-[11px] text-gray-500">
-                    Status: {voiceStatus}{lastEventType ? ` · ${lastEventType}` : ''}
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      Status: {voiceStatus}{lastEventType ? ` · ${lastEventType}` : ''}
+                    </div>
                   </div>
-
-                  {partialTranscript ? (
-                    <div className="mt-2 text-[11px] text-gray-400 bg-[#0f1419] border border-gray-800 rounded-lg px-2 py-1">
-                      {partialTranscript}
-                    </div>
-                  ) : null}
-
-                  {transcriptDraft ? (
-                    <div className="mt-2">
-                      <div className="text-[11px] text-gray-400 bg-[#0f1419] border border-gray-800 rounded-lg px-2 py-1">
-                        {transcriptDraft}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleInsertTranscript}
-                        className="w-full mt-2 px-3 py-2 text-sm rounded-xl bg-[#0f1419] border border-gray-800 text-gray-300 hover:bg-gray-800"
-                      >
-                        Insert Transcript
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
+                )}
               </div>
             </div>
 
@@ -476,18 +522,20 @@ const AskAiModal = ({
                 Read answer aloud
               </label>
 
-              {isTtsSpeaking ? (
+              {isSpeaking ? (
                 <div className="flex items-center gap-2">
+                  {readBackMode === 'browser' && (
+                    <button
+                      type="button"
+                      onClick={isTtsPaused ? resumeTts : pauseTts}
+                      className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
+                    >
+                      {isTtsPaused ? 'Resume' : 'Pause'}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={isTtsPaused ? resumeTts : pauseTts}
-                    className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
-                  >
-                    {isTtsPaused ? 'Resume' : 'Pause'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopTts}
+                    onClick={stopSpeaking}
                     className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
                   >
                     Stop
@@ -513,6 +561,53 @@ const AskAiModal = ({
             <div className="text-[11px] text-gray-500">
               Use AI Insights for top-down analysis, multi-step plans, and follow-ups.
             </div>
+
+            {settings?.ai?.voiceInputMode !== 'off' && (
+              <div className="border border-gray-800 bg-[#0f1419]/50 rounded-xl p-3 min-h-[100px]">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+                    {conversationMode ? 'Realtime Conversation' : 'Dictation Space'}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] uppercase font-bold ${conversationMode ? 'text-accent-green' : 'text-gray-500'}`}>
+                      {conversationMode ? 'Conversation' : 'Dictation'}
+                    </span>
+                    <div className="scale-75 origin-right">
+                      <NeomorphicSwitch
+                        checked={conversationMode}
+                        onChange={() => setConversationMode(!conversationMode)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {!partialTranscript && !transcriptDraft ? (
+                  <div className="text-sm text-gray-600 italic">
+                    Start recording to see dictation...
+                  </div>
+                ) : null}
+
+                {partialTranscript ? (
+                  <div className="text-sm text-gray-300 animate-pulse">
+                    {partialTranscript}
+                  </div>
+                ) : null}
+
+                {transcriptDraft ? (
+                  <div className="mt-2">
+                    <div className="text-sm text-gray-200">
+                      {transcriptDraft}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleInsertTranscript}
+                      className="mt-3 px-3 py-1.5 text-xs rounded bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"
+                    >
+                      Insert into Prompt
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
       </div>

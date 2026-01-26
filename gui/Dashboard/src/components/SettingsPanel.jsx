@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSettingsStore from '../store/settingsStore';
 import useMarketStore from '../store/marketStore';
-import { 
-  SettingsSection, 
-  SettingRow, 
-  SliderInput, 
-  DropdownInput, 
-  RadioGroup 
+import {
+  SettingsSection,
+  SettingRow,
+  SliderInput,
+  DropdownInput,
+  RadioGroup
 } from './Settings/SettingsPrimitives';
 import NeomorphicSwitch from './NeomorphicSwitch';
 import { Save, RotateCcw, Download } from 'lucide-react';
@@ -70,8 +70,8 @@ const SettingsPanel = () => {
         meta.displayValue ||
         (meta.params
           ? Object.values(meta.params)
-              .filter((v) => v !== undefined && v !== null)
-              .join(',')
+            .filter((v) => v !== undefined && v !== null)
+            .join(',')
           : 'Default');
 
       return {
@@ -201,19 +201,19 @@ const SettingsPanel = () => {
   return (
     <div className="flex-1 flex flex-col bg-dashboard-bg overflow-y-auto custom-scrollbar p-6">
       <div className="max-w-4xl mx-auto w-full space-y-6">
-        
+
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-text-primary tracking-tight flex items-center gap-3">
             <span className="text-accent-green">⚙️</span> SETTINGS
           </h1>
           <div className="flex gap-3">
-            <button 
+            <button
               onClick={resetAll}
               className="flex items-center gap-2 px-4 py-2 bg-section-bg hover:bg-section-bg/80 text-text-primary rounded-lg transition-colors text-sm font-medium border border-border-primary shadow-sm"
             >
               <RotateCcw size={16} /> Reset All
             </button>
-            <button 
+            <button
               onClick={handleSave}
               className="flex items-center gap-2 px-6 py-2 bg-accent-green hover:opacity-90 text-text-primary rounded-lg transition-colors text-sm font-bold shadow-lg shadow-accent-green/20"
             >
@@ -225,8 +225,8 @@ const SettingsPanel = () => {
         {/* Global Settings */}
         <SettingsSection title="Global Settings">
           <SettingRow label="Theme" description="Overall appearance of the dashboard">
-            <DropdownInput 
-              value={settings.global.theme} 
+            <DropdownInput
+              value={settings.global.theme}
               options={[
                 { label: 'System Default', value: 'system' },
                 { label: 'Dark Mode', value: 'dark' },
@@ -274,8 +274,8 @@ const SettingsPanel = () => {
             </div>
           </SettingRow>
           <SettingRow label="Language" description="Interface language">
-            <DropdownInput 
-              value={settings.global.language} 
+            <DropdownInput
+              value={settings.global.language}
               options={[
                 { label: 'English (EN)', value: 'en' },
                 { label: 'Spanish (ES)', value: 'es' },
@@ -285,13 +285,13 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Auto-start Collector" description="Start data collection service on launch">
-            <NeomorphicSwitch 
+            <NeomorphicSwitch
               checked={settings.global.autoStartCollector}
               onChange={() => updateSection('global', { autoStartCollector: !settings.global.autoStartCollector })}
             />
           </SettingRow>
           <SettingRow label="Auto-start Gateway" description="Start API gateway service on launch">
-            <NeomorphicSwitch 
+            <NeomorphicSwitch
               checked={settings.global.autoStartGateway}
               onChange={() => updateSection('global', { autoStartGateway: !settings.global.autoStartGateway })}
             />
@@ -301,7 +301,7 @@ const SettingsPanel = () => {
         {/* Automation & Execution */}
         <SettingsSection title="Automation & Execution">
           <SettingRow label="History Wait Time" description="How long to wait for manual asset click (seconds)">
-            <SliderInput 
+            <SliderInput
               value={settings.automation.historyWaitTime}
               min={0.5}
               max={5}
@@ -321,7 +321,7 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Retry Attempts" description="Max attempts for UI automation tasks">
-            <SliderInput 
+            <SliderInput
               value={settings.automation.retryAttempts}
               min={0}
               max={5}
@@ -329,7 +329,7 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Retry Delay" description="Delay between automation retries (ms)">
-            <SliderInput 
+            <SliderInput
               value={settings.automation.retryDelay}
               min={0}
               max={5000}
@@ -354,7 +354,7 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Default Timeframe" description="Starting timeframe when switching assets">
-            <DropdownInput 
+            <DropdownInput
               value={settings.analysis.defaultTimeframe}
               options={[
                 { label: '15s', value: '15s' },
@@ -367,7 +367,7 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Chart Precision" description="Number of decimals for price display">
-            <SliderInput 
+            <SliderInput
               value={settings.analysis.chartPrecision}
               min={0}
               max={8}
@@ -375,7 +375,7 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Auto-load Indicators" description="Restore last used indicators on startup">
-            <NeomorphicSwitch 
+            <NeomorphicSwitch
               checked={settings.analysis.autoLoadIndicators}
               onChange={() => updateSection('analysis', { autoLoadIndicators: !settings.analysis.autoLoadIndicators })}
             />
@@ -385,7 +385,7 @@ const SettingsPanel = () => {
         {/* AI Assistant */}
         <SettingsSection title="AI Assistant">
           <SettingRow label="Response Verbosity" description="Detail level of AI analysis">
-            <RadioGroup 
+            <RadioGroup
               value={settings.ai.responseVerbosity}
               options={[
                 { label: 'Concise', value: 'concise' },
@@ -407,51 +407,97 @@ const SettingsPanel = () => {
             />
           </SettingRow>
           <SettingRow label="Auto-include Context" description="Send market data context with AI queries">
-            <NeomorphicSwitch 
+            <NeomorphicSwitch
               checked={settings.ai.autoIncludeContext}
               onChange={() => updateSection('ai', { autoIncludeContext: !settings.ai.autoIncludeContext })}
             />
           </SettingRow>
 
-          <SettingRow label="Voice Read-Back" description="Read AI answers aloud using your browser">
+          <SettingRow label="Voice Input Mode" description="Method for listening to voice commands">
+            <DropdownInput
+              value={settings.ai.voiceInputMode}
+              options={[
+                { label: 'Disabled', value: 'off' },
+                { label: 'Browser (Free, Local)', value: 'browser' },
+                { label: 'Server (Adv, High Quality)', value: 'server' }
+              ]}
+              onChange={(val) => updateSection('ai', { voiceInputMode: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Voice Read-Back" description="Read AI answers aloud">
             <NeomorphicSwitch
               checked={settings.ai.voiceReadBackEnabled}
               onChange={() => updateSection('ai', { voiceReadBackEnabled: !settings.ai.voiceReadBackEnabled })}
             />
           </SettingRow>
 
-          <SettingRow label="Voice Rate" description="Speech speed">
-            <SliderInput
-              value={settings.ai.voiceReadBackRate}
-              min={0.5}
-              max={2}
-              step={0.1}
-              unit="x"
-              disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
-              onChange={(val) => updateSection('ai', { voiceReadBackRate: val })}
-            />
-          </SettingRow>
-
-          <SettingRow label="Voice Pitch" description="Speech pitch">
-            <SliderInput
-              value={settings.ai.voiceReadBackPitch}
-              min={0}
-              max={2}
-              step={0.1}
-              unit=""
-              disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
-              onChange={(val) => updateSection('ai', { voiceReadBackPitch: val })}
-            />
-          </SettingRow>
-
-          <SettingRow label="Voice" description="Select a system voice">
+          <SettingRow label="Read-Back Mode" description="Voice engine for reading AI responses">
             <DropdownInput
-              value={settings.ai.voiceReadBackVoiceURI || ''}
-              options={ttsVoiceOptions}
-              disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
-              onChange={(val) => updateSection('ai', { voiceReadBackVoiceURI: val || null })}
+              value={settings.ai.voiceReadBackMode}
+              options={[
+                { label: 'Browser (Free, Robotic)', value: 'browser' },
+                { label: 'Server (xAI Natural Voice)', value: 'server' }
+              ]}
+              disabled={!settings.ai.voiceReadBackEnabled}
+              onChange={(val) => updateSection('ai', { voiceReadBackMode: val })}
             />
           </SettingRow>
+
+          {settings.ai.voiceReadBackMode === 'server' && (
+            <SettingRow label="xAI Voice" description="Natural voice personality">
+              <DropdownInput
+                value={settings.ai.voiceReadBackVoice}
+                options={[
+                  { label: 'Ara (Female, Warm)', value: 'Ara' },
+                  { label: 'Eve (Female, Calm)', value: 'Eve' },
+                  { label: 'Leo (Male, Confident)', value: 'Leo' },
+                  { label: 'Orion (Male, Deep)', value: 'Orion' },
+                  { label: 'Nova (Female, Energetic)', value: 'Nova' },
+                  { label: 'Sage (Neutral, Wise)', value: 'Sage' }
+                ]}
+                disabled={!settings.ai.voiceReadBackEnabled}
+                onChange={(val) => updateSection('ai', { voiceReadBackVoice: val })}
+              />
+            </SettingRow>
+          )}
+
+          {settings.ai.voiceReadBackMode === 'browser' && (
+            <>
+              <SettingRow label="Voice Rate" description="Speech speed">
+                <SliderInput
+                  value={settings.ai.voiceReadBackRate}
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  unit="x"
+                  disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
+                  onChange={(val) => updateSection('ai', { voiceReadBackRate: val })}
+                />
+              </SettingRow>
+
+              <SettingRow label="Voice Pitch" description="Speech pitch">
+                <SliderInput
+                  value={settings.ai.voiceReadBackPitch}
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  unit=""
+                  disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
+                  onChange={(val) => updateSection('ai', { voiceReadBackPitch: val })}
+                />
+              </SettingRow>
+
+              <SettingRow label="Browser Voice" description="Select a system voice">
+                <DropdownInput
+                  value={settings.ai.voiceReadBackVoiceURI || ''}
+                  options={ttsVoiceOptions}
+                  disabled={!settings.ai.voiceReadBackEnabled || !ttsSupported}
+                  onChange={(val) => updateSection('ai', { voiceReadBackVoiceURI: val || null })}
+                />
+              </SettingRow>
+            </>
+          )}
         </SettingsSection>
 
         <SettingsSection title="Screenshot & Markup">
@@ -651,7 +697,7 @@ const SettingsPanel = () => {
           <div className="text-xs text-text-secondary">
             QuFLX v2.0.0-beta | Settings Version: {settings.version}
           </div>
-          <button 
+          <button
             className="flex items-center gap-2 px-4 py-2 bg-section-bg hover:bg-section-bg/80 text-text-primary rounded-lg transition-colors text-sm font-medium border border-border-primary shadow-sm"
           >
             <Download size={16} /> Export Config (JSON)

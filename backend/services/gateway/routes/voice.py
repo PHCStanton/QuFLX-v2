@@ -1,14 +1,30 @@
+"""
+DEPRECATED: This mock voice handler is deprecated as of 2026-01-25.
+Use ai_voice.py instead, which provides the real xAI WebSocket relay.
+
+This file is preserved only for reference and testing purposes.
+DO NOT register this router in main.py - use ai_voice.router instead.
+"""
 import logging
 import json
 import asyncio
 import base64
+import warnings
 from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from starlette.websockets import WebSocketState
 
-router = APIRouter()
-logger = logging.getLogger('gateway.voice')
+warnings.warn(
+    "voice.py is deprecated. Use ai_voice.py for the real xAI voice relay.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# DEPRECATED: Do not use this router - use ai_voice.router instead
+router_deprecated = APIRouter()
+router = router_deprecated  # Alias for backward compatibility during transition
+logger = logging.getLogger('gateway.voice_deprecated')
 
 @router.websocket('/ws')
 async def voice_websocket_endpoint(websocket: WebSocket):
@@ -58,24 +74,12 @@ async def voice_websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({'type': 'input_audio_buffer.committed'})
                 await websocket.send_json({'type': 'input_audio_buffer.speech_stopped'})
                 
-                # Mock Response for Validation (Echo / Confirmation)
-                # This proves the loop works before real AI integration
+                # Mock Response for Validation
+                # We send the 'done' events but NOT the text deltas,
+                # because the frontend is handling dictation via Hybrid Mode.
+                # In the future, this would send the actual AI response.
                 await websocket.send_json({
                     'type': 'response.created',
-                })
-                
-                # Simulate "Thinking..." delay
-                await asyncio.sleep(0.5)
-                
-                # Send text delta
-                await websocket.send_json({
-                    'type': 'response.text.delta',
-                    'delta': 'I received your audio. '
-                })
-                await asyncio.sleep(0.2)
-                await websocket.send_json({
-                    'type': 'response.text.delta',
-                    'delta': 'Backend voice relay is functional.'
                 })
                 
                 # Done

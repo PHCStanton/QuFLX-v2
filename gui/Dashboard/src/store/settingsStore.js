@@ -18,11 +18,31 @@ const normalizeAiImageSource = (value) => {
   return 'live';
 };
 
+const normalizeVoiceInputMode = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'browser') return 'browser';
+  if (v === 'server') return 'server';
+  return 'off';
+};
+
 const normalizeVoiceReadBackRate = (value) => clampNumber(value, { min: 0.5, max: 2, fallback: 1 });
 const normalizeVoiceReadBackPitch = (value) => clampNumber(value, { min: 0, max: 2, fallback: 1 });
 const normalizeVoiceUri = (value) => {
   const v = typeof value === 'string' ? value.trim() : '';
   return v || null;
+};
+
+const normalizeVoiceReadBackMode = (value) => {
+  const v = String(value || '').toLowerCase();
+  if (v === 'server') return 'server';  // xAI natural voice
+  return 'browser';  // Browser TTS (default)
+};
+
+const normalizeVoiceReadBackVoice = (value) => {
+  const v = String(value || '').trim();
+  const allowed = ['Ara', 'Eve', 'Leo', 'Orion', 'Nova', 'Sage'];
+  if (allowed.includes(v)) return v;
+  return 'Ara';  // Default xAI voice
 };
 
 const normalizeScreenshotTool = (value) => {
@@ -83,7 +103,10 @@ const defaultSettings = {
     autoIncludeChart: true,
     autoIncludeContext: true,
     imageSource: 'live',
+    voiceInputMode: 'off',
     voiceReadBackEnabled: false,
+    voiceReadBackMode: 'browser',  // 'browser' (TTS) or 'server' (xAI natural voice)
+    voiceReadBackVoice: 'Ara',     // xAI voice: Ara, Eve, Leo, Orion, Nova, Sage
     voiceReadBackRate: 1,
     voiceReadBackPitch: 1,
     voiceReadBackVoiceURI: null,
@@ -175,10 +198,14 @@ const normalizeSettings = (settings) => {
   merged.global.theme = normalizeTheme(merged.global.theme);
   merged.ai = { ...(merged.ai || {}) };
   merged.ai.imageSource = normalizeAiImageSource(merged.ai.imageSource);
+  merged.ai.voiceInputMode = normalizeVoiceInputMode(merged.ai.voiceInputMode);
   merged.ai.voiceReadBackEnabled = Boolean(merged.ai.voiceReadBackEnabled);
+  merged.ai.voiceReadBackMode = normalizeVoiceReadBackMode(merged.ai.voiceReadBackMode);
+  merged.ai.voiceReadBackVoice = normalizeVoiceReadBackVoice(merged.ai.voiceReadBackVoice);
   merged.ai.voiceReadBackRate = normalizeVoiceReadBackRate(merged.ai.voiceReadBackRate);
   merged.ai.voiceReadBackPitch = normalizeVoiceReadBackPitch(merged.ai.voiceReadBackPitch);
   merged.ai.voiceReadBackVoiceURI = normalizeVoiceUri(merged.ai.voiceReadBackVoiceURI);
+
 
   merged.screenshot = { ...(merged.screenshot || {}) };
   merged.screenshot.defaultTool = normalizeScreenshotTool(merged.screenshot.defaultTool);
@@ -206,174 +233,174 @@ const useSettingsStore = create(
       return next;
     }
   })((set, get) => ({
-      settings: defaultSettings,
-      
-      // Initialize settings from backend if possible
-      fetchSettings: async () => {
-        try {
-          const current = get().settings;
-          const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
-          const response = await fetch('/api/v1/settings');
-          if (response.ok) {
-            const backendSettings = await response.json();
+    settings: defaultSettings,
 
-            const merged = {
-              ...current,
-              ...backendSettings,
-              global: {
-                ...(current.global || {}),
-                ...(backendSettings.global || {}),
-                sidebarSkinDataUrl: localSidebarSkinDataUrl,
-              },
-              automation: {
-                ...(current.automation || {}),
-                ...(backendSettings.automation || {}),
-              },
-              analysis: {
-                ...(current.analysis || {}),
-                ...(backendSettings.analysis || {}),
-              },
-              ai: {
-                ...(current.ai || {}),
-                ...(backendSettings.ai || {}),
-              },
-              screenshot: {
-                ...(current.screenshot || {}),
-                ...(backendSettings.screenshot || {}),
-              },
-              userProfile: {
-                ...(current.userProfile || {}),
-                ...(backendSettings.userProfile || {}),
-              },
-              riskManager: {
-                ...(current.riskManager || {}),
-                ...(backendSettings.riskManager || {}),
-              },
-              calendarJournal: {
-                ...(current.calendarJournal || {}),
-                ...(backendSettings.calendarJournal || {}),
-              },
-              strategyLab: {
-                ...(current.strategyLab || {}),
-                ...(backendSettings.strategyLab || {}),
-              },
-            };
-
-            merged.automation = {
-              ...(merged.automation || {}),
-              historyWaitTime: clampNumber(merged.automation?.historyWaitTime, {
-                min: 0.5,
-                max: 5,
-                fallback: defaultSettings.automation.historyWaitTime,
-              }),
-            };
-
-            set({ settings: normalizeSettings(merged) });
-          }
-        } catch (error) {
-          console.error('Failed to fetch settings from backend:', error);
-        }
-      },
-
-      // Save settings to backend
-      saveSettings: async (newSettings) => {
-        try {
-          const current = get().settings;
-          const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
-
-          const payload = sanitizeSettingsForBackend(normalizeSettings(newSettings || current));
-          const response = await fetch('/api/v1/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          if (response.ok) {
-            const saved = await response.json();
-
-            const merged = {
-              ...current,
-              ...saved,
-              global: {
-                ...(current.global || {}),
-                ...(saved.global || {}),
-                sidebarSkinDataUrl: localSidebarSkinDataUrl,
-              },
-              automation: {
-                ...(current.automation || {}),
-                ...(saved.automation || {}),
-              },
-              analysis: {
-                ...(current.analysis || {}),
-                ...(saved.analysis || {}),
-              },
-              ai: {
-                ...(current.ai || {}),
-                ...(saved.ai || {}),
-              },
-              screenshot: {
-                ...(current.screenshot || {}),
-                ...(saved.screenshot || {}),
-              },
-              userProfile: {
-                ...(current.userProfile || {}),
-                ...(saved.userProfile || {}),
-              },
-              riskManager: {
-                ...(current.riskManager || {}),
-                ...(saved.riskManager || {}),
-              },
-              calendarJournal: {
-                ...(current.calendarJournal || {}),
-                ...(saved.calendarJournal || {}),
-              },
-              strategyLab: {
-                ...(current.strategyLab || {}),
-                ...(saved.strategyLab || {}),
-              },
-            };
-
-            set({ settings: normalizeSettings(merged) });
-            return true;
-          }
-        } catch (error) {
-          console.error('Failed to save settings to backend:', error);
-        }
-        return false;
-      },
-
-      setSettings: (next) => set({ settings: next }),
-      
-      updateSection: (section, partial) => {
+    // Initialize settings from backend if possible
+    fetchSettings: async () => {
+      try {
         const current = get().settings;
-        const prevSection = current[section] || {};
-        const nextSettings = {
-          ...current,
-          [section]: {
-            ...prevSection,
-            ...partial
-          }
-        };
-        set({ settings: section === 'global' ? normalizeSettings(nextSettings) : nextSettings });
-        // Optionally auto-save to backend
-        // get().saveSettings(nextSettings);
-      },
+        const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
+        const response = await fetch('/api/v1/settings');
+        if (response.ok) {
+          const backendSettings = await response.json();
 
-      resetSection: (section) => {
-        const current = get().settings;
-        const baseSection = defaultSettings[section] || {};
-        const nextSettings = {
-          ...current,
-          [section]: baseSection
-        };
-        set({ settings: nextSettings });
-        get().saveSettings(nextSettings);
-      },
+          const merged = {
+            ...current,
+            ...backendSettings,
+            global: {
+              ...(current.global || {}),
+              ...(backendSettings.global || {}),
+              sidebarSkinDataUrl: localSidebarSkinDataUrl,
+            },
+            automation: {
+              ...(current.automation || {}),
+              ...(backendSettings.automation || {}),
+            },
+            analysis: {
+              ...(current.analysis || {}),
+              ...(backendSettings.analysis || {}),
+            },
+            ai: {
+              ...(current.ai || {}),
+              ...(backendSettings.ai || {}),
+            },
+            screenshot: {
+              ...(current.screenshot || {}),
+              ...(backendSettings.screenshot || {}),
+            },
+            userProfile: {
+              ...(current.userProfile || {}),
+              ...(backendSettings.userProfile || {}),
+            },
+            riskManager: {
+              ...(current.riskManager || {}),
+              ...(backendSettings.riskManager || {}),
+            },
+            calendarJournal: {
+              ...(current.calendarJournal || {}),
+              ...(backendSettings.calendarJournal || {}),
+            },
+            strategyLab: {
+              ...(current.strategyLab || {}),
+              ...(backendSettings.strategyLab || {}),
+            },
+          };
 
-      resetAll: () => {
-        set({ settings: defaultSettings });
-        get().saveSettings(defaultSettings);
+          merged.automation = {
+            ...(merged.automation || {}),
+            historyWaitTime: clampNumber(merged.automation?.historyWaitTime, {
+              min: 0.5,
+              max: 5,
+              fallback: defaultSettings.automation.historyWaitTime,
+            }),
+          };
+
+          set({ settings: normalizeSettings(merged) });
+        }
+      } catch (error) {
+        console.error('Failed to fetch settings from backend:', error);
       }
-    }))
+    },
+
+    // Save settings to backend
+    saveSettings: async (newSettings) => {
+      try {
+        const current = get().settings;
+        const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
+
+        const payload = sanitizeSettingsForBackend(normalizeSettings(newSettings || current));
+        const response = await fetch('/api/v1/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+          const saved = await response.json();
+
+          const merged = {
+            ...current,
+            ...saved,
+            global: {
+              ...(current.global || {}),
+              ...(saved.global || {}),
+              sidebarSkinDataUrl: localSidebarSkinDataUrl,
+            },
+            automation: {
+              ...(current.automation || {}),
+              ...(saved.automation || {}),
+            },
+            analysis: {
+              ...(current.analysis || {}),
+              ...(saved.analysis || {}),
+            },
+            ai: {
+              ...(current.ai || {}),
+              ...(saved.ai || {}),
+            },
+            screenshot: {
+              ...(current.screenshot || {}),
+              ...(saved.screenshot || {}),
+            },
+            userProfile: {
+              ...(current.userProfile || {}),
+              ...(saved.userProfile || {}),
+            },
+            riskManager: {
+              ...(current.riskManager || {}),
+              ...(saved.riskManager || {}),
+            },
+            calendarJournal: {
+              ...(current.calendarJournal || {}),
+              ...(saved.calendarJournal || {}),
+            },
+            strategyLab: {
+              ...(current.strategyLab || {}),
+              ...(saved.strategyLab || {}),
+            },
+          };
+
+          set({ settings: normalizeSettings(merged) });
+          return true;
+        }
+      } catch (error) {
+        console.error('Failed to save settings to backend:', error);
+      }
+      return false;
+    },
+
+    setSettings: (next) => set({ settings: next }),
+
+    updateSection: (section, partial) => {
+      const current = get().settings;
+      const prevSection = current[section] || {};
+      const nextSettings = {
+        ...current,
+        [section]: {
+          ...prevSection,
+          ...partial
+        }
+      };
+      set({ settings: section === 'global' ? normalizeSettings(nextSettings) : nextSettings });
+      // Optionally auto-save to backend
+      // get().saveSettings(nextSettings);
+    },
+
+    resetSection: (section) => {
+      const current = get().settings;
+      const baseSection = defaultSettings[section] || {};
+      const nextSettings = {
+        ...current,
+        [section]: baseSection
+      };
+      set({ settings: nextSettings });
+      get().saveSettings(nextSettings);
+    },
+
+    resetAll: () => {
+      set({ settings: defaultSettings });
+      get().saveSettings(defaultSettings);
+    }
+  }))
 );
 
 export default useSettingsStore;

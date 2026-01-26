@@ -141,6 +141,14 @@ Chunking guidance:
 - User can hear spoken responses in real time
 - Transcript remains visible and accurate
 - Interruptions handled cleanly
+ 
+ ## Settings & Customization
+- **Voice Input Mode** (`voiceInputMode`):
+  - `off`: Voice disabled.
+  - `browser`: Uses **Web Speech API** for free, local, zero-latency dictation.
+  - `server`: Uses **WebSocket Relay** for advanced AI audio streaming (Server-side).
+- **Voice Read-Back**: Toggle for browser-based TTS.
+- **Voice Customization**: Rate, Pitch, and Voice selection.
 
 ## Implementation Order & Status
 

@@ -69,7 +69,11 @@
 - [x] Implement frontend mic controls and transcript handling for dictation (Modal + AI Insights).
 - [x] Prevent audio payloads from being rendered as text in the UI.
 - [x] Add browser TTS read-back for AI outputs (Speak buttons + modal auto-read).
-- [x] Add settings for TTS enable/rate/pitch/voice selection.
+- [x] Fix voice route registration bug in `main.py` (was importing mock instead of real xAI relay).
+- [x] Deprecate `voice.py` mock handler to prevent future misalignment.
+- [x] Implement `useNaturalVoice` hook for xAI Message-to-Audio (TTS).
+- [x] Add Read-Back Mode (Browser vs Server) and xAI Voice selection in Settings.
+- [x] Integrate Natural Voice Read-Back into Ask AI Modal and Insights Panel.
 - [ ] (Optional) Add realtime conversation mode (AI audio output) in AI Insights.
 
 ## Phase 5.4: Settings & Configuration Architecture (Foundation & Scaffolding Complete)
