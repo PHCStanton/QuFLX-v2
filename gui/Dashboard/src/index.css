@@ -518,17 +518,17 @@
   --logo-glow-bg: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
 }
 
-/* Black & White Theme Shimmer Effect for Logo Text */
-.theme-black-white .quflx-logo-text-main,
-.theme-black-white .quflx-logo-text-version {
+/* Global Shimmer Effect for Logo Text */
+.quflx-logo-text-main,
+.quflx-logo-text-version {
   position: relative;
   background-size: 200% 100%;
   background-position: 100% 0;
   transition: background-position 1.2s ease;
 }
 
-.theme-black-white .quflx-logo-text-main::after,
-.theme-black-white .quflx-logo-text-version::after {
+.quflx-logo-text-main::after,
+.quflx-logo-text-version::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -553,13 +553,13 @@
     background-position 1.4s ease;
 }
 
-.theme-black-white .quflx-logo:hover .quflx-logo-text-main,
-.theme-black-white .quflx-logo:hover .quflx-logo-text-version {
+.quflx-logo:hover .quflx-logo-text-main,
+.quflx-logo:hover .quflx-logo-text-version {
   background-position: -100% 0;
 }
 
-.theme-black-white .quflx-logo:hover .quflx-logo-text-main::after,
-.theme-black-white .quflx-logo:hover .quflx-logo-text-version::after {
+.quflx-logo:hover .quflx-logo-text-main::after,
+.quflx-logo:hover .quflx-logo-text-version::after {
   opacity: 1;
   background-position: -120% 0;
 }
@@ -651,6 +651,7 @@
 .quflx-logo-text-version {
   font-weight: 900;
   line-height: 1;
+  /* background is set via shorthand in some themes, ensuring compatibility */
   background: var(--logo-text-gradient);
   -webkit-background-clip: text;
   background-clip: text;
