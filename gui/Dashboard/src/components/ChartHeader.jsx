@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText, RefreshCcw, Link2 } from 'lucide-react';
+import { X, Layers, Clock, FileText } from 'lucide-react';
 import ChartActions from './ChartActions';
+import NeoSyncButton from './NeoSyncButton';
 
 const ChartHeader = ({
   selectedAsset,
@@ -41,63 +42,35 @@ const ChartHeader = ({
     <div className="p-1.5 border-b border-border-primary bg-card-bg/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
       <div className="flex items-center gap-2">
         <div className="w-36">
-          <Combobox 
-            value={selectedAsset} 
-            onChange={setSelectedAsset} 
-            options={assetOptions} 
+          <Combobox
+            value={selectedAsset}
+            onChange={setSelectedAsset}
+            options={assetOptions}
           />
         </div>
 
         <div className="w-28">
-          <Combobox 
-            value={selectedTimeframe} 
-            onChange={handleTimeframeChange} 
+          <Combobox
+            value={selectedTimeframe}
+            onChange={handleTimeframeChange}
             options={timeframeOptions}
             icon={Clock}
           />
         </div>
 
-        {onSyncTimeframe && (
-          <button
-            type="button"
-            onClick={handleSyncClick}
-            disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
-            title={
-              selectedTimeframe === 'ticks'
-                ? "Sync disabled for 'ticks'"
-                : isTimeframeSyncLinked
-                  ? 'Sync TimeFrame with Platform (Linked)'
-                  : 'Sync TimeFrame with Platform'
-            }
-            aria-label={
-              selectedTimeframe === 'ticks'
-                ? "Sync disabled for 'ticks'"
-                : isTimeframeSyncLinked
-                  ? 'Sync TimeFrame with Platform (Linked)'
-                  : 'Sync TimeFrame with Platform'
-            }
-            className={`quflx-neo-icon-btn quflx-neo-icon-btn--sm relative disabled:opacity-60 disabled:cursor-not-allowed ${syncClicked ? 'quflx-neo-btn-clicked' : ''} ${isTimeframeSyncLinked ? 'ring-1 ring-accent-green/50 border-accent-green/50' : ''}`}
-          >
-            <RefreshCcw className="w-3.5 h-3.5 quflx-neo-btn__icon" />
-            {isTimeframeSyncLinked ? (
-              <span className="absolute -top-1 -right-1 bg-accent-green text-black rounded-full p-0.5 border border-black/40">
-                <Link2 className="w-3 h-3" />
-              </span>
-            ) : null}
-          </button>
-        )}
+
 
         <div className="w-32">
-          <Combobox 
+          <Combobox
             placeholder="CSV..."
             options={csvOptions}
-            onChange={() => {}}
+            onChange={() => { }}
             icon={FileText}
           />
         </div>
 
         <div className="w-32">
-          <Combobox 
+          <Combobox
             placeholder="+ Indicator"
             options={indicatorOptions}
             onChange={(val) => {
@@ -108,8 +81,8 @@ const ChartHeader = ({
                 meta.displayValue ||
                 (meta.params
                   ? Object.values(meta.params)
-                      .filter((v) => v !== undefined && v !== null)
-                      .join(',')
+                    .filter((v) => v !== undefined && v !== null)
+                    .join(',')
                   : 'Default');
               addIndicator({
                 id,
@@ -126,17 +99,28 @@ const ChartHeader = ({
             icon={Layers}
           />
         </div>
+
+        {onSyncTimeframe && (
+          <div className="ml-1">
+            <NeoSyncButton
+              onClick={handleSyncClick}
+              disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
+              active={syncClicked}
+              size={38}
+            />
+          </div>
+        )}
       </div>
 
       <div className="ml-auto flex items-center gap-3 px-2">
         <div className="flex-1 flex gap-2 overflow-x-auto items-center justify-end no-scrollbar">
           {activeIndicators.map((ind) => (
-            <IndicatorBadge 
-              key={ind.id} 
-              name={ind.name} 
-              value={ind.value} 
+            <IndicatorBadge
+              key={ind.id}
+              name={ind.name}
+              value={ind.value}
               onClick={() => onIndicatorClick && onIndicatorClick(ind)}
-              onRemove={() => removeIndicator(ind.id)} 
+              onRemove={() => removeIndicator(ind.id)}
             />
           ))}
         </div>
