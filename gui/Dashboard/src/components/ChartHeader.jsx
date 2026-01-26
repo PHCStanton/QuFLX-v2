@@ -3,6 +3,7 @@ import Combobox from './Combobox';
 import { X, Layers, Clock, FileText } from 'lucide-react';
 import ChartActions from './ChartActions';
 import NeoSyncButton from './NeoSyncButton';
+import syncClickSound from '../assets/Sounds/Click_TF_Sync_Button1.mp3';
 
 const ChartHeader = ({
   selectedAsset,
@@ -29,6 +30,10 @@ const ChartHeader = ({
 
   const handleSyncClick = async () => {
     if (!onSyncTimeframe || isSyncingTimeframe) return;
+
+    const audio = new Audio(syncClickSound);
+    audio.play().catch(() => { });
+
     setSyncClicked(true);
     window.setTimeout(() => setSyncClicked(false), 1000);
     try {
@@ -64,7 +69,7 @@ const ChartHeader = ({
               onClick={handleSyncClick}
               disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
               active={syncClicked}
-              size={38}
+              size={32}
             />
           </div>
         )}
