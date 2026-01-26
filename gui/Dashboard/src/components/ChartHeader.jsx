@@ -69,6 +69,7 @@ const ChartHeader = ({
               onClick={handleSyncClick}
               disabled={isSyncingTimeframe || selectedTimeframe === 'ticks'}
               active={syncClicked}
+              linked={isTimeframeSyncLinked}
               size={32}
             />
           </div>

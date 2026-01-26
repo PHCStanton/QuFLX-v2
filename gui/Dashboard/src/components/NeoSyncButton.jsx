@@ -1,49 +1,49 @@
 import React from 'react';
 
-const NeoSyncButton = ({ onClick, disabled, size = 42, active }) => {
-    const shadowDistance = Math.round(size * 0.1);
-    const shadowBlur = Math.round(size * 0.2);
-    const fontSize = Math.round(size * 0.3);
+const NeoSyncButton = ({ onClick, disabled, size = 42, active, linked }) => {
+  const shadowDistance = Math.round(size * 0.1);
+  const shadowBlur = Math.round(size * 0.2);
+  const fontSize = Math.round(size * 0.3);
 
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            className={`neo-sync-btn ${active ? 'active-state' : ''}`}
-            style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                '--btn-size': `${size}px`,
-                '--font-size': `${fontSize}px`,
-                '--shadow-dist': `${shadowDistance}px`,
-                '--shadow-blur': `${shadowBlur}px`,
-            }}
-            title="Sync TimeFrame"
-        >
-            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                <text
-                    x="50" y="44"
-                    fontFamily="Arial Black, Impact, sans-serif"
-                    fontSize="44"
-                    fontWeight="900"
-                    textAnchor="middle"
-                    className="neo-text"
-                    letterSpacing="0.8">
-                    SY
-                </text>
-                <text
-                    x="50" y="82"
-                    fontFamily="Arial Black, Impact, sans-serif"
-                    fontSize="44"
-                    fontWeight="900"
-                    textAnchor="middle"
-                    className="neo-text"
-                    letterSpacing="0.8">
-                    NC
-                </text>
-            </svg>
-            <style jsx>{`
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`neo-sync-btn ${active ? 'active-state' : ''} ${linked ? 'linked' : ''}`}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        '--btn-size': `${size}px`,
+        '--font-size': `${fontSize}px`,
+        '--shadow-dist': `${shadowDistance}px`,
+        '--shadow-blur': `${shadowBlur}px`,
+      }}
+      title="Sync TimeFrame"
+    >
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <text
+          x="50" y="44"
+          fontFamily="Arial Black, Impact, sans-serif"
+          fontSize="44"
+          fontWeight="900"
+          textAnchor="middle"
+          className="neo-text"
+          letterSpacing="0.8">
+          SY
+        </text>
+        <text
+          x="50" y="82"
+          fontFamily="Arial Black, Impact, sans-serif"
+          fontSize="44"
+          fontWeight="900"
+          textAnchor="middle"
+          className="neo-text"
+          letterSpacing="0.8">
+          NC
+        </text>
+      </svg>
+      <style jsx>{`
         .neo-sync-btn {
           --bg: #1e2128;
           --shadow-dark: rgba(0,0,0,0.82);
@@ -101,8 +101,20 @@ const NeoSyncButton = ({ onClick, disabled, size = 42, active }) => {
           transition: filter 0.25s ease;
         }
 
-        .neo-sync-btn:hover:not(:disabled) .neo-text {
+        /* Standard: Glow on Hover (when NOT linked) */
+        .neo-sync-btn:not(.linked):hover:not(:disabled) .neo-text {
           filter: drop-shadow(0 0 5px #ffeb3b) drop-shadow(0 0 8px #ffeb3b);
+        }
+
+        /* Linked: Glow by Default */
+        .neo-sync-btn.linked .neo-text {
+          filter: drop-shadow(0 0 5px #00ff88) drop-shadow(0 0 8px #00ff88); /* Green glow for linked? Or user implied yellow? Let's stick to yellow or maybe green for 'linked' context? User said "glow like in hover state", which was yellow. But linked usually implies green/active. I'll stick to yellow to match "like hover state" request exactly. */
+          filter: drop-shadow(0 0 5px #ffeb3b) drop-shadow(0 0 8px #ffeb3b);
+        }
+
+        /* Linked AND Hover: Remove Glow (Invert) */
+        .neo-sync-btn.linked:hover:not(:disabled) .neo-text {
+          filter: none;
         }
 
         /* Subtle inner highlight */
@@ -119,8 +131,8 @@ const NeoSyncButton = ({ onClick, disabled, size = 42, active }) => {
           opacity: 0.8;
         }
       `}</style>
-        </button>
-    );
+    </button>
+  );
 };
 
 export default NeoSyncButton;
