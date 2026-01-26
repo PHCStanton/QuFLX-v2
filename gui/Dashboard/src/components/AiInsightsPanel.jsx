@@ -1,4 +1,5 @@
 import Card from './Card';
+import { Volume2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
@@ -43,6 +44,7 @@ const AiInsightsPanel = () => {
     autoIncludeContext: settings?.ai?.autoIncludeContext,
     responseVerbosity: settings?.ai?.responseVerbosity,
     uiMode: 'insights',
+    customInstructions: settings?.ai?.customInstructions,
     marketData,
     selectedAssetKey,
     indicatorSeries,
@@ -225,7 +227,7 @@ const AiInsightsPanel = () => {
                             }`}
                           disabled={!ttsEnabled}
                         >
-                          Speak
+                          <Volume2 size={12} />
                         </button>
                       ) : null}
                     </div>
@@ -316,8 +318,8 @@ const AiInsightsPanel = () => {
             </div>
           </div>
         </div>
-      </Card>
-    </div>
+      </Card >
+    </div >
   );
 };
 

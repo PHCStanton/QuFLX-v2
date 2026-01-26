@@ -14,6 +14,7 @@ const useAskAi = ({
   autoIncludeContext,
   responseVerbosity,
   uiMode,
+  customInstructions,
   marketData,
   selectedAssetKey,
   indicatorSeries,
@@ -46,6 +47,9 @@ const useAskAi = ({
     }
     if (uiMode) {
       context.uiMode = String(uiMode);
+    }
+    if (customInstructions) {
+      context.customInstructions = String(customInstructions);
     }
 
     const src = imageSourceOverride || imageSource;

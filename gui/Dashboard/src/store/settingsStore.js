@@ -110,6 +110,7 @@ const defaultSettings = {
     voiceReadBackRate: 1,
     voiceReadBackPitch: 1,
     voiceReadBackVoiceURI: null,
+    customInstructions: '',
   },
   screenshot: {
     defaultTool: 'arrow',
@@ -205,6 +206,7 @@ const normalizeSettings = (settings) => {
   merged.ai.voiceReadBackRate = normalizeVoiceReadBackRate(merged.ai.voiceReadBackRate);
   merged.ai.voiceReadBackPitch = normalizeVoiceReadBackPitch(merged.ai.voiceReadBackPitch);
   merged.ai.voiceReadBackVoiceURI = normalizeVoiceUri(merged.ai.voiceReadBackVoiceURI);
+  merged.ai.customInstructions = String(merged.ai.customInstructions || '');
 
 
   merged.screenshot = { ...(merged.screenshot || {}) };

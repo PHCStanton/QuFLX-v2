@@ -190,8 +190,13 @@ const AskAiModal = ({
   }, [readBackMode, speakNatural, speakTts, ttsOptions]);
 
   const contextInstructions = useMemo(() => {
-    return `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}. Respond concisely relative to the user's trading context.`;
-  }, [asset, timeframe]);
+    let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}. Respond concisely relative to the user's trading context.`;
+    const custom = settings?.ai?.customInstructions;
+    if (custom) {
+      base = `${custom}\n\n${base}`;
+    }
+    return base;
+  }, [asset, timeframe, settings?.ai?.customInstructions]);
 
   const {
     status: voiceStatus,
@@ -249,7 +254,12 @@ const AskAiModal = ({
     try {
       setIsThinking(true);
       appendAiMessage({ role: 'user', content: prompt, meta: { asset, timeframe, imageSource: localImageSource } });
-      const result = await onAsk({ prompt, imageSourceOverride: localImageSource, forceImageDataUrl });
+      const result = await onAsk({
+        prompt,
+        imageSourceOverride: localImageSource,
+        forceImageDataUrl,
+        context: { customInstructions: settings?.ai?.customInstructions }
+      });
       if (!result) {
         setAnswer('⚠️ System Error: The AI request timed out or failed.\n\nPlease close and reopen this "Ask AI" modal, then try again.');
         return;

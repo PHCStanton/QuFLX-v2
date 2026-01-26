@@ -86,6 +86,15 @@ class AIService:
             ui_mode = str(context.get('uiMode') or '').strip().lower()
 
         system_content = "You are a helpful trading assistant for QuFLX."
+        
+        # Enforce OTC Data Lock
+        system_content += "\n\nYou MUST use ONLY QuFLX-provided TradingContext (live ticks, candles, indicators). DO NOT search web, use external sources (Deriv, etc.), or recall cached prices. If data insufficient, say so."
+
+        if context and context.get('customInstructions'):
+            instr = str(context.get('customInstructions')).strip()
+            if instr:
+                 system_content = f"{instr}\n\n{system_content}"
+
         if ui_mode == 'modal':
             system_content += "\n\nThis is a quick Ask AI modal response. Keep it short, actionable, and skimmable."
         elif ui_mode == 'insights':
@@ -99,7 +108,10 @@ class AIService:
             system_content += "\n\nStyle: balanced. Be specific and practical without being verbose."
 
         if context:
-            context_str = json.dumps(context, indent=2)
+            # Remove customInstructions from context dump to avoid clutter
+            dump_ctx = dict(context)
+            dump_ctx.pop('customInstructions', None)
+            context_str = json.dumps(dump_ctx, indent=2)
             system_content += f"\n\nCurrent Market Context:\n{context_str}"
 
         # Prepare user message content

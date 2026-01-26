@@ -498,6 +498,15 @@ const SettingsPanel = () => {
               </SettingRow>
             </>
           )}
+
+          <SettingRow label="Custom Instructions" description="System prompt override for specific trading rules">
+            <textarea
+              className="w-full h-24 bg-card-bg border border-border-primary rounded p-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+              placeholder="e.g. Always use ONLY QuFLX live OTC data. Never external sources..."
+              value={settings.ai.customInstructions || ''}
+              onChange={(e) => updateSection('ai', { customInstructions: e.target.value })}
+            />
+          </SettingRow>
         </SettingsSection>
 
         <SettingsSection title="Screenshot & Markup">
@@ -705,7 +714,7 @@ const SettingsPanel = () => {
         </div>
 
       </div>
-    </div>
+    </div >
   );
 };
 
