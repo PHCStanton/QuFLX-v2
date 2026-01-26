@@ -254,6 +254,18 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
     statusRef.current = status;
   }, [status]);
 
+  // Update session config (instructions/voice) on the fly if already connected
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN && !shouldUseBrowser) {
+      try {
+        ws.send(JSON.stringify(sessionUpdateMessage));
+      } catch (err) {
+        console.warn('Failed to update voice session config:', err);
+      }
+    }
+  }, [sessionUpdateMessage, shouldUseBrowser]);
+
   useEffect(() => {
     speakingRef.current = isSpeaking;
   }, [isSpeaking]);
