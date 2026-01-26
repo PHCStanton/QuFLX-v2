@@ -127,12 +127,10 @@ const extractTextDelta = (msg) => {
   // Method 2: Generic Delta (Fallback) - Checks if it's NOT audio
   if (typeof msg.delta === 'string') {
     if (isAudioDeltaType(type)) return null;
-    if (isTextDeltaType(type)) {
-      // Heuristic: If we are in the middle of a response, it's likely AI. 
-      // But safe to ignore generic deltas if we rely on specific types above.
-      // actually, response.text.delta IS the generic delta for AI. 
-      return null;
-    }
+
+    // If it's a delta and NOT audio, assume it's text.
+    // This catches 'response.content_part.delta' or other variations.
+    return { kind: 'ai_delta', text: msg.delta };
   }
 
   return null;
