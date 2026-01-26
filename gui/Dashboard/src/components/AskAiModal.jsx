@@ -7,6 +7,7 @@ import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
 import useTextToSpeech from '../utils/useTextToSpeech';
 import useNaturalVoice from '../hooks/useNaturalVoice';
 import NeomorphicSwitch from './NeomorphicSwitch';
+import askAiSubmitSound from '../assets/Sounds/UIAlert-Positive,_high-tech.mp3';
 
 const PRESETS = [
   {
@@ -248,6 +249,10 @@ const AskAiModal = ({
     if (!onAsk) return;
     const prompt = String(aiDraftPrompt || '').trim();
     if (!prompt) return;
+
+    // Play submit sound
+    const audio = new Audio(askAiSubmitSound);
+    audio.play().catch(() => { });
 
     if (isThinking) return;
 

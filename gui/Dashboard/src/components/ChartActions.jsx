@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { Camera } from 'lucide-react';
-import askAiClickSound from '../assets/Sounds/UIClick-Ai_short.mp3';
+import askAiClickSound from '../assets/Sounds/UIAlert-Positive,_high-tech.mp3';
 import screenshotClickSound from '../assets/Sounds/screenshot.mp3';
 
 const ChartActions = ({ onOpenScreenshot, onAskAi, isCapturing, isAsking }) => {
@@ -32,7 +32,7 @@ const ChartActions = ({ onOpenScreenshot, onAskAi, isCapturing, isAsking }) => {
     <div className="flex items-center gap-2">
       <button
         type="button"
-	        onClick={handleScreenshotClick}
+        onClick={handleScreenshotClick}
         disabled={isCapturing}
         className="quflx-neo-square-btn quflx-neo-square-btn--sm quflx-screenshot-btn text-text-primary disabled:opacity-60 disabled:cursor-not-allowed"
         title="Capture chart screenshot"
