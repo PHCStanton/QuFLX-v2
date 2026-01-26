@@ -366,14 +366,14 @@ const CalendarJournalEditIcon = ({ size = 20 }) => (
 );
 
 const SIDEBAR_TABS = [
-	{ id: 'dashboard', label: 'Dashboard', icon: Dashboard3Icon },
-	{ id: 'analysis', label: 'Analysis', icon: SoundRecognitionSearchIcon },
-	{ id: 'ai_insights', label: 'AI Insights', icon: AiInsightsChipBotIcon },
-	{ id: 'live_trading', label: 'Live Trading', icon: LiveTradingCandlestickIcon },
-	{ id: 'risk_manager', label: 'Risk Manager', icon: RiskManagerStockIcon },
-	{ id: 'strategy_lab', label: 'Strategy Lab', icon: StrategyLabFlaskIcon },
-	{ id: 'calendar_journal', label: 'Calendar & Journal', icon: CalendarJournalEditIcon },
-	{ id: 'settings', label: 'Settings', icon: Settings }
+  { id: 'dashboard', label: 'Dashboard', icon: Dashboard3Icon },
+  { id: 'analysis', label: 'Analysis', icon: SoundRecognitionSearchIcon },
+  { id: 'ai_insights', label: 'AI Insights', icon: AiInsightsChipBotIcon },
+  { id: 'live_trading', label: 'Live Trading', icon: LiveTradingCandlestickIcon },
+  { id: 'risk_manager', label: 'Risk Manager', icon: RiskManagerStockIcon },
+  { id: 'strategy_lab', label: 'Strategy Lab', icon: StrategyLabFlaskIcon },
+  { id: 'calendar_journal', label: 'Calendar & Journal', icon: CalendarJournalEditIcon },
+  { id: 'settings', label: 'Settings', icon: Settings }
 ];
 
 const Sidebar = () => {
@@ -394,8 +394,8 @@ const Sidebar = () => {
           <div className="quflx-logo">
             <AnimatedLogo />
             <div className="quflx-logo-text">
-              <span className="quflx-logo-text-main">QuFLX</span>
-              <span className="quflx-logo-text-version">_v.2</span>
+              <span className="quflx-logo-text-main" data-text="QuFLX">QuFLX</span>
+              <span className="quflx-logo-text-version" data-text="_v.2">_v.2</span>
             </div>
           </div>
         )}
@@ -406,7 +406,7 @@ const Sidebar = () => {
           </svg>
         </button>
       </div>
-      
+
       <nav className="flex-1 p-2 space-y-2">
         {SIDEBAR_TABS.map((tab) => (
           <SidebarItem
@@ -431,10 +431,9 @@ const Sidebar = () => {
 };
 
 const SidebarItem = ({ icon, label, isOpen, active, onClick }) => (
-  <div 
+  <div
     onClick={onClick}
-    className={`quflx-sidebar-item flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${
-      active
+    className={`quflx-sidebar-item flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${active
         ? 'quflx-sidebar-item-active bg-accent-green/10 text-accent-green border-r-2 border-accent-green'
         : 'hover:bg-section-bg/50 text-text-secondary'
       }`}
