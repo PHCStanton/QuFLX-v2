@@ -1,6 +1,6 @@
 // gui/Dashboard/src/components/ProfileMenu.jsx
 import { useEffect, useState } from 'react';
-import avatar from '../assets/Agent_Profile.jpg';
+import avatar from '../assets/profile_pic_new.png';
 
 const ProfileMenu = () => {
   const [open, setOpen] = useState(false);
@@ -67,22 +67,20 @@ const ProfileMenu = () => {
           <button
             type="button"
             onClick={() => handleThemeChange('default')}
-            className={`w-full text-left px-3 py-2 text-[11px] ${
-              theme === 'default'
+            className={`w-full text-left px-3 py-2 text-[11px] ${theme === 'default'
                 ? 'bg-accent-green/10 text-accent-green'
                 : 'hover:bg-section-bg'
-            }`}
+              }`}
           >
             Default
           </button>
           <button
             type="button"
             onClick={() => handleThemeChange('orange-dark')}
-            className={`w-full text-left px-3 py-2 text-[11px] ${
-              theme === 'orange-dark'
+            className={`w-full text-left px-3 py-2 text-[11px] ${theme === 'orange-dark'
                 ? 'bg-accent-green/10 text-accent-green'
                 : 'hover:bg-section-bg'
-            }`}
+              }`}
           >
             Orange Dark
           </button>
