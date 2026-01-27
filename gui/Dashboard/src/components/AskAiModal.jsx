@@ -213,11 +213,13 @@ const AskAiModal = ({
     isRecording,
     isSpeaking: isVoiceAgentSpeaking,
     lastEventType,
+    resetTranscript,
   } = useVoiceAgent({
     onError: setError,
     mode: conversationMode ? 'server' : (settings?.ai?.voiceInputMode || 'off'),
     enableAudioResponse: conversationMode,
-    instructions: conversationMode ? contextInstructions : undefined
+    instructions: conversationMode ? contextInstructions : undefined,
+    voice: settings?.ai?.voiceReadBackVoice || 'Ara'
   });
 
   const isSpeaking = conversationMode ? isVoiceAgentSpeaking : (readBackMode === 'server' ? isNaturalSpeaking : isTtsSpeaking);
@@ -336,8 +338,12 @@ const AskAiModal = ({
       // Let's do it to keep record, but debounce it or ensure it's final.
       // aiTranscript is final.
       appendAiMessage({ role: 'assistant', content: aiTranscript, meta: { asset, timeframe, mode: 'voice_conversation' } });
+
+      // TURN COMPLETE -> CLEAR USER INPUT
+      resetTranscript();
+      setTranscriptDraft('');
     }
-  }, [conversationMode, aiPartial, aiTranscript, appendAiMessage, asset, timeframe]);
+  }, [conversationMode, aiPartial, aiTranscript, appendAiMessage, asset, timeframe, resetTranscript]);
 
   const applyPreset = (presetId) => {
     setSelectedPresetId(presetId);
@@ -580,7 +586,7 @@ const AskAiModal = ({
             </div>
 
             {settings?.ai?.voiceInputMode !== 'off' && (
-              <div className="border border-gray-800 bg-[#0f1419]/50 rounded-xl p-3 min-h-[100px]">
+              <div className="border border-gray-800 bg-[#0f1419]/50 rounded-xl p-3 min-h-[100px] max-h-[150px] overflow-y-auto">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">
                     {conversationMode ? 'Realtime Conversation' : 'Dictation Space'}

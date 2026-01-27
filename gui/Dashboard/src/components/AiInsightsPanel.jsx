@@ -136,7 +136,11 @@ const AiInsightsPanel = () => {
     stopRecording,
     isConnected: isVoiceConnected,
     isRecording,
-  } = useVoiceAgent({ onError: setError, mode: settings?.ai?.voiceInputMode || 'off' });
+  } = useVoiceAgent({
+    onError: setError,
+    mode: settings?.ai?.voiceInputMode || 'off',
+    voice: settings?.ai?.voiceReadBackVoice || 'Ara'
+  });
 
   useEffect(() => {
     const text = String(transcript || '').trim();

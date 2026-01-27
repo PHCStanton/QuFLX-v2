@@ -43,7 +43,7 @@ const NeoSyncButton = ({ onClick, disabled, size = 42, active, linked }) => {
           NC
         </text>
       </svg>
-      <style jsx>{`
+      <style>{`
         .neo-sync-btn {
           --bg: #1e2128;
           --shadow-dark: rgba(0,0,0,0.82);

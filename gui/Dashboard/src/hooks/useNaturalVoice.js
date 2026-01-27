@@ -6,7 +6,7 @@
  * 
  * Available voices: Ara, Eve, Leo, Orion, Nova, Sage
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getApiBaseUrl } from '../api/apiBase';
 
 const toWsBaseUrl = (httpBaseUrl) => {
@@ -205,6 +205,29 @@ const useNaturalVoice = ({ onError, voice = 'Ara', sampleRate = 24000 } = {}) =>
         setStatus(NaturalVoiceStatus.idle);
     }, []);
 
+    const sessionUpdateMessage = useMemo(() => ({
+        type: 'session.update',
+        session: {
+            voice,
+            instructions: 'Read the provided text naturally and expressively.',
+            turn_detection: null,
+            audio: {
+                output: { format: { type: 'audio/pcm', rate: sampleRate } },
+            },
+        },
+    }), [voice, sampleRate]);
+
+    useEffect(() => {
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try {
+                ws.send(JSON.stringify(sessionUpdateMessage));
+            } catch (err) {
+                console.warn('Failed to update natural voice session:', err);
+            }
+        }
+    }, [sessionUpdateMessage]);
+
     const connect = useCallback(() => {
         return new Promise((resolve, reject) => {
             if (!wsUrl) {
@@ -214,6 +237,10 @@ const useNaturalVoice = ({ onError, voice = 'Ara', sampleRate = 24000 } = {}) =>
             }
 
             if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                // Ensure session is updated even if already connected
+                try {
+                    wsRef.current.send(JSON.stringify(sessionUpdateMessage));
+                } catch { }
                 setStatus(NaturalVoiceStatus.ready);
                 resolve();
                 return;
@@ -225,20 +252,8 @@ const useNaturalVoice = ({ onError, voice = 'Ara', sampleRate = 24000 } = {}) =>
             wsRef.current = ws;
 
             ws.onopen = () => {
-                // Configure session for TTS (no input audio, just text->audio)
-                const sessionUpdate = {
-                    type: 'session.update',
-                    session: {
-                        voice,
-                        instructions: 'Read the provided text naturally and expressively.',
-                        turn_detection: null, // Disable VAD for TTS-only mode
-                        audio: {
-                            output: { format: { type: 'audio/pcm', rate: sampleRate } },
-                        },
-                    },
-                };
                 try {
-                    ws.send(JSON.stringify(sessionUpdate));
+                    ws.send(JSON.stringify(sessionUpdateMessage));
                 } catch (err) {
                     reportError('Failed to configure voice session');
                     reject(err);

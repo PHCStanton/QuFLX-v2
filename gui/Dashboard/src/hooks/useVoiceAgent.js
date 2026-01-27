@@ -363,6 +363,12 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
     [ensureOutputContext, reportError, shouldPlayAudio]
   );
 
+  const resetTranscript = useCallback(() => {
+    userTextAccumulator.current = '';
+    setTranscript('');
+    setPartial('');
+  }, []);
+
   const disconnect = useCallback(() => {
     // 1. Clean up Browser Speech
     if (recognitionRef.current) {
@@ -826,6 +832,7 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
     startRecording,
     stopRecording,
     stopAudioPlayback,
+    resetTranscript,
     isConnected: status === VoiceStatus.ready || status === VoiceStatus.recording,
     isRecording: status === VoiceStatus.recording,
     isSpeaking,

@@ -22,6 +22,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 export const QFLX_PERSIST_KEYS = {
   market: 'quflx-market',
   settings: 'quflx-settings',
+  user: 'quflx-user',
   rightPanelWidthPx: 'quflx.ui.rightPanelWidthPx',
   lastAnnotatedScreenshotDataUrl: 'quflx:lastAnnotatedScreenshotDataUrl'
 };

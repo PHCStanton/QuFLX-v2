@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSettingsStore from '../store/settingsStore';
 import useMarketStore from '../store/marketStore';
+import useUserStore from '../store/userStore';
 import {
   SettingsSection,
   SettingRow,
@@ -17,6 +18,7 @@ import useTextToSpeech from '../utils/useTextToSpeech';
 const SettingsPanel = () => {
   const { settings, updateSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
   const { assetFilterState, setAssetFilterState, activeIndicators, setActiveIndicators } = useMarketStore();
+  const { user, updateUser } = useUserStore();
   const sidebarSkinFileInputRef = useRef(null);
   const [sidebarSkinError, setSidebarSkinError] = useState('');
 
@@ -221,6 +223,41 @@ const SettingsPanel = () => {
             </button>
           </div>
         </div>
+
+        {/* User Account */}
+        <SettingsSection title="User Account">
+          <SettingRow label="Display Name" description="How you appear in the platform">
+            <input
+              type="text"
+              value={user?.name || ''}
+              onChange={(e) => updateUser({ name: e.target.value })}
+              className="bg-section-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+            />
+          </SettingRow>
+          <SettingRow label="Email Address" description="Primary contact and login email">
+            <input
+              type="email"
+              value={user?.email || ''}
+              onChange={(e) => updateUser({ email: e.target.value })}
+              className="bg-section-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+            />
+          </SettingRow>
+          <SettingRow label="Account Tier" description="Your current subscription level">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-accent-blue/20 text-accent-blue text-[10px] font-bold uppercase tracking-wider">
+                {user?.tier || 'Standard'}
+              </span>
+            </div>
+          </SettingRow>
+          <SettingRow label="API Access Key" description="Authenticated key for programmatic access">
+            <input
+              type="password"
+              value={user?.apiKey || ''}
+              readOnly
+              className="bg-section-bg/50 border border-border-primary rounded px-3 py-1.5 text-xs text-text-secondary cursor-not-allowed w-48"
+            />
+          </SettingRow>
+        </SettingsSection>
 
         {/* Global Settings */}
         <SettingsSection title="Global Settings">

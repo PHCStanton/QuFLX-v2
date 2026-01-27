@@ -105,6 +105,7 @@ async def voice_ws(websocket: WebSocket):
                 )
                 continue
 
+            logger.debug('Voice WS upstream << %s', event_type)
             await upstream.send(json.dumps(payload))
 
     async def upstream_to_client(upstream):
@@ -112,6 +113,13 @@ async def voice_ws(websocket: WebSocket):
             async for raw in upstream:
                 if websocket.client_state.name != 'CONNECTED':
                     break
+                try:
+                    payload = json.loads(raw)
+                    event_type = payload.get('type')
+                    if event_type not in ('response.audio.delta', 'response.audio_transcript.delta', 'response.text.delta'):
+                        logger.info('Voice downstream: %s', event_type)
+                except Exception:
+                    pass
                 await websocket.send_text(raw)
         finally:
             upstream_state['closed'] = True
