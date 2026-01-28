@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, Optional
 
 import httpx
@@ -42,6 +43,21 @@ class AIService:
             self.model = raw_model
 
         self.base_url = os.getenv("AI_BASE_URL", "https://api.x.ai/v1/chat/completions")
+
+        try:
+            default_timeout_seconds = float(os.getenv("AI_TIMEOUT_SECONDS", "75"))
+        except Exception:
+            default_timeout_seconds = 75.0
+
+        try:
+            self.timeout_seconds_fast = float(os.getenv("AI_TIMEOUT_SECONDS_FAST", "30"))
+        except Exception:
+            self.timeout_seconds_fast = 30.0
+
+        try:
+            self.timeout_seconds_slow = float(os.getenv("AI_TIMEOUT_SECONDS_SLOW", str(default_timeout_seconds)))
+        except Exception:
+            self.timeout_seconds_slow = default_timeout_seconds
         
         self._enabled = bool(self.api_key)
         if not self._enabled:
@@ -81,9 +97,18 @@ class AIService:
 
         verbosity = ''
         ui_mode = ''
+        has_custom_instructions = False
         if context:
             verbosity = str(context.get('responseVerbosity') or '').strip().lower()
             ui_mode = str(context.get('uiMode') or '').strip().lower()
+            has_custom_instructions = bool(str(context.get('customInstructions') or '').strip())
+
+        prompt_text = str(prompt or '')
+        prompt_len = len(prompt_text)
+        has_format_constraints = bool(re.search(r'\b(output\s*format|indicators\s*used|rating\s*:\s*\w|expiry\s*:)\b', prompt_text, flags=re.IGNORECASE))
+
+        is_complex_request = has_custom_instructions or has_format_constraints or prompt_len >= 500 or bool(image)
+        timeout_seconds = self.timeout_seconds_slow if is_complex_request else self.timeout_seconds_fast
 
         system_content = "You are a helpful trading assistant for QuFLX."
         
@@ -93,7 +118,7 @@ class AIService:
         if context and context.get('customInstructions'):
             instr = str(context.get('customInstructions')).strip()
             if instr:
-                 system_content = f"{instr}\n\n{system_content}"
+                system_content = f"{instr}\n\n{system_content}"
 
         if ui_mode == 'modal':
             system_content += "\n\nThis is a quick Ask AI modal response. Keep it short, actionable, and skimmable."
@@ -161,7 +186,17 @@ class AIService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info(
+                'AIService.ask timeout_seconds=%s complex=%s has_custom_instructions=%s has_format_constraints=%s ui_mode=%s verbosity=%s',
+                timeout_seconds,
+                is_complex_request,
+                has_custom_instructions,
+                has_format_constraints,
+                ui_mode or '-',
+                verbosity or '-',
+            )
+
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                 response = await client.post(
                     self.base_url,
                     headers={

@@ -1,6 +1,6 @@
 import Card from './Card';
 import { Volume2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import useAskAi from '../hooks/useAskAi';
@@ -112,18 +112,18 @@ const AiInsightsPanel = () => {
     }
   };
 
-  const stopSpeaking = () => {
+  const stopSpeaking = useCallback(() => {
     if (readBackMode === 'server') {
       stopNatural();
     } else {
       stopTts();
     }
-  };
+  }, [readBackMode, stopNatural, stopTts]);
 
   useEffect(() => {
     if (!isAsking) return;
     if (isSpeaking) stopSpeaking();
-  }, [isAsking, isSpeaking]);
+  }, [isAsking, isSpeaking, stopSpeaking]);
 
 
   const contextInstructions = useMemo(() => {
@@ -138,8 +138,9 @@ const AiInsightsPanel = () => {
       selectedTimeframe,
     });
 
-    // Remove duplicates
-    const { asset: _a, timeframe: _t, ...dataCtx } = ctx;
+    const dataCtx = { ...ctx };
+    delete dataCtx.asset;
+    delete dataCtx.timeframe;
 
     let base = `You are the QuFLX AI Insights Assistant. Analyzing ${selectedAsset || 'the asset'} on ${selectedTimeframe || 'the chart'}.\n\n`;
     base += `Current Market Data Context:\n${JSON.stringify(dataCtx, null, 2)}\n\n`;

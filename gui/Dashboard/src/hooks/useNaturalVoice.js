@@ -240,7 +240,9 @@ const useNaturalVoice = ({ onError, voice = 'Ara', sampleRate = 24000 } = {}) =>
                 // Ensure session is updated even if already connected
                 try {
                     wsRef.current.send(JSON.stringify(sessionUpdateMessage));
-                } catch { }
+                } catch (err) {
+                    console.warn('Failed to update natural voice session:', err);
+                }
                 setStatus(NaturalVoiceStatus.ready);
                 resolve();
                 return;
@@ -297,7 +299,7 @@ const useNaturalVoice = ({ onError, voice = 'Ara', sampleRate = 24000 } = {}) =>
                 reject(new Error('WebSocket error'));
             };
 
-            ws.onclose = (e) => {
+            ws.onclose = () => {
                 const wasClosing = Boolean(closingRef.current);
                 closingRef.current = false;
                 if (wasClosing) {

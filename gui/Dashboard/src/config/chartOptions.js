@@ -84,6 +84,18 @@ export const indicatorOptions = [
     ],
   },
   {
+    label: 'ATR',
+    value: 'atr',
+    key: 'atr_14',
+    kind: 'oscillator',
+    displayValue: '14',
+    source: 'backend',
+    params: { period: 14 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 1, max: 200, default: 14 },
+    ],
+  },
+  {
     label: 'Schaff Trend Cycle',
     value: 'stc',
     key: 'schaff_tc',

@@ -89,11 +89,6 @@ const isAudioDeltaType = (type) => {
   return t.includes('audio') && !t.includes('transcript');
 };
 
-const isTextDeltaType = (type) => {
-  const t = String(type || '').toLowerCase();
-  return t.includes('text') || t.includes('transcript') || t.includes('output_text');
-};
-
 const extractTextDelta = (msg) => {
   if (!msg || typeof msg !== 'object') return null;
   const type = typeof msg.type === 'string' ? msg.type : '';
@@ -661,14 +656,9 @@ const useVoiceAgent = ({ onError, mode = 'dictation', voice = 'Ara', sampleRate 
       recognition.lang = 'en-US';
 
       recognition.onresult = (e) => {
-        let finalTrans = '';
         let interimTrans = '';
         for (let i = e.resultIndex; i < e.results.length; ++i) {
-          if (e.results[i].isFinal) {
-            finalTrans += e.results[i][0].transcript;
-          } else {
-            interimTrans += e.results[i][0].transcript;
-          }
+          interimTrans += e.results[i][0].transcript;
         }
         if (interimTrans) setPartial(interimTrans);
         // In Server Hybrid mode, we use browser ONLY for partials/interim. We rely on Server for final.

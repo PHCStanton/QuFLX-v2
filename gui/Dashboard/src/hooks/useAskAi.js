@@ -26,13 +26,40 @@ const useAskAi = ({
   const [isAsking, setIsAsking] = useState(false);
 
   const ask = useCallback(async ({ prompt, imageSourceOverride, forceImageDataUrl } = {}) => {
+    const isTimeoutError = (err) => {
+      const msg = getErrorMessage(err).toLowerCase();
+      return msg.includes('code=timeout') || msg.includes('timed out') || msg.includes('timeout');
+    };
+
+    const shrinkContext = ({ context, level }) => {
+      if (!context || typeof context !== 'object') return context;
+      const next = { ...context };
+
+      if (Array.isArray(next.recentTicks)) {
+        const keep = level === 'aggressive' ? 8 : 15;
+        next.recentTicks = next.recentTicks.slice(-keep);
+      }
+
+      if (next.indicatorSnapshots && typeof next.indicatorSnapshots === 'object') {
+        const snapped = {};
+        const keep = level === 'aggressive' ? 12 : 25;
+        Object.entries(next.indicatorSnapshots).forEach(([k, v]) => {
+          if (!Array.isArray(v)) return;
+          snapped[k] = v.slice(-keep);
+        });
+        next.indicatorSnapshots = snapped;
+      }
+
+      return next;
+    };
+
     if (isAsking) return null;
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       if (onError) onError('Ask AI requires a non-empty prompt.');
       return null;
     }
 
-    const context = buildAiContext({
+    let context = buildAiContext({
       autoIncludeContext,
       marketData,
       selectedAssetKey,
@@ -52,19 +79,48 @@ const useAskAi = ({
       context.customInstructions = String(customInstructions);
     }
 
+    const trimmedPrompt = prompt.trim();
+    const complexPrompt = trimmedPrompt.length >= 450;
+
+    if (complexPrompt) {
+      context = shrinkContext({ context, level: 'normal' });
+    }
+
     const src = imageSourceOverride || imageSource;
+    let usedImageSource = String(src || 'live');
 
     try {
       setIsAsking(true);
-      const image = forceImageDataUrl
-        ? forceImageDataUrl
-        : await resolveAiImage({
-          imageSource: src,
+      const resolveImage = async (source) => {
+        if (forceImageDataUrl) {
+          return forceImageDataUrl;
+        }
+        return resolveAiImage({
+          imageSource: source,
           lastAnnotatedImage,
           captureImage,
         });
+      };
 
-      const response = await askAI({ prompt: prompt.trim(), context, image });
+      const runRequest = async ({ requestContext, requestImageSource }) => {
+        const image = await resolveImage(requestImageSource);
+        return askAI({ prompt: trimmedPrompt, context: requestContext, image });
+      };
+
+      let response;
+      try {
+        response = await runRequest({ requestContext: context, requestImageSource: src });
+      } catch (err) {
+        if (isTimeoutError(err)) {
+          const retryContext = shrinkContext({ context, level: 'aggressive' });
+          response = await runRequest({ requestContext: retryContext, requestImageSource: 'none' });
+          context = retryContext;
+          usedImageSource = 'none';
+        } else {
+          throw err;
+        }
+      }
+
       if (!response || !response.answer) {
         const msg = 'AI did not return an answer.';
         if (onError) onError(msg);
@@ -74,7 +130,7 @@ const useAskAi = ({
       return {
         answer: String(response.answer),
         meta: response.meta || null,
-        usedImageSource: String(src || 'live'),
+        usedImageSource,
         asset: selectedAsset,
         timeframe: selectedTimeframe,
       };
@@ -93,6 +149,7 @@ const useAskAi = ({
     autoIncludeContext,
     responseVerbosity,
     uiMode,
+    customInstructions,
     marketData,
     selectedAssetKey,
     indicatorSeries,

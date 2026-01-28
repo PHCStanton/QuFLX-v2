@@ -84,6 +84,10 @@ class IndicatorCalculator:
                     if 'period' in p: pipeline_params['ema_fast'] = p['period']
                 elif ind_key == 'adx':
                     if 'period' in p: pipeline_params['adx_period'] = p['period']
+                elif ind_key == 'atr' or ind_key == 'atr_14':
+                    if 'period' in p: pipeline_params['atr_period'] = p['period']
+                elif ind_key == 'atr_21':
+                    if 'period' in p: pipeline_params['atr_period_2'] = p['period']
                 elif ind_key == 'stc' or ind_key == 'schaff_tc':
                     if 'fast' in p: pipeline_params['schaff_fast'] = p['fast']
                     if 'slow' in p: pipeline_params['schaff_slow'] = p['slow']

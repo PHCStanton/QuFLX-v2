@@ -3,7 +3,7 @@ import { X, Upload, Check, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import useUserStore from '../store/userStore';
 
 const ProfilePicEditorModal = ({ isOpen, onClose }) => {
-    const { user, updateUser } = useUserStore();
+    const { updateUser } = useUserStore();
     const [image, setImage] = useState(null);
     const [scale, setScale] = useState(1);
     const [rotation, setRotation] = useState(0);
@@ -11,7 +11,6 @@ const ProfilePicEditorModal = ({ isOpen, onClose }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-    const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
     const imgRef = useRef(null);
 

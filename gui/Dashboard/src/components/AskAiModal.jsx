@@ -118,6 +118,7 @@ const AskAiModal = ({
   forceImageDataUrl,
 }) => {
   const { settings } = useSettingsStore();
+  const customInstructions = settings?.ai?.customInstructions;
   const useWhiteModalSurface = true;
   const {
     setActiveTab,
@@ -195,7 +196,7 @@ const AskAiModal = ({
   }, [readBackMode, speakNatural, speakTts, ttsOptions]);
 
   const contextInstructions = useMemo(() => {
-    const custom = settings?.ai?.customInstructions;
+    const custom = customInstructions;
     const ctx = buildAiContext({
       autoIncludeContext: true,
       marketData,
@@ -206,8 +207,9 @@ const AskAiModal = ({
       selectedTimeframe: timeframe,
     });
 
-    // Remove duplicates from context display
-    const { asset: _a, timeframe: _t, ...dataCtx } = ctx;
+    const dataCtx = { ...ctx };
+    delete dataCtx.asset;
+    delete dataCtx.timeframe;
 
     let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}.\n\n`;
     base += `Current Market Data Context:\n${JSON.stringify(dataCtx, null, 2)}\n\n`;
@@ -217,7 +219,7 @@ const AskAiModal = ({
       base = `${custom}\n\n${base}`;
     }
     return base;
-  }, [asset, timeframe, settings?.ai?.customInstructions, marketData, selectedAssetKey, indicatorSeries, activeIndicators]);
+  }, [asset, timeframe, customInstructions, marketData, selectedAssetKey, indicatorSeries, activeIndicators]);
 
   const {
     status: voiceStatus,
@@ -285,7 +287,7 @@ const AskAiModal = ({
         prompt,
         imageSourceOverride: localImageSource,
         forceImageDataUrl,
-        context: { customInstructions: settings?.ai?.customInstructions }
+        context: { customInstructions }
       });
       if (!result) {
         setAnswer('⚠️ System Error: The AI request timed out or failed.\n\nPlease close and reopen this "Ask AI" modal, then try again.');
@@ -318,6 +320,7 @@ const AskAiModal = ({
     readBackEnabled,
     speakText,
     setError,
+    customInstructions,
   ]);
 
   useEffect(() => {
@@ -370,9 +373,7 @@ const AskAiModal = ({
     const preset = PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     const next = preset.promptTemplate({ asset, timeframe });
-    if (next) {
-      setAiDraftPrompt(next);
-    }
+    setAiDraftPrompt(next);
     if (presetId === 'top_down') {
       setActiveTab('ai_insights');
     }
@@ -431,7 +432,11 @@ const AskAiModal = ({
               {isThinking ? (
                 <div className={`mt-2 inline-flex items-center gap-2 text-[11px] ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>
                   <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                  <span>AI is thinking…</span>
+                  <span>
+                    {activePreset.id === 'custom' || String(aiDraftPrompt || '').trim().length >= 450
+                      ? 'AI is thinking… (complex analysis may take longer)'
+                      : 'AI is thinking…'}
+                  </span>
                 </div>
               ) : null}
             </div>

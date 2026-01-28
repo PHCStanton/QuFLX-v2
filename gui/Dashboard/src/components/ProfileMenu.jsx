@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import avatarPlaceholder from '../assets/profile_pic_new.png';
 import useMarketStore from '../store/marketStore';
 import useUserStore from '../store/userStore';

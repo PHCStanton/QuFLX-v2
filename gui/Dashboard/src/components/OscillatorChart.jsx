@@ -44,6 +44,7 @@ const OscillatorChart = ({
     let series;
     const isRSI = indicatorValue === 'rsi' || (title && title.toLowerCase().includes('rsi'));
     const isCCI = indicatorValue === 'cci' || (title && title.toLowerCase().includes('cci'));
+    const isATR = indicatorValue === 'atr' || (title && title.toLowerCase().includes('atr'));
 
     if (type === 'histogram') {
       series = chart.addSeries(HistogramSeries, {
@@ -51,8 +52,17 @@ const OscillatorChart = ({
       });
     } else {
       series = chart.addSeries(LineSeries, {
-        color: isCCI ? '#facc15' : '#22c55e', // yellow-400 for CCI
-        lineWidth: 1.5
+        color: isATR ? '#38bdf8' : isCCI ? '#facc15' : '#22c55e',
+        lineWidth: 1.5,
+        ...(isATR
+          ? {
+              priceFormat: {
+                type: 'custom',
+                minMove: 0.00001,
+                formatter: (price) => (Number.isFinite(price) ? price.toFixed(5) : ''),
+              },
+            }
+          : {}),
       });
     }
 

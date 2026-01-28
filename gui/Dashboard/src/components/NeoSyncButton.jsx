@@ -1,5 +1,3 @@
-import React from 'react';
-
 const NeoSyncButton = ({ onClick, disabled, size = 42, active, linked }) => {
   const shadowDistance = Math.round(size * 0.1);
   const shadowBlur = Math.round(size * 0.2);
