@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neomorphic Controls: Rec • Play • Pause</title>
+    <style>
+        body {
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #181a20;
+            font-family: system-ui, sans-serif;
+        }
+
+        .controls {
+            display: flex;
+            gap: 32px;
+            /* space between buttons */
+        }
+
+        .neo-btn {
+            --bg: #1e2128;
+            --shadow-dark: rgba(0, 0, 0, 0.82);
+            --shadow-light: rgba(60, 70, 90, 0.18);
+            --radius: 32px;
+            --size: 140px;
+
+            width: var(--size);
+            height: var(--size);
+            border-radius: var(--radius);
+            background: var(--bg);
+
+            box-shadow:
+                14px 14px 28px var(--shadow-dark),
+                -10px -10px 20px var(--shadow-light);
+
+            transition: box-shadow 0.28s ease, transform 0.16s ease;
+            cursor: pointer;
+            border: none;
+            outline: none;
+
+            display: grid;
+            place-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .neo-btn:hover {
+            box-shadow:
+                18px 18px 36px rgba(0, 0, 0, 0.9),
+                -12px -12px 24px rgba(50, 60, 80, 0.22),
+                0 0 16px rgba(0, 0, 0, 0.6);
+            transform: translateY(-1px);
+        }
+
+        .neo-btn:active {
+            box-shadow:
+                inset 12px 12px 24px var(--shadow-dark),
+                inset -8px -8px 16px var(--shadow-light);
+            transform: translateY(2px);
+        }
+
+        .neo-btn svg {
+            width: 58%;
+            height: 58%;
+            transition: filter 0.25s ease;
+        }
+
+        /* Glow on hover – color per button */
+        .btn-record:hover svg {
+            filter:
+                drop-shadow(0 0 6px #f44336) drop-shadow(0 0 10px #ef5350) drop-shadow(0 0 16px #d32f2f);
+        }
+
+        .btn-play:hover svg,
+        .btn-pause:hover svg {
+            filter:
+                drop-shadow(0 0 5px #bb86fc) drop-shadow(0 0 8px #bb86fc) drop-shadow(0 0 12px #7c4dff);
+        }
+
+        /* Pulsating background for Record at rest */
+        .btn-record .pulse-bg {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 50%,
+                    rgba(244, 67, 54, 0.18) 0%,
+                    rgba(244, 67, 54, 0.06) 60%,
+                    transparent 80%);
+            animation: pulse 4.2s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.35;
+                transform: scale(0.90);
+            }
+
+            50% {
+                opacity: 0.80;
+                transform: scale(1.12);
+            }
+        }
+
+        /* Subtle highlight for all buttons */
+        .neo-btn::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: var(--radius);
+            background: linear-gradient(145deg,
+                    rgba(255, 255, 255, 0.07) 0%,
+                    transparent 50%,
+                    rgba(0, 0, 0, 0.04) 100%);
+            pointer-events: none;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="controls">
+
+        <!-- Record Button -->
+        <button class="neo-btn btn-record" aria-label="Record">
+            <div class="pulse-bg"></div>
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="28" fill="#f44336" />
+                <rect x="46" y="22" width="8" height="14" fill="#f44336" rx="4" />
+                <circle cx="50" cy="50" r="18" fill="#0f111a" />
+            </svg>
+        </button>
+
+        <!-- Play Button -->
+        <button class="neo-btn btn-play" aria-label="Play">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <polygon points="35,25 35,75 75,50" fill="#f0f0f0" />
+            </svg>
+        </button>
+
+        <!-- Pause Button -->
+        <button class="neo-btn btn-pause" aria-label="Pause">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <rect x="34" y="24" width="14" height="52" rx="7" fill="#f0f0f0" />
+                <rect x="52" y="24" width="14" height="52" rx="7" fill="#f0f0f0" />
+            </svg>
+        </button>
+
+    </div>
+
+</body>
+
+</html>
