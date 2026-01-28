@@ -433,6 +433,7 @@ class HistoryCollector(Capability):
 
                 if isinstance(c, (list, tuple)):
                     if len(c) == 5:
+                        # Format [ts, open, close, high, low]
                         candles.append(
                             Candle(
                                 timestamp=float(c[0]),
@@ -445,13 +446,14 @@ class HistoryCollector(Capability):
                         )
                         continue
                     if len(c) >= 6:
+                        # Format [ts, open, close, high, low, volume]
                         candles.append(
                             Candle(
                                 timestamp=float(c[0]),
                                 open=float(c[1]),
-                                high=float(c[2]),
-                                low=float(c[3]),
-                                close=float(c[4]),
+                                high=float(c[3]),
+                                close=float(c[2]),
+                                low=float(c[4]),
                                 volume=float(c[5]),
                             )
                         )

@@ -145,17 +145,27 @@ class CollectorService:
             raw_candles = ev.get("candles")
             if isinstance(raw_candles, list) and raw_candles:
                 for c in raw_candles:
-                    if not isinstance(c, dict):
-                        continue
                     try:
-                        ts = float(c.get("timestamp"))
-                        o = float(c.get("open"))
-                        h = float(c.get("high"))
-                        l = float(c.get("low"))
-                        cl = float(c.get("close"))
-                        v = float(c.get("volume", 0.0))
+                        if isinstance(c, dict):
+                            ts = float(c.get("timestamp"))
+                            o = float(c.get("open"))
+                            h = float(c.get("high"))
+                            l = float(c.get("low"))
+                            cl = float(c.get("close"))
+                            v = float(c.get("volume", 0.0))
+                        elif isinstance(c, (list, tuple)) and len(c) >= 5:
+                            # Unified format: [timestamp, open, close, high, low, ...]
+                            ts = float(c[0])
+                            o = float(c[1])
+                            cl = float(c[2])
+                            h = float(c[3])
+                            l = float(c[4])
+                            v = float(c[5]) if len(c) >= 6 else 0.0
+                        else:
+                            continue
                     except Exception:
                         continue
+                        
                     candles_out.append({
                         "timestamp": ts,
                         "open": o,

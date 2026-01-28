@@ -35,7 +35,7 @@ async def capture_chart_screenshot(payload: Dict[str, Any] = Body(...)):
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"{safe_asset}_{safe_timeframe}_{ts}{suffix}.png"
         
-        output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../data/data_output/screenshots"))
+        output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../data/screenshots"))
         os.makedirs(output_dir, exist_ok=True)
         filepath = os.path.join(output_dir, filename)
 
@@ -119,7 +119,7 @@ async def save_chart_screenshot(payload: Dict[str, Any] = Body(...)):
         suffix = "_annotated" if annotated else ""
         filename = f"{safe_asset}_{safe_timeframe}_{ts}{suffix}.png"
         
-        output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../data/data_output/screenshots"))
+        output_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../data/screenshots"))
         os.makedirs(output_dir, exist_ok=True)
         filepath = os.path.join(output_dir, filename)
 

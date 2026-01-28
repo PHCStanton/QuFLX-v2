@@ -1,4 +1,5 @@
 import Card from './Card';
+import AssetPayoutPanel from './AssetPayoutPanel';
 import { Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import useMarketStore from '../store/marketStore';
@@ -196,7 +197,17 @@ const AiInsightsPanel = () => {
 
   return (
     <div className="col-span-3 flex flex-col gap-2 h-full min-h-0">
-      <Card className="p-3 rounded-lg h-full overflow-y-auto quflx-section-light">
+      {/* 92% Payout Assets Section */}
+      <div className="flex-none min-h-[40px] max-h-[40%] overflow-hidden">
+        <AssetPayoutPanel
+          showControls={false}
+          defaultIsTopCollapsed={true}
+          initialTopHeight={0}
+        />
+      </div>
+
+      {/* AI Insights Chat Section */}
+      <Card className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div>
             <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">AI Insights</h3>
