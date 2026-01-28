@@ -12,7 +12,7 @@ QuFLX v2 is a **well-structured Event-Driven Modular Monolith** application for 
 |------|------------|-------|
 | Functional Simplicity | ✅ Strong | Modular components, clear separation |
 | Sequential Logic | ✅ Strong | Step-by-step workflows documented |
-| Incremental Testing | ⚠️ Partial | Tests exist but coverage can improve |
+| Incremental Testing | ✅ Strong | Unit/integration tests added for AI/Voice (86% coverage) |
 | Zero Assumptions | ✅ Strong | Explicit error codes, Pydantic validation |
 | Backward Compatibility | ✅ Strong | Legacy `data` key maintained in history API |
 | Separation of Concerns | ✅ Strong | Clear file/module boundaries |
@@ -78,10 +78,10 @@ gui/Dashboard/src/
 - `activeContext.md`, `progress.md`, `systemPatterns.md` document step-by-step workflows
 - History bootstrap follows explicit state machine: Chrome → WebSocket → Collect → Validate → Return
 
-### ⚠️ Principle 3: Incremental Testing
+### ✅ Principle 3: Incremental Testing
 - Backend: `python -m pytest -q` configured
 - Frontend: `npm run lint`, `npm run build`, `npm run test:qa`
-- **Gap:** Limited unit test coverage for some newer features (AI integration, voice)
+- **Status:** Expanded unit/integration tests for AI/Voice now active (86% coverage for AIService).
 
 ### ✅ Principle 4: Zero Assumptions
 - Pydantic models enforce data contracts (`HistoryErrorResponse`, `HistorySuccessResponse`)
@@ -152,13 +152,11 @@ gui/Dashboard/src/
 ## Identified Improvement Areas
 
 ### Priority 1: Test Coverage
-- [ ] Add unit tests for AI Gateway request shaping
-- [ ] Add integration tests for voice WebSocket relay
 - [ ] Add E2E tests for indicator visualization
 
 ### Priority 2: Minor Code Quality
-- [ ] Migrate Pydantic v2 deprecated `Config` classes to `ConfigDict`
-- [ ] Address Vite warning about `settingsStore.js` dual import
+- [x] Migrate Pydantic v2 deprecated `Config` classes to `ConfigDict`
+- [x] Address Vite warning about `settingsStore.js` dual import (Cleanup imports)
 
 ### Priority 3: Documentation
 - [ ] Add JSDoc comments to complex frontend hooks

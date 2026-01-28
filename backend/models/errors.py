@@ -5,7 +5,7 @@ Implements CORE_PRINCIPLE #9: Fail Fast, Fail Loud, Fail Predictably
 """
 
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any
 
 
@@ -51,8 +51,8 @@ class HistoryErrorResponse(BaseModel):
     user_message: str = Field(..., description="User-friendly message for UI display")
     details: Optional[Dict[str, Any]] = Field(default=None, description="Additional error context")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "ok": False,
                 "error_code": "manual_click_timeout",
@@ -64,6 +64,7 @@ class HistoryErrorResponse(BaseModel):
                 }
             }
         }
+    )
 
 
 class HistorySuccessResponse(BaseModel):
@@ -78,8 +79,8 @@ class HistorySuccessResponse(BaseModel):
     file_path: Optional[str] = Field(default=None, description="Path to saved CSV file (if applicable)")
     collection_time_ms: Optional[float] = Field(default=None, description="Collection duration in milliseconds")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "ok": True,
                 "asset": "AUDCAD OTC",
@@ -98,6 +99,7 @@ class HistorySuccessResponse(BaseModel):
                 "collection_time_ms": 21450.5
             }
         }
+    )
 
 
 # User-friendly message mappings for each error code

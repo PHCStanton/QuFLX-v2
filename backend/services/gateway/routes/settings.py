@@ -1,10 +1,10 @@
 import os
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 router = APIRouter()
 logger = logging.getLogger("gateway.settings")
@@ -37,6 +37,14 @@ class AISettings(BaseModel):
     autoIncludeChart: bool = True
     autoIncludeContext: bool = True
     imageSource: str = "live"
+    voiceInputMode: str = "off"
+    voiceReadBackEnabled: bool = False
+    voiceReadBackMode: str = "browser"
+    voiceReadBackVoice: str = "Ara"
+    voiceReadBackRate: float = 1.0
+    voiceReadBackPitch: float = 1.0
+    voiceReadBackVoiceURI: Optional[str] = None
+    customInstructions: str = ""
 
 class ScreenshotSettings(BaseModel):
     defaultTool: str = "arrow"
@@ -68,11 +76,10 @@ class PlatformSettings(BaseModel):
     calendarJournal: Dict[str, Any] = Field(default_factory=dict)
     strategyLab: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 def get_default_settings() -> Dict[str, Any]:
-    return PlatformSettings().dict(by_alias=True)
+    return PlatformSettings().model_dump(by_alias=True)
 
 def load_settings() -> Dict[str, Any]:
     try:
@@ -120,7 +127,7 @@ async def update_platform_settings(payload: Dict[str, Any] = Body(...)):
     try:
         # Validate payload against Pydantic model
         validated = PlatformSettings(**payload)
-        settings_dict = validated.dict(by_alias=True)
+        settings_dict = validated.model_dump(by_alias=True)
         save_settings(settings_dict)
         return settings_dict
     except ValueError as e:

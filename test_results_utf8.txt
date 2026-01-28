@@ -1,0 +1,242 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0 -- C:\Users\piete\anaconda3\envs\QuFLX-v2\python.exe
+cachedir: .pytest_cache
+rootdir: C:\QuFLX\v2
+configfile: pytest.ini
+plugins: anyio-4.12.0, logfire-4.15.1, asyncio-1.3.0, cov-7.0.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 14 items
+
+backend/tests/test_ai_service.py::test_ask_success PASSED                [  7%]
+backend/tests/test_ai_service.py::test_ask_missing_api_key PASSED        [ 14%]
+backend/tests/test_ai_service.py::test_ask_provider_error PASSED         [ 21%]
+backend/tests/test_ai_service.py::test_ask_timeout PASSED                [ 28%]
+backend/tests/test_ai_service.py::test_prompt_construction PASSED        [ 35%]
+backend/tests/test_ai_routes.py::test_ask_ai_route_success FAILED        [ 42%]
+backend/tests/test_ai_routes.py::test_ask_ai_route_validation_error PASSED [ 50%]
+backend/tests/test_ai_routes.py::test_ask_ai_route_image_too_large PASSED [ 57%]
+backend/tests/test_ai_routes.py::test_ask_ai_route_service_error FAILED  [ 64%]
+backend/tests/test_ai_voice_ws.py::test_voice_ws_missing_api_key PASSED  [ 71%]
+backend/tests/test_ai_voice_ws.py::test_voice_ws_invalid_json FAILED     [ 78%]
+backend/tests/test_ai_voice_ws.py::test_voice_ws_unsupported_event FAILED [ 85%]
+backend/tests/test_ai_voice_ws.py::test_voice_ws_relay_flow PASSED       [ 92%]
+backend/tests/test_ai_voice_ws.py::test_voice_ws_upstream_fails PASSED   [100%]
+
+================================== FAILURES ===================================
+__________________________ test_ask_ai_route_success __________________________
+
+    @pytest.mark.asyncio
+    async def test_ask_ai_route_success():
+        mock_result = {
+            "answer": "Hello from mock AI",
+            "meta": {"ok": True}
+        }
+    
+        with patch("backend.services.gateway.routes.ai._get_ai_service") as mock_get_service:
+            mock_service = AsyncMock()
+            mock_service.ask.return_value = mock_result
+            mock_get_service.return_value = mock_service
+    
+            response = client.post(
+                "/api/v1/ai/ask",
+                json={"prompt": "How is the market?", "asset": "EURUSD"}
+            )
+    
+            assert response.status_code == 200
+            data = response.json()
+>           assert data["answer"] == "Hello from mock AI"
+E           assert "I'm sorry, b...o analyze it." == 'Hello from mock AI'
+E             
+E             - Hello from mock AI
+E             + I'm sorry, but the current QuFLX TradingContext doesn't provide live ticks, candles, or indicators for EURUSD. Without sufficient data, I can't give an accurate market assessment. If you have more details or can provide updated context, I'd be happy to analyze it.
+
+backend\tests\test_ai_routes.py:28: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-01-27T10:09:32Z | INFO | gateway.ai | run=ec07f18aa808 req=6b84bab6fa98 | AI ask request_id=6b84bab6fa98 asset=EURUSD timeframe=- image_present=False context_keys=1
+2026-01-27T10:09:32Z | INFO | AIService | run=ec07f18aa808 req=6b84bab6fa98 | AIService.ask request_id=6b84bab6fa98 model=grok-4-latest asset=EURUSD timeframe=- image_present=False prompt_len=18
+2026-01-27T10:09:39Z | INFO | httpx | run=ec07f18aa808 req=6b84bab6fa98 | HTTP Request: POST https://api.x.ai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-27T10:09:39Z | INFO | httpx | run=ec07f18aa808 req=- | HTTP Request: POST http://testserver/api/v1/ai/ask "HTTP/1.1 200 OK"
+------------------------------ Captured log call ------------------------------
+INFO     gateway.ai:ai.py:150 AI ask request_id=6b84bab6fa98 asset=EURUSD timeframe=- image_present=False context_keys=1
+INFO     AIService:service.py:72 AIService.ask request_id=6b84bab6fa98 model=grok-4-latest asset=EURUSD timeframe=- image_present=False prompt_len=18
+INFO     httpx:_client.py:1740 HTTP Request: POST https://api.x.ai/v1/chat/completions "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/ai/ask "HTTP/1.1 200 OK"
+_______________________ test_ask_ai_route_service_error _______________________
+
+    @pytest.mark.asyncio
+    async def test_ask_ai_route_service_error():
+        with patch("backend.services.gateway.routes.ai._get_ai_service") as mock_get_service:
+            mock_service = AsyncMock()
+            mock_service.ask.side_effect = AIServiceError(
+                code="provider_error",
+                user_message="AI provider failed",
+                status_code=502,
+                retryable=True
+            )
+            mock_get_service.return_value = mock_service
+    
+            response = client.post(
+                "/api/v1/ai/ask",
+                json={"prompt": "Error test"}
+            )
+    
+>           assert response.status_code == 502
+E           assert 200 == 502
+E            +  where 200 = <Response [200 OK]>.status_code
+
+backend\tests\test_ai_routes.py:70: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-01-27T10:09:39Z | INFO | gateway.ai | run=ec07f18aa808 req=84166e6bc20c | AI ask request_id=84166e6bc20c asset=- timeframe=- image_present=False context_keys=0
+2026-01-27T10:09:39Z | INFO | AIService | run=ec07f18aa808 req=84166e6bc20c | AIService.ask request_id=84166e6bc20c model=grok-4-latest asset=- timeframe=- image_present=False prompt_len=10
+2026-01-27T10:09:48Z | INFO | httpx | run=ec07f18aa808 req=84166e6bc20c | HTTP Request: POST https://api.x.ai/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-27T10:09:48Z | INFO | httpx | run=ec07f18aa808 req=- | HTTP Request: POST http://testserver/api/v1/ai/ask "HTTP/1.1 200 OK"
+------------------------------ Captured log call ------------------------------
+INFO     gateway.ai:ai.py:150 AI ask request_id=84166e6bc20c asset=- timeframe=- image_present=False context_keys=0
+INFO     AIService:service.py:72 AIService.ask request_id=84166e6bc20c model=grok-4-latest asset=- timeframe=- image_present=False prompt_len=10
+INFO     httpx:_client.py:1740 HTTP Request: POST https://api.x.ai/v1/chat/completions "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/ai/ask "HTTP/1.1 200 OK"
+_________________________ test_voice_ws_invalid_json __________________________
+
+voice_app = <fastapi.applications.FastAPI object at 0x00000153CA9734A0>
+
+    def test_voice_ws_invalid_json(voice_app):
+        client = TestClient(voice_app)
+    
+        # We need to mock websockets.connect to prevent it from actually trying to connect
+        with patch("websockets.connect", new_callable=AsyncMock) as mock_connect:
+            # Mock the async context manager
+            mock_upstream = AsyncMock()
+            mock_connect.return_value.__aenter__.return_value = mock_upstream
+    
+            with client.websocket_connect('/api/v1/ai/voice/ws') as ws:
+                ws.send_text("not json")
+                msg = ws.receive_json()
+>               assert msg['code'] == 'invalid_json'
+E               AssertionError: assert 'relay_failed' == 'invalid_json'
+E                 
+E                 - invalid_json
+E                 + relay_failed
+
+backend\tests\test_ai_voice_ws.py:42: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-01-27T10:09:48Z | INFO | gateway.ai_voice | run=ec07f18aa808 req=- | Voice WS connect request_id=7984d7fb7ffd upstream=wss://api.x.ai/v1/realtime
+2026-01-27T10:09:48Z | ERROR | gateway.ai_voice | run=ec07f18aa808 req=- | Voice WS failed request_id=7984d7fb7ffd
+Traceback (most recent call last):
+  File "C:\QuFLX\v2\backend\services\gateway\routes\ai_voice.py", line 130, in voice_ws
+    async with websockets.connect(
+               ^^^^^^^^^^^^^^^^^^^
+TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+------------------------------ Captured log call ------------------------------
+INFO     gateway.ai_voice:ai_voice.py:63 Voice WS connect request_id=7984d7fb7ffd upstream=wss://api.x.ai/v1/realtime
+ERROR    gateway.ai_voice:ai_voice.py:171 Voice WS failed request_id=7984d7fb7ffd
+Traceback (most recent call last):
+  File "C:\QuFLX\v2\backend\services\gateway\routes\ai_voice.py", line 130, in voice_ws
+    async with websockets.connect(
+               ^^^^^^^^^^^^^^^^^^^
+TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+conda.exe : ERROR 
+conda.cli.main_run:execute(125): 
+`conda run python -m pytest 
+backend/tests/test_ai_service.py 
+backend/tests/test_ai_routes.py 
+backend/tests/test_ai_voice_ws.py` 
+failed. (See above for error)
+At C:\Users\piete\anaconda3\shell\cond
+abin\Conda.psm1:153 char:17
++ ...             & $Env:CONDA_EXE 
+$Env:_CE_M $Env:_CE_CONDA $Command 
+@Othe ...
++                 ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpec 
+   ified: (ERROR conda.cli...bove fo  
+  r error):String) [], RemoteExcept   
+ ion
+    + FullyQualifiedErrorId : NativeC 
+   ommandError
+ 
+_______________________ test_voice_ws_unsupported_event _______________________
+
+voice_app = <fastapi.applications.FastAPI object at 0x00000153CAD5FD40>
+
+    def test_voice_ws_unsupported_event(voice_app):
+        client = TestClient(voice_app)
+    
+        with patch("websockets.connect", new_callable=AsyncMock) as mock_connect:
+            mock_upstream = AsyncMock()
+            mock_connect.return_value.__aenter__.return_value = mock_upstream
+    
+            with client.websocket_connect('/api/v1/ai/voice/ws') as ws:
+                ws.send_json({"type": "malicious.event", "data": "hack"})
+                msg = ws.receive_json()
+>               assert msg['code'] == 'unsupported_event'
+E               AssertionError: assert 'relay_failed' == 'unsupported_event'
+E                 
+E                 - unsupported_event
+E                 + relay_failed
+
+backend\tests\test_ai_voice_ws.py:54: AssertionError
+---------------------------- Captured stdout call -----------------------------
+2026-01-27T10:09:48Z | INFO | gateway.ai_voice | run=ec07f18aa808 req=- | Voice WS connect request_id=821659062a32 upstream=wss://api.x.ai/v1/realtime
+2026-01-27T10:09:48Z | ERROR | gateway.ai_voice | run=ec07f18aa808 req=- | Voice WS failed request_id=821659062a32
+Traceback (most recent call last):
+  File "C:\QuFLX\v2\backend\services\gateway\routes\ai_voice.py", line 130, in voice_ws
+    async with websockets.connect(
+               ^^^^^^^^^^^^^^^^^^^
+TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+------------------------------ Captured log call ------------------------------
+INFO     gateway.ai_voice:ai_voice.py:63 Voice WS connect request_id=821659062a32 upstream=wss://api.x.ai/v1/realtime
+ERROR    gateway.ai_voice:ai_voice.py:171 Voice WS failed request_id=821659062a32
+Traceback (most recent call last):
+  File "C:\QuFLX\v2\backend\services\gateway\routes\ai_voice.py", line 130, in voice_ws
+    async with websockets.connect(
+               ^^^^^^^^^^^^^^^^^^^
+TypeError: 'coroutine' object does not support the asynchronous context manager protocol
+============================== warnings summary ===============================
+..\..\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:323
+..\..\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:323
+..\..\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:323
+..\..\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:323
+..\..\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:323
+  C:\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:323: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+..\..\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:373
+  C:\Users\piete\anaconda3\envs\QuFLX-v2\Lib\site-packages\pydantic\_internal\_config.py:373: UserWarning: Valid config keys have changed in V2:
+  * 'allow_population_by_field_name' has been renamed to 'validate_by_name'
+    warnings.warn(message, UserWarning)
+
+backend\services\gateway\routes\ai.py:28
+  C:\QuFLX\v2\backend\services\gateway\routes\ai.py:28: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    @validator('prompt', pre=True)
+
+backend\services\gateway\routes\ai.py:36
+  C:\QuFLX\v2\backend\services\gateway\routes\ai.py:36: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    @validator('asset', 'timeframe', pre=True)
+
+backend\services\gateway\routes\ai.py:43
+  C:\QuFLX\v2\backend\services\gateway\routes\ai.py:43: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    @validator('context', pre=True)
+
+backend/tests/test_ai_routes.py::test_ask_ai_route_success
+backend/tests/test_ai_routes.py::test_ask_ai_route_validation_error
+backend/tests/test_ai_routes.py::test_ask_ai_route_image_too_large
+backend/tests/test_ai_routes.py::test_ask_ai_route_service_error
+  C:\QuFLX\v2\backend\services\gateway\routes\ai.py:116: PydanticDeprecatedSince20: The `parse_obj` method is deprecated; use `model_validate` instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    parsed = AiAskRequest.parse_obj(payload)
+
+backend/tests/test_ai_voice_ws.py::test_voice_ws_invalid_json
+backend/tests/test_ai_voice_ws.py::test_voice_ws_unsupported_event
+  C:\QuFLX\v2\backend\services\gateway\routes\ai_voice.py:130: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    async with websockets.connect(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_ai_routes.py::test_ask_ai_route_success - assert "I...
+FAILED backend/tests/test_ai_routes.py::test_ask_ai_route_service_error - ass...
+FAILED backend/tests/test_ai_voice_ws.py::test_voice_ws_invalid_json - Assert...
+FAILED backend/tests/test_ai_voice_ws.py::test_voice_ws_unsupported_event - A...
+================= 4 failed, 10 passed, 15 warnings in 17.43s ==================
+

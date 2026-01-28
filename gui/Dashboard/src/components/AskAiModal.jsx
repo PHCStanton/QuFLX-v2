@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
-import { getAiImageSourceLabel } from '../utils/aiContext';
+import { getAiImageSourceLabel, buildAiContext } from '../utils/aiContext';
 import useVoiceAgent from '../hooks/useVoiceAgent';
 import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
 import useTextToSpeech from '../utils/useTextToSpeech';
@@ -126,6 +126,10 @@ const AskAiModal = ({
     appendAiMessage,
     setError,
     lastAnnotatedScreenshotDataUrl,
+    marketData,
+    selectedAssetKey,
+    indicatorSeries,
+    activeIndicators,
   } = useMarketStore();
 
   const [selectedPresetId, setSelectedPresetId] = useState('market_overview');
@@ -191,13 +195,29 @@ const AskAiModal = ({
   }, [readBackMode, speakNatural, speakTts, ttsOptions]);
 
   const contextInstructions = useMemo(() => {
-    let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}. Respond concisely relative to the user's trading context.`;
     const custom = settings?.ai?.customInstructions;
+    const ctx = buildAiContext({
+      autoIncludeContext: true,
+      marketData,
+      selectedAssetKey,
+      indicatorSeries,
+      activeIndicators,
+      selectedAsset: asset,
+      selectedTimeframe: timeframe,
+    });
+
+    // Remove duplicates from context display
+    const { asset: _a, timeframe: _t, ...dataCtx } = ctx;
+
+    let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}.\n\n`;
+    base += `Current Market Data Context:\n${JSON.stringify(dataCtx, null, 2)}\n\n`;
+    base += `Respond concisely relative to the user's trading context. If the user asks for current price or indicators, refer to the data provided above. NEVER say you are using simulation data.`;
+
     if (custom) {
       base = `${custom}\n\n${base}`;
     }
     return base;
-  }, [asset, timeframe, settings?.ai?.customInstructions]);
+  }, [asset, timeframe, settings?.ai?.customInstructions, marketData, selectedAssetKey, indicatorSeries, activeIndicators]);
 
   const {
     status: voiceStatus,

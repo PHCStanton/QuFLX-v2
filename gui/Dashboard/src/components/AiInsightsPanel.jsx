@@ -5,7 +5,7 @@ import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import useAskAi from '../hooks/useAskAi';
 import { askAI } from '../api/aiClient';
-import { getAiImageSourceLabel } from '../utils/aiContext';
+import { getAiImageSourceLabel, buildAiContext } from '../utils/aiContext';
 import useVoiceAgent from '../hooks/useVoiceAgent';
 import useTextToSpeech from '../utils/useTextToSpeech';
 import useNaturalVoice from '../hooks/useNaturalVoice';
@@ -126,6 +126,31 @@ const AiInsightsPanel = () => {
   }, [isAsking, isSpeaking]);
 
 
+  const contextInstructions = useMemo(() => {
+    const custom = settings?.ai?.customInstructions;
+    const ctx = buildAiContext({
+      autoIncludeContext: true,
+      marketData,
+      selectedAssetKey,
+      indicatorSeries,
+      activeIndicators,
+      selectedAsset,
+      selectedTimeframe,
+    });
+
+    // Remove duplicates
+    const { asset: _a, timeframe: _t, ...dataCtx } = ctx;
+
+    let base = `You are the QuFLX AI Insights Assistant. Analyzing ${selectedAsset || 'the asset'} on ${selectedTimeframe || 'the chart'}.\n\n`;
+    base += `Current Market Data Context:\n${JSON.stringify(dataCtx, null, 2)}\n\n`;
+    base += `Respond concisely. If the user asks for current price or indicators, refer to the data provided above. NEVER say you are using simulation data.`;
+
+    if (custom) {
+      base = `${custom}\n\n${base}`;
+    }
+    return base;
+  }, [selectedAsset, selectedTimeframe, settings?.ai?.customInstructions, marketData, selectedAssetKey, indicatorSeries, activeIndicators]);
+
   const {
     status: voiceStatus,
     transcript,
@@ -139,7 +164,8 @@ const AiInsightsPanel = () => {
   } = useVoiceAgent({
     onError: setError,
     mode: settings?.ai?.voiceInputMode || 'off',
-    voice: settings?.ai?.voiceReadBackVoice || 'Ara'
+    voice: settings?.ai?.voiceReadBackVoice || 'Ara',
+    instructions: contextInstructions
   });
 
   useEffect(() => {
