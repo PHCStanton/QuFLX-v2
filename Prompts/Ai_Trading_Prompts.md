@@ -12,7 +12,7 @@ Give me a short, clear breakdown:
 2. Key confluences (EMA, RSI, BB, ADX, candle structure)
 3. Optimal entry timing (wait for close? seconds left?)
 4. Risk level (1–10) + main danger
-5. My historical win rate on this exact setup (from journal)
+5. My historical win rate on this exact setup (from journal. If available)
 6. Final call: Enter / Wait / Skip + one-sentence reason
 ```
 
@@ -85,6 +85,15 @@ Calculate:
 ```
 One-sentence regime summary + biggest current risk on this chart.
 Rate tradeability 1–10 right now.
+```
+
+### 8. Quick Predict (Ultra-Fast Bias)
+```
+FAST PREDICT for [asset] [timeframe].
+Bias: [Call/Put/Neutral] (Confidence %)
+Primary Trigger: [Logic]
+Expiry: [Target]
+Limit response to 3 precise lines.
 ```
 
 ### Power Prefix (Use on Almost Any Question)

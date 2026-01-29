@@ -41,6 +41,12 @@ const PRESETS = [
     promptTemplate: ({ asset, timeframe }) => `Start a top-down analysis for ${asset}. Use HTF bias, key levels, and an entry plan for ${timeframe}.`
   },
   {
+    id: 'quick_predict',
+    title: 'Quick Predict',
+    description: 'Rapid bias, confidence, and primary trigger',
+    promptTemplate: ({ asset, timeframe }) => `FAST PREDICT for ${asset} ${timeframe}.\nBias: [Call/Put/Neutral] (Confidence %)\nPrimary Trigger: [Logic]\nExpiry: [Target]\nLimit response to 3 precise lines.`
+  },
+  {
     id: 'custom',
     title: 'Custom',
     description: 'Ask anything',

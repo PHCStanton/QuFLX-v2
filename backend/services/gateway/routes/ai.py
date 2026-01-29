@@ -208,7 +208,8 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
     into the context if the frontend did not provide any.
     """
     # Skip if we already have indicators, or if asset/timeframe are missing
-    if context.get('indicatorSnapshots') or not asset or not timeframe:
+    existing_snapshots = context.get('indicatorSnapshots')
+    if (existing_snapshots and len(existing_snapshots) > 0) or not asset or not timeframe:
         return
 
     # Determine timeframe in minutes
