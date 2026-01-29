@@ -157,6 +157,9 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
     )
 
     try:
+        # Optimization: Inject backend indicators if missing from frontend
+        await _inject_backend_indicators(context, parsed.asset, parsed.timeframe)
+
         result = await ai_service.ask(
             prompt=parsed.prompt,
             context=context or None,
@@ -197,3 +200,112 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
                 'retryable': False,
             },
         )
+
+
+async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[str], timeframe: Optional[str]) -> None:
+    """
+    Attempts to calculate default technical indicators on the backend and inject them 
+    into the context if the frontend did not provide any.
+    """
+    # Skip if we already have indicators, or if asset/timeframe are missing
+    if context.get('indicatorSnapshots') or not asset or not timeframe:
+        return
+
+    # Determine timeframe in minutes
+    try:
+        if timeframe.endswith('m'):
+            tf_min = int(timeframe[:-1])
+        elif timeframe.endswith('h'):
+            tf_min = int(timeframe[:-1]) * 60
+        elif timeframe.isdigit():
+            tf_min = int(timeframe)
+        else:
+            return  # Unsupported timeframe format for backend calc
+    except Exception:
+        return
+
+    # Dynamic import to avoid circular issues if any, though likely safe
+    import os
+    import sys
+    import json
+    import asyncio
+    from backend.utils.history_utils import get_recent_history_file
+    from backend.services.gateway.routes.common import parse_script_json
+
+    csv_path = get_recent_history_file(asset, tf_min)
+    if not csv_path:
+        return
+
+    # Default indicators to inject
+    defaults = [
+        {"type": "ema", "params": {"period": 20}},
+        {"type": "ema", "params": {"period": 50}},
+        {"type": "rsi", "params": {"period": 14}},
+        {"type": "macd", "params": {}},
+        {"type": "bollinger_bands", "params": {}}
+    ]
+
+    try:
+        runner_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py")
+        )
+        
+        inputs = {
+            "csv_path": str(csv_path),
+            "asset": asset,
+            "timeframe": tf_min,
+            "indicators": defaults,
+            "params": {},
+            "current_candle": None
+        }
+
+        args = [
+            sys.executable,
+            runner_path,
+            "indicator_calculator",
+            "--inputs",
+            json.dumps(inputs),
+        ]
+
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        stdout, _ = await process.communicate()
+        
+        if process.returncode == 0:
+            out = parse_script_json(stdout.decode().strip())
+            if out.get('ok') and 'data' in out and 'indicators' in out['data']:
+                # Transform the flat arrays from calculator into 'indicatorSnapshots' format
+                # Calculator returns: { indicators: { "ema_20": [...], ... } }
+                # Context expects: { "EMA 20": [...], ... }
+                backend_data = out['data']['indicators']
+                snapshots = {}
+                
+                for key, series in backend_data.items():
+                    if series and isinstance(series, list):
+                        # Map technical keys to readable names
+                        name = key.replace('_', ' ').upper()
+                        # Clean up names slightly
+                        if name.startswith('EMA '): name = f"EMA {key.split('_')[-1]}"
+                        elif name.startswith('RSI '): name = "RSI 14"
+                        elif 'MACD' in name: name = key.replace('_', ' ').title().replace('Macd', 'MACD')
+                        elif 'BB' in name: name = key.replace('_', ' ').title().replace('Bb', 'BB')
+                        
+                        snapshots[name] = series[-50:] # Keep last 50 points
+
+                if snapshots:
+                    context['indicatorSnapshots'] = snapshots
+                    context['backendDataInjected'] = True
+                    logger.info('Injected backend indicators for %s %s:Keys=%s', asset, timeframe, list(snapshots.keys()))
+
+    except Exception as e:
+        logger.warning('Failed to inject backend indicators: %s', e)
+
+

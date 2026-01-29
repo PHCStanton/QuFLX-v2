@@ -16,6 +16,7 @@ const useAskAi = ({
   uiMode,
   customInstructions,
   marketData,
+  historyCandles,
   selectedAssetKey,
   indicatorSeries,
   activeIndicators,
@@ -62,6 +63,7 @@ const useAskAi = ({
     let context = buildAiContext({
       autoIncludeContext,
       marketData,
+      historyCandles,
       selectedAssetKey,
       indicatorSeries,
       activeIndicators,
@@ -151,6 +153,7 @@ const useAskAi = ({
     uiMode,
     customInstructions,
     marketData,
+    historyCandles,
     selectedAssetKey,
     indicatorSeries,
     activeIndicators,

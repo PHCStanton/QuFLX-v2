@@ -23,7 +23,7 @@ import { timeframeOptions, csvOptions, indicatorOptions } from '../config/chartO
 
 const ChartWorkspace = () => {
   const { settings } = useSettingsStore();
-  const { 
+  const {
     selectedAsset, setSelectedAsset,
     selectedAssetKey,
     selectedTimeframe, setSelectedTimeframe,
@@ -68,6 +68,7 @@ const ChartWorkspace = () => {
     responseVerbosity: 'concise',
     uiMode: 'modal',
     marketData,
+    historyCandles,
     selectedAssetKey,
     indicatorSeries,
     activeIndicators,
@@ -194,7 +195,7 @@ const ChartWorkspace = () => {
         </div>
       )}
 
-      <ChartHeader 
+      <ChartHeader
         selectedAsset={selectedAsset}
         setSelectedAsset={setSelectedAsset}
         assetOptions={assetOptions}
@@ -213,7 +214,7 @@ const ChartWorkspace = () => {
         onIndicatorClick={handleIndicatorClick}
         onSyncTimeframe={handleSyncTimeframe}
         isSyncingTimeframe={isSyncingTimeframe}
-      isTimeframeSyncLinked={Boolean(settings?.automation?.linkTimeframeSync)}
+        isTimeframeSyncLinked={Boolean(settings?.automation?.linkTimeframeSync)}
       />
 
       <AskAiModal

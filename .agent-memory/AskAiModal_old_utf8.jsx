@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState } from 'react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
-import { getAiImageSourceLabel, buildAiContext } from '../utils/aiContext';
+import { getAiImageSourceLabel } from '../utils/aiContext';
 import useVoiceAgent from '../hooks/useVoiceAgent';
 import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
 import useTextToSpeech from '../utils/useTextToSpeech';
@@ -103,7 +103,7 @@ const OptionCard = ({ title, description, active, onClick }) => (
         <div className="text-xs text-gray-400 mt-1">{description}</div>
       </div>
       <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${active ? 'border-purple-400 bg-purple-500/20 text-purple-300' : 'border-gray-700 text-gray-600'}`}>
-        <span className="text-[12px]">✓</span>
+        <span className="text-[12px]">Γ£ô</span>
       </div>
     </div>
   </button>
@@ -118,7 +118,6 @@ const AskAiModal = ({
   forceImageDataUrl,
 }) => {
   const { settings } = useSettingsStore();
-  const customInstructions = settings?.ai?.customInstructions;
   const useWhiteModalSurface = true;
   const {
     setActiveTab,
@@ -127,11 +126,6 @@ const AskAiModal = ({
     appendAiMessage,
     setError,
     lastAnnotatedScreenshotDataUrl,
-    marketData,
-    historyCandles,
-    selectedAssetKey,
-    indicatorSeries,
-    activeIndicators,
   } = useMarketStore();
 
   const [selectedPresetId, setSelectedPresetId] = useState('market_overview');
@@ -197,31 +191,13 @@ const AskAiModal = ({
   }, [readBackMode, speakNatural, speakTts, ttsOptions]);
 
   const contextInstructions = useMemo(() => {
-    const custom = customInstructions;
-    const ctx = buildAiContext({
-      autoIncludeContext: true,
-      marketData,
-      historyCandles,
-      selectedAssetKey,
-      indicatorSeries,
-      activeIndicators,
-      selectedAsset: asset,
-      selectedTimeframe: timeframe,
-    });
-
-    const dataCtx = { ...ctx };
-    delete dataCtx.asset;
-    delete dataCtx.timeframe;
-
-    let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}.\n\n`;
-    base += `Current Market Data Context:\n${JSON.stringify(dataCtx, null, 2)}\n\n`;
-    base += `Respond concisely relative to the user's trading context. If the user asks for current price or indicators, refer to the data provided above. NEVER say you are using simulation data.`;
-
+    let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}. Respond concisely relative to the user's trading context.`;
+    const custom = settings?.ai?.customInstructions;
     if (custom) {
       base = `${custom}\n\n${base}`;
     }
     return base;
-  }, [asset, timeframe, customInstructions, marketData, historyCandles, selectedAssetKey, indicatorSeries, activeIndicators]);
+  }, [asset, timeframe, settings?.ai?.customInstructions]);
 
   const {
     status: voiceStatus,
@@ -237,13 +213,11 @@ const AskAiModal = ({
     isRecording,
     isSpeaking: isVoiceAgentSpeaking,
     lastEventType,
-    resetTranscript,
   } = useVoiceAgent({
     onError: setError,
     mode: conversationMode ? 'server' : (settings?.ai?.voiceInputMode || 'off'),
     enableAudioResponse: conversationMode,
-    instructions: conversationMode ? contextInstructions : undefined,
-    voice: settings?.ai?.voiceReadBackVoice || 'Ara'
+    instructions: conversationMode ? contextInstructions : undefined
   });
 
   const isSpeaking = conversationMode ? isVoiceAgentSpeaking : (readBackMode === 'server' ? isNaturalSpeaking : isTtsSpeaking);
@@ -289,10 +263,10 @@ const AskAiModal = ({
         prompt,
         imageSourceOverride: localImageSource,
         forceImageDataUrl,
-        context: { customInstructions }
+        context: { customInstructions: settings?.ai?.customInstructions }
       });
       if (!result) {
-        setAnswer('⚠️ System Error: The AI request timed out or failed.\n\nPlease close and reopen this "Ask AI" modal, then try again.');
+        setAnswer('ΓÜá∩╕Å System Error: The AI request timed out or failed.\n\nPlease close and reopen this "Ask AI" modal, then try again.');
         return;
       }
       setAnswer(result.answer);
@@ -322,7 +296,6 @@ const AskAiModal = ({
     readBackEnabled,
     speakText,
     setError,
-    customInstructions,
   ]);
 
   useEffect(() => {
@@ -363,19 +336,17 @@ const AskAiModal = ({
       // Let's do it to keep record, but debounce it or ensure it's final.
       // aiTranscript is final.
       appendAiMessage({ role: 'assistant', content: aiTranscript, meta: { asset, timeframe, mode: 'voice_conversation' } });
-
-      // TURN COMPLETE -> CLEAR USER INPUT
-      resetTranscript();
-      setTranscriptDraft('');
     }
-  }, [conversationMode, aiPartial, aiTranscript, appendAiMessage, asset, timeframe, resetTranscript]);
+  }, [conversationMode, aiPartial, aiTranscript, appendAiMessage, asset, timeframe]);
 
   const applyPreset = (presetId) => {
     setSelectedPresetId(presetId);
     const preset = PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     const next = preset.promptTemplate({ asset, timeframe });
-    setAiDraftPrompt(next);
+    if (next) {
+      setAiDraftPrompt(next);
+    }
     if (presetId === 'top_down') {
       setActiveTab('ai_insights');
     }
@@ -429,16 +400,12 @@ const AskAiModal = ({
                 Quick assist now. Continue in AI Insights for deeper, multi-step analysis.
               </div>
               <div className={`text-[11px] mt-1 ${useWhiteModalSurface ? 'text-gray-500' : 'text-gray-500'}`}>
-                {asset ? asset : 'No asset'}{timeframe ? ` · ${timeframe}` : ''} · Image: {imageSourceLabel}
+                {asset ? asset : 'No asset'}{timeframe ? ` ┬╖ ${timeframe}` : ''} ┬╖ Image: {imageSourceLabel}
               </div>
               {isThinking ? (
                 <div className={`mt-2 inline-flex items-center gap-2 text-[11px] ${useWhiteModalSurface ? 'text-gray-600' : 'text-gray-400'}`}>
                   <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                  <span>
-                    {activePreset.id === 'custom' || String(aiDraftPrompt || '').trim().length >= 450
-                      ? 'AI is thinking… (complex analysis may take longer)'
-                      : 'AI is thinking…'}
-                  </span>
+                  <span>AI is thinkingΓÇª</span>
                 </div>
               ) : null}
             </div>
@@ -479,7 +446,7 @@ const AskAiModal = ({
                   onChange={(e) => setAiDraftPrompt(e.target.value)}
                   rows={5}
                   className="w-full bg-[#0f1419] border border-gray-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/40"
-                  placeholder={activePreset.id === 'custom' ? 'Type your question…' : 'Select an option or write a custom question…'}
+                  placeholder={activePreset.id === 'custom' ? 'Type your questionΓÇª' : 'Select an option or write a custom questionΓÇª'}
                 />
                 <div className={`text-[11px] mt-1 ${useWhiteModalSurface ? 'text-gray-500' : 'text-gray-500'}`}>Ctrl+Enter to ask</div>
               </div>
@@ -513,7 +480,7 @@ const AskAiModal = ({
                           : 'bg-[#0f1419] text-gray-200 border-gray-800 hover:bg-gray-800'
                         }`}
                     >
-                      {isVoiceConnected ? 'Voice: Connected' : voiceStatus === 'connecting' ? 'Voice: Connecting…' : 'Voice: Connect'}
+                      {isVoiceConnected ? 'Voice: Connected' : voiceStatus === 'connecting' ? 'Voice: ConnectingΓÇª' : 'Voice: Connect'}
                     </button>
                     <button
                       type="button"
@@ -530,7 +497,7 @@ const AskAiModal = ({
                     </button>
 
                     <div className="mt-2 text-[11px] text-gray-500">
-                      Status: {voiceStatus}{lastEventType ? ` · ${lastEventType}` : ''}
+                      Status: {voiceStatus}{lastEventType ? ` ┬╖ ${lastEventType}` : ''}
                     </div>
                   </div>
                 )}
@@ -544,7 +511,7 @@ const AskAiModal = ({
                 disabled={isThinking}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-600 text-white font-semibold hover:from-purple-600 hover:to-blue-700"
               >
-                {isThinking ? 'Thinking…' : 'Ask AI'}
+                {isThinking ? 'ThinkingΓÇª' : 'Ask AI'}
               </button>
               <button
                 type="button"
@@ -598,7 +565,7 @@ const AskAiModal = ({
               {isThinking && !answer ? (
                 <div className="text-sm text-gray-400 flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-                  <span>Thinking…</span>
+                  <span>ThinkingΓÇª</span>
                 </div>
               ) : answer ? (
                 <pre className="whitespace-pre-wrap text-sm text-gray-100">{answer}</pre>
@@ -613,7 +580,7 @@ const AskAiModal = ({
             </div>
 
             {settings?.ai?.voiceInputMode !== 'off' && (
-              <div className="border border-gray-800 bg-[#0f1419]/50 rounded-xl p-3 min-h-[100px] max-h-[150px] overflow-y-auto">
+              <div className="border border-gray-800 bg-[#0f1419]/50 rounded-xl p-3 min-h-[100px]">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">
                     {conversationMode ? 'Realtime Conversation' : 'Dictation Space'}

@@ -24,6 +24,7 @@ export const resolveAiImage = async ({ imageSource, lastAnnotatedImage, captureI
 export const buildAiContext = ({
   autoIncludeContext,
   marketData,
+  historyCandles,
   selectedAssetKey,
   indicatorSeries,
   activeIndicators,
@@ -42,6 +43,10 @@ export const buildAiContext = ({
   const recentTicks = (marketData && selectedAssetKey && marketData[selectedAssetKey])
     ? marketData[selectedAssetKey].slice(-20)
     : [];
+
+  const rawCandles = (historyCandles && selectedAsset && historyCandles[selectedAsset]) || [];
+  // Include last 100 candles for solid trend analysis
+  const recentCandles = Array.isArray(rawCandles) ? rawCandles.slice(-100) : [];
 
   const indicatorKey = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
   const seriesForKey = indicatorKey && indicatorSeries ? indicatorSeries[indicatorKey] : null;
@@ -64,6 +69,7 @@ export const buildAiContext = ({
     currentPrice: recentTicks[recentTicks.length - 1]?.price,
     activeIndicators: Array.isArray(activeIndicators) ? activeIndicators.map((i) => i.name) : [],
     recentTicks,
+    recentCandles,
     indicatorSnapshots,
   };
 };

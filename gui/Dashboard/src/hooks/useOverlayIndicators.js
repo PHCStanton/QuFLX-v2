@@ -6,6 +6,45 @@ const getErrorMessage = (err) => {
   return String(err);
 };
 
+const normalizeTime = (time) => {
+  if (typeof time === 'number') return time;
+  if (typeof time === 'string') {
+    const n = Number(time);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+
+const normalizeDirection = (value) => {
+  if (typeof value === 'string') {
+    const v = value.toLowerCase();
+    if (v === 'up' || v === 'long' || v === 'bull' || v === 'buy') return 'up';
+    if (v === 'down' || v === 'short' || v === 'bear' || v === 'sell') return 'down';
+    return null;
+  }
+  if (typeof value === 'number') {
+    if (value > 0) return 'up';
+    if (value < 0) return 'down';
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'up' : 'down';
+  }
+  return null;
+};
+
+const sortByTimeAsc = (data) => {
+  if (!Array.isArray(data) || data.length === 0) return data;
+  return [...data].sort((a, b) => {
+    const ta = normalizeTime(a?.time);
+    const tb = normalizeTime(b?.time);
+    if (ta == null && tb == null) return 0;
+    if (ta == null) return 1;
+    if (tb == null) return -1;
+    return ta - tb;
+  });
+};
+
 const useOverlayIndicators = ({
   mainChart,
   activeIndicators,
@@ -20,33 +59,6 @@ const useOverlayIndicators = ({
   );
 
   const overlaySeriesRef = useRef({});
-
-  const normalizeTime = (time) => {
-    if (typeof time === 'number') return time;
-    if (typeof time === 'string') {
-      const n = Number(time);
-      return Number.isFinite(n) ? n : null;
-    }
-    return null;
-  };
-
-  const normalizeDirection = (value) => {
-    if (typeof value === 'string') {
-      const v = value.toLowerCase();
-      if (v === 'up' || v === 'long' || v === 'bull' || v === 'buy') return 'up';
-      if (v === 'down' || v === 'short' || v === 'bear' || v === 'sell') return 'down';
-      return null;
-    }
-    if (typeof value === 'number') {
-      if (value > 0) return 'up';
-      if (value < 0) return 'down';
-      return null;
-    }
-    if (typeof value === 'boolean') {
-      return value ? 'up' : 'down';
-    }
-    return null;
-  };
 
   useEffect(() => {
     if (!mainChart) return;
@@ -207,9 +219,9 @@ const useOverlayIndicators = ({
           const lowerData = seriesForKey['bb_lower'] || [];
           const dataHash = JSON.stringify([data.slice(-1), upperData.slice(-1), lowerData.slice(-1)]);
           if (seriesObj.lastDataHash !== dataHash) {
-            seriesObj.series.setData(data);
-            if (seriesObj.upper) seriesObj.upper.setData(upperData);
-            if (seriesObj.lower) seriesObj.lower.setData(lowerData);
+            seriesObj.series.setData(sortByTimeAsc(data));
+            if (seriesObj.upper) seriesObj.upper.setData(sortByTimeAsc(upperData));
+            if (seriesObj.lower) seriesObj.lower.setData(sortByTimeAsc(lowerData));
             seriesObj.lastDataHash = dataHash;
           }
           return;
@@ -280,8 +292,8 @@ const useOverlayIndicators = ({
               });
             }
 
-            if (seriesObj.upSeries) seriesObj.upSeries.setData(upData);
-            if (seriesObj.downSeries) seriesObj.downSeries.setData(downData);
+            if (seriesObj.upSeries) seriesObj.upSeries.setData(sortByTimeAsc(upData));
+            if (seriesObj.downSeries) seriesObj.downSeries.setData(sortByTimeAsc(downData));
             seriesObj.lastDataHash = dataHash;
           }
           return;
@@ -293,8 +305,8 @@ const useOverlayIndicators = ({
           const dataHash = JSON.stringify([resistanceData.slice(-1), supportData.slice(-1)]);
 
           if (seriesObj.lastDataHash !== dataHash) {
-            if (seriesObj.upper) seriesObj.upper.setData(resistanceData);
-            if (seriesObj.lower) seriesObj.lower.setData(supportData);
+            if (seriesObj.upper) seriesObj.upper.setData(sortByTimeAsc(resistanceData));
+            if (seriesObj.lower) seriesObj.lower.setData(sortByTimeAsc(supportData));
             seriesObj.lastDataHash = dataHash;
           }
           return;
@@ -307,9 +319,9 @@ const useOverlayIndicators = ({
           const dataHash = JSON.stringify([ema21.slice(-1), ema50.slice(-1), ema100.slice(-1)]);
 
           if (seriesObj.lastDataHash !== dataHash) {
-            if (seriesObj.series) seriesObj.series.setData(ema21);
-            if (seriesObj.upper) seriesObj.upper.setData(ema50);
-            if (seriesObj.lower) seriesObj.lower.setData(ema100);
+            if (seriesObj.series) seriesObj.series.setData(sortByTimeAsc(ema21));
+            if (seriesObj.upper) seriesObj.upper.setData(sortByTimeAsc(ema50));
+            if (seriesObj.lower) seriesObj.lower.setData(sortByTimeAsc(ema100));
             seriesObj.lastDataHash = dataHash;
           }
           return;
@@ -317,7 +329,7 @@ const useOverlayIndicators = ({
 
         const dataHash = JSON.stringify(data.slice(-1));
         if (seriesObj.lastDataHash !== dataHash) {
-          seriesObj.series.setData(data);
+          seriesObj.series.setData(sortByTimeAsc(data));
           seriesObj.lastDataHash = dataHash;
         }
       } catch (err) {

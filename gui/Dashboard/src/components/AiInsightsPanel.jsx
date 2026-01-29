@@ -22,6 +22,7 @@ const AiInsightsPanel = () => {
     captureChartImage,
     lastAnnotatedScreenshotDataUrl,
     marketData,
+    historyCandles,
     selectedAssetKey,
     indicatorSeries,
     activeIndicators,
@@ -47,6 +48,7 @@ const AiInsightsPanel = () => {
     uiMode: 'insights',
     customInstructions: settings?.ai?.customInstructions,
     marketData,
+    historyCandles,
     selectedAssetKey,
     indicatorSeries,
     activeIndicators,
@@ -132,6 +134,7 @@ const AiInsightsPanel = () => {
     const ctx = buildAiContext({
       autoIncludeContext: true,
       marketData,
+      historyCandles,
       selectedAssetKey,
       indicatorSeries,
       activeIndicators,
@@ -151,7 +154,7 @@ const AiInsightsPanel = () => {
       base = `${custom}\n\n${base}`;
     }
     return base;
-  }, [selectedAsset, selectedTimeframe, settings?.ai?.customInstructions, marketData, selectedAssetKey, indicatorSeries, activeIndicators]);
+  }, [selectedAsset, selectedTimeframe, settings?.ai?.customInstructions, marketData, historyCandles, selectedAssetKey, indicatorSeries, activeIndicators]);
 
   const {
     status: voiceStatus,
