@@ -5,12 +5,23 @@ export async function askAI({ prompt, context = {}, image = null }) {
     throw new Error('prompt must be a non-empty string');
   }
 
+  // Extract asset and timeframe from context to send as top-level params
+  // Backend requires these as top-level for indicator injection
+  const asset = context?.asset || null;
+  const timeframe = context?.timeframe || null;
+
   const res = await fetch(`${getApiBaseUrl()}/api/v1/ai/ask`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ prompt, context, image_base64: image }),
+    body: JSON.stringify({
+      prompt,
+      context,
+      image_base64: image,
+      asset,
+      timeframe,
+    }),
   });
 
   if (!res.ok) {

@@ -209,7 +209,12 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
     """
     # Skip if we already have indicators, or if asset/timeframe are missing
     existing_snapshots = context.get('indicatorSnapshots')
+    logger.info('Backend indicator injection check: asset=%s, timeframe=%s, existing_snapshots=%s',
+                 asset, timeframe, bool(existing_snapshots and len(existing_snapshots) > 0))
+    
     if (existing_snapshots and len(existing_snapshots) > 0) or not asset or not timeframe:
+        logger.info('Skipping backend indicator injection: existing_snapshots=%s, asset=%s, timeframe=%s',
+                     len(existing_snapshots) if existing_snapshots else 0, bool(asset), bool(timeframe))
         return
 
     # Determine timeframe in minutes
@@ -221,8 +226,10 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
         elif timeframe.isdigit():
             tf_min = int(timeframe)
         else:
+            logger.warning('Backend indicator injection: unsupported timeframe format: %s', timeframe)
             return  # Unsupported timeframe format for backend calc
-    except Exception:
+    except Exception as e:
+        logger.warning('Backend indicator injection: timeframe parse error: %s, error: %s', timeframe, e)
         return
 
     # Dynamic import to avoid circular issues if any, though likely safe
@@ -234,7 +241,9 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
     from backend.services.gateway.routes.common import parse_script_json
 
     csv_path = get_recent_history_file(asset, tf_min)
+    logger.info('Backend indicator injection: history file lookup for %s %dm -> %s', asset, tf_min, csv_path)
     if not csv_path:
+        logger.warning('Backend indicator injection: no history file found for %s %dm', asset, tf_min)
         return
 
     # Default indicators to inject
@@ -250,6 +259,7 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
         runner_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py")
         )
+        logger.info('Backend indicator injection: using runner at %s', runner_path)
         
         inputs = {
             "csv_path": str(csv_path),
@@ -272,41 +282,86 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUTF8"] = "1"
 
-        process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env
-        )
-        stdout, _ = await process.communicate()
+        # Use subprocess.run in a thread for Windows compatibility
+        # asyncio.create_subprocess_exec fails with NotImplementedError on Windows
+        import subprocess
         
-        if process.returncode == 0:
+        def run_indicator_calc():
+            return subprocess.run(
+                args,
+                capture_output=True,
+                env=env,
+                timeout=30
+            )
+        
+        result = await asyncio.to_thread(run_indicator_calc)
+        stdout = result.stdout
+        stderr = result.stderr
+        returncode = result.returncode
+        
+        logger.info('Backend indicator injection: subprocess returncode=%d, stdout_len=%d, stderr_len=%d',
+                     returncode, len(stdout), len(stderr))
+        
+        if returncode != 0:
+            logger.warning('Backend indicator injection: subprocess failed with code %d, stderr=%s',
+                           returncode, stderr.decode()[:500] if stderr else '')
+        
+        if returncode == 0:
             out = parse_script_json(stdout.decode().strip())
-            if out.get('ok') and 'data' in out and 'indicators' in out['data']:
-                # Transform the flat arrays from calculator into 'indicatorSnapshots' format
-                # Calculator returns: { indicators: { "ema_20": [...], ... } }
-                # Context expects: { "EMA 20": [...], ... }
-                backend_data = out['data']['indicators']
+            logger.info('Backend indicator injection: parsed output ok=%s, data_keys=%s',
+                         out.get('ok'), list(out.get('data', {}).keys()) if 'data' in out else 'none')
+            
+            # indicator_calculator returns 'series', not 'indicators'
+            if out.get('ok') and 'data' in out and 'series' in out['data']:
+                # Transform the {time, value} objects from calculator into 'indicatorSnapshots' format
+                # Calculator returns: { series: { "ema_16": [{"time": ..., "value": ...}, ...], ... } }
+                # Context expects: { "EMA 16": [{"time": ..., "value": ...}, ...], ... }
+                backend_data = out['data']['series']
                 snapshots = {}
                 
                 for key, series in backend_data.items():
-                    if series and isinstance(series, list):
+                    if series and isinstance(series, list) and len(series) > 0:
                         # Map technical keys to readable names
                         name = key.replace('_', ' ').upper()
-                        # Clean up names slightly
-                        if name.startswith('EMA '): name = f"EMA {key.split('_')[-1]}"
-                        elif name.startswith('RSI '): name = "RSI 14"
-                        elif 'MACD' in name: name = key.replace('_', ' ').title().replace('Macd', 'MACD')
-                        elif 'BB' in name: name = key.replace('_', ' ').title().replace('Bb', 'BB')
+                        # Clean up names for common indicators
+                        if key.startswith('ema_'): 
+                            name = f"EMA {key.split('_')[-1]}"
+                        elif key.startswith('rsi_'): 
+                            name = f"RSI {key.split('_')[-1]}"
+                        elif key.startswith('atr_'): 
+                            name = f"ATR {key.split('_')[-1]}"
+                        elif key.startswith('sma_'): 
+                            name = f"SMA {key.split('_')[-1]}"
+                        elif key == 'adx': 
+                            name = "ADX"
+                        elif key.startswith('bb_'): 
+                            name = key.replace('bb_', 'BB ').upper()
+                        elif 'macd' in key.lower(): 
+                            name = key.replace('_', ' ').upper()
+                        elif key == 'supertrend':
+                            name = "Supertrend"
+                        elif key == 'cci':
+                            name = "CCI"
+                        elif key == 'demarker':
+                            name = "DeMarker"
+                        elif key == 'schaff_tc':
+                            name = "Schaff TC"
                         
-                        snapshots[name] = series[-50:] # Keep last 50 points
+                        # Keep last 50 points for context
+                        snapshots[name] = series[-50:]
 
                 if snapshots:
                     context['indicatorSnapshots'] = snapshots
                     context['backendDataInjected'] = True
-                    logger.info('Injected backend indicators for %s %s:Keys=%s', asset, timeframe, list(snapshots.keys()))
+                    logger.info('Injected backend indicators for %s %s: Keys=%s (count=%d)', 
+                                asset, timeframe, list(snapshots.keys()), len(snapshots))
+                else:
+                    logger.warning('Backend indicator injection: no snapshots generated from response')
+            else:
+                logger.warning('Backend indicator injection: response parsing issue, ok=%s, has_data=%s, has_series=%s',
+                               out.get('ok'), 'data' in out, 'series' in out.get('data', {}))
 
     except Exception as e:
-        logger.warning('Failed to inject backend indicators: %s', e)
+        logger.warning('Failed to inject backend indicators: %s', e, exc_info=True)
 
 

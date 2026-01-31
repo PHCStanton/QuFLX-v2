@@ -26,7 +26,9 @@ env_path = project_root / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # Add project root to path for internal imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+project_root_str = str(project_root)
+if project_root_str not in sys.path:
+    sys.path.insert(0, project_root_str)
 
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
@@ -331,4 +333,5 @@ if __name__ == "__main__":
 
     configure_logging(service_name='gateway')
     # Use loop="asyncio" to ensure it respects the policy set at the top
-    uvicorn.run("main:socket_app", host=str(args.host), port=int(args.port), reload=bool(args.reload), loop="asyncio", log_level=str(args.log_level).lower())
+    target = "backend.services.gateway.main:socket_app" if args.reload else socket_app
+    uvicorn.run(target, host=str(args.host), port=int(args.port), reload=bool(args.reload), loop="asyncio", log_level=str(args.log_level).lower())
