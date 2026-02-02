@@ -225,7 +225,7 @@ const SettingsPanel = () => {
         </div>
 
         {/* User Account */}
-        <SettingsSection title="User Account">
+        <SettingsSection title="User Account" defaultOpen={false}>
           <SettingRow label="Display Name" description="How you appear in the platform">
             <input
               type="text"
@@ -260,7 +260,7 @@ const SettingsPanel = () => {
         </SettingsSection>
 
         {/* Global Settings */}
-        <SettingsSection title="Global Settings">
+        <SettingsSection title="Global Settings" defaultOpen={false}>
           <SettingRow label="Theme" description="Overall appearance of the dashboard">
             <DropdownInput
               value={settings.global.theme}
@@ -321,6 +321,16 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('global', { language: val })}
             />
           </SettingRow>
+          <SettingRow label="App Font Size" description="Base font scale (px)">
+            <SliderInput
+              value={settings.global.fontSize || 13}
+              min={10}
+              max={20}
+              step={1}
+              unit="px"
+              onChange={(val) => updateSection('global', { fontSize: val })}
+            />
+          </SettingRow>
           <SettingRow label="Auto-start Collector" description="Start data collection service on launch">
             <NeomorphicSwitch
               checked={settings.global.autoStartCollector}
@@ -336,7 +346,7 @@ const SettingsPanel = () => {
         </SettingsSection>
 
         {/* Automation & Execution */}
-        <SettingsSection title="Automation & Execution">
+        <SettingsSection title="Automation & Execution" defaultOpen={false}>
           <SettingRow label="History Wait Time" description="How long to wait for manual asset click (seconds)">
             <SliderInput
               value={settings.automation.historyWaitTime}
@@ -378,7 +388,7 @@ const SettingsPanel = () => {
         </SettingsSection>
 
         {/* Analysis & Charting */}
-        <SettingsSection title="Analysis & Charting">
+        <SettingsSection title="Analysis & Charting" defaultOpen={false}>
           <SettingRow label="Data Source Mode" description="Controls how chart data is populated">
             <DropdownInput
               value={settings.analysis.dataSourceMode}
@@ -420,7 +430,7 @@ const SettingsPanel = () => {
         </SettingsSection>
 
         {/* AI Assistant */}
-        <SettingsSection title="AI Assistant">
+        <SettingsSection title="AI Assistant" defaultOpen={false}>
           <SettingRow label="Response Verbosity" description="Detail level of AI analysis">
             <RadioGroup
               value={settings.ai.responseVerbosity}
@@ -546,7 +556,7 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
-        <SettingsSection title="Screenshot & Markup">
+        <SettingsSection title="Screenshot & Markup" defaultOpen={false}>
           <SettingRow label="Default Tool" description="Tool selected when screenshot editor opens">
             <DropdownInput
               value={settings.screenshot.defaultTool}
@@ -623,7 +633,7 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
-        <SettingsSection title="Risk Manager">
+        <SettingsSection title="Risk Manager" defaultOpen={false}>
           <SettingRow label="Daily Max Trades" description="Maximum trades per day">
             <SliderInput
               value={settings.riskManager.dailyMaxTrades}
@@ -664,7 +674,7 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
-        <SettingsSection title="Advanced">
+        <SettingsSection title="Advanced" defaultOpen={false}>
           <SettingRow label="Reset All Settings" description="Clears local persistence and resets backend settings">
             <button
               type="button"
@@ -676,7 +686,7 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
-        <SettingsSection title="Asset Controls">
+        <SettingsSection title="Asset Controls" defaultOpen={false}>
           <SettingRow label="OTC Only" description="Persist the OTC-only filter in the Dashboard Data Source">
             <NeomorphicSwitch
               checked={assetFilterState?.filterMode === 'otc'}

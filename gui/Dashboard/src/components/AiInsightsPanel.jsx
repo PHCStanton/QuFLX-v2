@@ -1,7 +1,9 @@
 import Card from './Card';
 import AssetPayoutPanel from './AssetPayoutPanel';
 import { Volume2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AnalysisToggle from './AnalysisToggle';
+import { BuySellIcon, EntryIcon, LevelsIcon, TopDownIcon, IndicatorsIcon } from './AnalysisIcons';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import useAskAi from '../hooks/useAskAi';
@@ -55,6 +57,15 @@ const AiInsightsPanel = () => {
     selectedAsset,
     selectedTimeframe,
     onError: setError,
+  });
+
+  const messagesEndRef = useRef(null);
+  const [analysisFilters, setAnalysisFilters] = useState({
+    entries: false,
+    levels: false,
+    confluences: false,
+    confluences: false,
+    topDown: false
   });
 
   const [transcriptDraft, setTranscriptDraft] = useState('');
@@ -128,6 +139,13 @@ const AiInsightsPanel = () => {
     if (isSpeaking) stopSpeaking();
   }, [isAsking, isSpeaking, stopSpeaking]);
 
+  useEffect(() => {
+    // Auto-scroll to bottom when messages change
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [aiMessages]);
+
 
   const contextInstructions = useMemo(() => {
     const custom = settings?.ai?.customInstructions;
@@ -179,6 +197,10 @@ const AiInsightsPanel = () => {
     setTranscriptDraft(text);
   }, [transcript]);
 
+  const toggleFilter = (key) => {
+    setAnalysisFilters(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const handleInsertTranscript = () => {
     const merged = `${String(aiDraftPrompt || '').trim()} ${String(transcriptDraft || '').trim()}`.trim();
     if (!merged) return;
@@ -187,7 +209,21 @@ const AiInsightsPanel = () => {
   };
 
   const handleSend = async () => {
-    const prompt = String(aiDraftPrompt || '').trim();
+    let prompt = String(aiDraftPrompt || '').trim();
+
+    // Construct additional prompt requirements if filters are active
+    const requirements = [];
+    if (analysisFilters.entries) requirements.push('- IMMEDIATE ENTRIES: Check for high-conviction entries (Rate X/10). Specify Expiry (15s/30s/1m/etc).');
+    if (analysisFilters.levels) requirements.push('- KEY LEVELS: Identify Limit/Stop order zones & Breakout levels.');
+    if (analysisFilters.confluences) requirements.push('- CONFLUENCES: List matching indicators (EMA, RSI, BB, etc) confirming bias.');
+    if (analysisFilters.topDown) requirements.push('- TOP-DOWN ANALYSIS: Validate HTF trend before LTF entry.');
+    if (analysisFilters.topDown) requirements.push('- TOP-DOWN ANALYSIS: Validate HTF trend before LTF entry.');
+
+    if (requirements.length) {
+      const prefix = prompt ? `${prompt}\n\n` : '';
+      prompt = `${prefix}Please include the following in your analysis:\n${requirements.join('\n')}`;
+    }
+
     if (!prompt) return;
 
     appendAiMessage({ role: 'user', content: prompt, meta: { asset: selectedAsset, timeframe: selectedTimeframe } });
@@ -280,6 +316,7 @@ const AiInsightsPanel = () => {
                   <pre className="whitespace-pre-wrap text-sm text-gray-100">{String(m.content || '')}</pre>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
           ) : (
             <div className="text-sm text-gray-500">
@@ -288,6 +325,38 @@ const AiInsightsPanel = () => {
           )}
 
           <div className="pt-3 mt-1 border-t border-gray-800">
+            {/* Analysis Toggles */}
+            <div className="flex items-center gap-2 mb-2 overflow-x-auto no-scrollbar pb-1">
+              <AnalysisToggle
+                active={analysisFilters.entries}
+                onClick={() => toggleFilter('entries')}
+                icon={EntryIcon}
+                tooltip="Immediate Entries & Expiries"
+                size={34}
+              />
+              <AnalysisToggle
+                active={analysisFilters.levels}
+                onClick={() => toggleFilter('levels')}
+                icon={LevelsIcon}
+                tooltip="Key Levels & Limit Orders"
+                size={34}
+              />
+              <AnalysisToggle
+                active={analysisFilters.confluences}
+                onClick={() => toggleFilter('confluences')}
+                icon={IndicatorsIcon}
+                tooltip="Confluences (Indicators)"
+                size={34}
+              />
+              <AnalysisToggle
+                active={analysisFilters.topDown}
+                onClick={() => toggleFilter('topDown')}
+                icon={TopDownIcon}
+                tooltip="Top-Down Analysis"
+                size={34}
+              />
+            </div>
+
             <textarea
               value={aiDraftPrompt}
               onChange={(e) => setAiDraftPrompt(e.target.value)}

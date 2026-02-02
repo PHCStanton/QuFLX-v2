@@ -8,7 +8,17 @@ const normalizeTheme = (value) => {
   if (value === 'ironman') return 'ironman';
   if (value === 'orange-dark') return 'orange-dark';
   if (value === 'system') return 'system';
+  if (value === 'dark') return 'dark';
   return 'dark';
+};
+
+const normalizeFontSize = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 13;
+  // Limit to reasonable web app font sizes
+  if (n < 10) return 10;
+  if (n > 24) return 24;
+  return n;
 };
 
 const normalizeAiImageSource = (value) => {
@@ -83,7 +93,9 @@ const defaultSettings = {
     autoStartCollector: true,
     autoStartGateway: true,
     debugLevel: 'info',
+    debugLevel: 'info',
     sidebarSkinDataUrl: null,
+    fontSize: 13,
   },
   automation: {
     historyWaitTime: 1.5,
@@ -197,6 +209,7 @@ const normalizeSettings = (settings) => {
   };
 
   merged.global.theme = normalizeTheme(merged.global.theme);
+  merged.global.fontSize = normalizeFontSize(merged.global.fontSize);
   merged.ai = { ...(merged.ai || {}) };
   merged.ai.imageSource = normalizeAiImageSource(merged.ai.imageSource);
   merged.ai.voiceInputMode = normalizeVoiceInputMode(merged.ai.voiceInputMode);

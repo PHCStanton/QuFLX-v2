@@ -102,9 +102,9 @@ const Dashboard = () => {
     const root = window.document.documentElement;
     // Remove all theme classes first
     root.classList.remove('theme-light', 'theme-dark', 'theme-orange-dark', 'theme-ironman', 'theme-black-white', 'dark');
-    
+
     let targetTheme = settings.global.theme;
-    
+
     root.classList.add('dark');
     if (targetTheme === 'dark') {
       root.classList.add('theme-dark');
@@ -118,7 +118,10 @@ const Dashboard = () => {
     if (targetTheme === 'black-white') {
       root.classList.add('theme-black-white');
     }
-  }, [settings.global.theme]);
+
+    // Apply global font size
+    root.style.setProperty('--app-font-size', `${settings.global.fontSize || 13}px`);
+  }, [settings.global.theme, settings.global.fontSize]);
 
   return (
     <div className="flex h-screen bg-dashboard-bg text-text-primary overflow-hidden font-sans">
@@ -127,13 +130,13 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        
+
         {/* Top Header / Connection Status */}
         <TopBar />
 
         {/* Main Workspace */}
         <main className="flex-1 flex flex-col overflow-hidden p-2 gap-2">
-          
+
           {activeTab === 'settings' ? (
             <ErrorBoundary>
               <SettingsPanel />

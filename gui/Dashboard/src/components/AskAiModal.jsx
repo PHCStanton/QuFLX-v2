@@ -13,38 +13,62 @@ const PRESETS = [
   {
     id: 'market_overview',
     title: 'Market Overview',
-    description: 'Quick regime + volatility snapshot',
+    description: 'Trend, volatility, and regime snapshot',
     promptTemplate: ({ asset, timeframe }) => `Give a concise market overview for ${asset} on ${timeframe}. Trend, volatility, and any red flags.`
   },
   {
-    id: 'chart_overview',
-    title: 'Chart Overview',
-    description: 'What stands out on the chart right now',
-    promptTemplate: ({ asset, timeframe }) => `Summarize what stands out on the ${asset} ${timeframe} chart right now. Key levels, momentum, and likely scenarios.`
+    id: 'standard_top_down',
+    title: 'Standard Top-Down',
+    description: 'Balanced 1m–5m entry analysis',
+    promptTemplate: ({ asset, timeframe }) => `You are Jarvis, precise top-down A+ entry validator for Pocket Option OTC on QuFLX.
+Rules:
+- Use ONLY QuFLX live context (multi-TF snapshots, current price, payout, time left).
+- Step 1 – HTF (1h/15m/5m): overall bias (trend/strength via ADX + EMA position), major S/R.
+- Step 2 – LTF (current TF): specific trigger (price action + confluence of 2–3 indicators).
+- Require HTF alignment for entry.
+- If no strong confluence → recommend WAIT.
+
+Output format (exact, no extra text):
+HTF Bias: [Up/Down/Range] – [key reason]
+LTF Trigger: [price action + indicators]
+Confluence Score: X/10
+Direction: LONG / SHORT / WAIT
+Expiry: 15s / 30s / 1m / 3m / 5m
+Confidence: XX%
+Target: [price]
+Invalidation: [price or condition]
+Biggest Risk: one sentence`
   },
   {
-    id: 'alert_review',
-    title: 'Alert Review',
-    description: 'Sanity-check a notification/trigger',
-    promptTemplate: ({ asset, timeframe }) => `Review this setup on ${asset} ${timeframe}. Rate it 1-10, biggest risk, and whether to wait or enter.`
+    id: 'full_report',
+    title: 'Full Confluence Report',
+    description: 'Deep dive for Insights Panel',
+    promptTemplate: ({ asset, timeframe }) => `You are compiling a complete top-down report for ${asset} OTC on QuFLX v2.
+Rules:
+- Use ONLY provided multi-TF context (1h, 15m, 5m, 1m snapshots, current price, payout, time left).
+- Structure:
+  1. Higher Timeframe Bias (1h/15m/5m): trend, ADX strength, major S/R, regime (trending/ranging/choppy)
+  2. Lower Timeframe Triggers (1m/current): price action, best 3 indicators + values, momentum/volatility
+  3. Confluence Score (0–10): how many factors align (HTF + LTF)
+  4. Final Recommendation: Direction, Expiry, Target, Invalidation
+  5. Risk Summary: biggest risk + session/news note
+Keep total under 180 words. Be decisive — no hedging.`
   },
   {
-    id: 'risk_check',
-    title: 'Risk Check',
-    description: 'Sizing and risk guardrails',
-    promptTemplate: ({ asset, timeframe }) => `Given the current context on ${asset} ${timeframe}, propose a conservative risk plan and invalidation.`
-  },
-  {
-    id: 'top_down',
-    title: 'Top-Down Analysis',
-    description: 'Continue in Insights Panel for depth',
-    promptTemplate: ({ asset, timeframe }) => `Start a top-down analysis for ${asset}. Use HTF bias, key levels, and an entry plan for ${timeframe}.`
-  },
-  {
-    id: 'quick_predict',
-    title: 'Quick Predict',
-    description: 'Rapid bias, confidence, and primary trigger',
-    promptTemplate: ({ asset, timeframe }) => `FAST PREDICT for ${asset} ${timeframe}.\nBias: [Call/Put/Neutral] (Confidence %)\nPrimary Trigger: [Logic]\nExpiry: [Target]\nLimit response to 3 precise lines.`
+    id: 'blitz_15s',
+    title: '15s/30s Blitz',
+    description: 'Ultra-fast scalp validator',
+    promptTemplate: ({ asset, timeframe }) => `Fast 15s/30s MTF validator for Pocket Option OTC.
+Rules:
+- ONLY QuFLX live context.
+- HTF quick bias check (15m/5m only).
+- LTF trigger: strongest momentum signal right now.
+- Only LONG/SHORT if very clear alignment.
+
+Output exactly 3 lines:
+HTF Quick Bias: [Up/Down/Neutral]
+LTF Trigger: [one phrase]
+Call/Put – Expiry 15s/30s – Confidence XX% – Target [price]`
   },
   {
     id: 'custom',
