@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import Card from './Card';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
@@ -19,6 +19,10 @@ import AskAiModal from './AskAiModal';
 import OscillatorPanel from './OscillatorPanel';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 import ErrorBoundary from './ErrorBoundary';
+import ChartTooltip from './ChartTooltip'; // Import Tooltip
+import useChartMarkers from '../hooks/useChartMarkers'; // Import Markers Hook
+import useChartPriceLines from '../hooks/useChartPriceLines'; // Import Price Lines Hook
+import { HistogramSeries } from 'lightweight-charts'; // Import Series Type
 import { timeframeOptions, csvOptions, indicatorOptions } from '../config/chartOptions';
 
 const ChartWorkspace = () => {
@@ -43,6 +47,7 @@ const ChartWorkspace = () => {
     lastAnnotatedScreenshotDataUrl,
     setLastAnnotatedScreenshotDataUrl,
     setCaptureChartImage,
+    aiMessages, // Need to access AI Messages for markers
   } = useMarketStore();
 
   const health = useStreamHealth();
@@ -50,6 +55,12 @@ const ChartWorkspace = () => {
   const enableStreaming = dataSourceMode !== 'history_only';
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
+  const chartWrapperRef = useRef(null); // Ref for tooltip positioning bounds
+
+  // Tooltip State
+  const [tooltipData, setTooltipData] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(null); // { x, y, value }
+
   const {
     isCapturing,
     isScreenshotOpen,
@@ -85,10 +96,119 @@ const ChartWorkspace = () => {
     return () => setCaptureChartImage(null);
   }, [setCaptureChartImage, captureCompositeChart]);
 
+  const [volumeSeries, setVolumeSeries] = useState(null);
+
   const handleChartReady = useCallback(({ chart, series }) => {
     setCandleSeries(series);
     setMainChart(chart);
+
+    // Initialize Volume Series (Overlay at bottom)
+    const volSeries = chart.addSeries(HistogramSeries, {
+      color: '#26a69a',
+      priceFormat: { type: 'volume' },
+      priceScaleId: '', // Same scale as main chart (overlay)
+    });
+
+    // Configure scale margins to position volume at bottom 20%
+    volSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.85,
+        bottom: 0,
+      },
+    });
+
+    setVolumeSeries(volSeries);
   }, []);
+
+  // Crosshair / Tooltip Logic
+  // Crosshair / Tooltip Logic
+  useEffect(() => {
+    if (!mainChart || !candleSeries) return;
+
+    const handleCrosshairMove = (param) => {
+      if (
+        !param.point ||
+        !param.time ||
+        param.point.x < 0 ||
+        param.point.y < 0 ||
+        (chartWrapperRef.current && param.point.x > chartWrapperRef.current.clientWidth) ||
+        (chartWrapperRef.current && param.point.y > chartWrapperRef.current.clientHeight)
+      ) {
+        setTooltipData(null);
+        return;
+      }
+
+      const ohlc = param.seriesData.get(candleSeries);
+
+      // Extract Indicator Values via Data Lookup (Unified for Overlay & Oscillator)
+      const indicators = [];
+      if (activeIndicators && indicatorSeries) {
+        const key = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
+        const seriesForKey = key ? indicatorSeries[key] : null;
+
+        if (seriesForKey && param.time) {
+          activeIndicators.forEach(ind => {
+            const type = ind.type || ind.value || '';
+            const baseColor = ind.options?.color || ind.color || '#a78bfa';
+
+            const pushVal = (label, dataKey, color) => {
+              const dataArr = seriesForKey[dataKey] || seriesForKey[ind.key];
+              if (!Array.isArray(dataArr)) return;
+
+              // Find matching point by time (Assume exact match for now)
+              const pt = dataArr.find(d => d.time === param.time);
+              if (pt) {
+                let val = pt.value;
+                if (val === undefined && typeof pt.close === 'number') val = pt.close;
+                if (typeof val === 'number') {
+                  indicators.push({
+                    label,
+                    value: val.toFixed(2),
+                    color
+                  });
+                }
+              }
+            };
+
+            // Handle Complex Types
+            if (type === 'bollinger_bands') {
+              pushVal('BB Up', 'bb_upper', baseColor);
+              pushVal('BB Low', 'bb_lower', baseColor);
+              // pushVal('BB Mid', ind.key, baseColor); // Optional: add middle line if desired
+            } else if (type === 'ema_cross') {
+              const fast = ind.params?.fast || 21;
+              const med = ind.params?.med || 50;
+              const slow = ind.params?.slow || 100;
+              pushVal(`EMA ${fast}`, 'ema_21', '#3b82f6');
+              pushVal(`EMA ${med}`, 'ema_50', '#ffffff');
+              pushVal(`EMA ${slow}`, 'ema_100', '#ef4444');
+            } else if (type === 'supertrend') {
+              // Supertrend logic often involves direction, but value is usually sufficient
+              pushVal('SuperTrend', 'supertrend', baseColor);
+            } else if (type === 'support_resistance') {
+              pushVal('Res', 'resistance_level', '#ef4444');
+              pushVal('Sup', 'support_level', '#22c55e');
+            } else {
+              // Default Single Value
+              pushVal(ind.name || ind.label || ind.kind.toUpperCase(), ind.key, baseColor);
+            }
+          });
+        }
+      }
+
+      setTooltipData({
+        visible: true,
+        left: param.point.x,
+        top: param.point.y,
+        ohlc,
+        indicators
+      });
+    };
+
+    mainChart.subscribeCrosshairMove(handleCrosshairMove);
+    return () => mainChart.unsubscribeCrosshairMove(handleCrosshairMove);
+  }, [mainChart, candleSeries, activeIndicators, indicatorSeries, selectedAsset, selectedTimeframe]);
+
 
   const { assetOptions, handleTimeframeChange, isSyncingTimeframe, handleSyncTimeframe } =
     useChartWorkspaceHeaderControls({
@@ -125,11 +245,29 @@ const ChartWorkspace = () => {
     appendCandle,
   });
 
+  useChartMarkers({
+    mainChart,
+    candleSeries,
+    aiMessages,
+    indicatorSeries,
+    activeIndicators,
+    selectedAsset,
+    selectedTimeframe,
+    onError: setError
+  });
+
+  useChartPriceLines({
+    candleSeries,
+    aiMessages,
+    activeIndicators
+  });
+
   const { isLoading } = useTickAggregation({
     marketData,
     selectedAssetKey,
     selectedTimeframe,
     candleSeries,
+    volumeSeries, // Pass Volume Series
     historyCandles,
     historyStatus,
     selectedAsset,
@@ -254,7 +392,52 @@ const ChartWorkspace = () => {
           className="flex-1 relative w-full min-h-0 flex flex-col"
         >
           <ChartWorkspaceOverlays health={health} isLoading={isLoading} selectedAsset={selectedAsset} />
-          <div className="flex-1 min-h-[220px] relative">
+
+          <div
+            className="flex-1 min-h-[220px] relative cursor-crosshair"
+            ref={chartWrapperRef}
+            onDoubleClick={async (e) => {
+              if (!mainChart || !candleSeries || !chartWrapperRef.current) return;
+              const rect = chartWrapperRef.current.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const y = e.clientY - rect.top;
+
+              // Get price from coordinate
+              const price = candleSeries.coordinateToPrice(y);
+              if (price === null) return;
+
+              const priceText = price.toFixed(5);
+
+              try {
+                await navigator.clipboard.writeText(priceText);
+                setCopyFeedback({ x, y, value: priceText });
+                setTimeout(() => setCopyFeedback(null), 800);
+              } catch (err) {
+                console.error('Failed to copy', err);
+              }
+            }}
+          >
+            {/* Tooltip Overlay */}
+            <ChartTooltip
+              visible={tooltipData?.visible}
+              left={tooltipData?.left}
+              top={tooltipData?.top}
+              ohlc={tooltipData?.ohlc}
+              indicators={tooltipData?.indicators}
+              containerWidth={chartWrapperRef.current?.clientWidth || 800}
+              containerHeight={chartWrapperRef.current?.clientHeight || 500}
+            />
+
+            {/* Copy Feedback Toast */}
+            {copyFeedback && (
+              <div
+                className="absolute z-50 px-2 py-1 bg-accent-green text-black text-xs font-bold rounded shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full transition-opacity"
+                style={{ left: copyFeedback.x, top: copyFeedback.y - 10 }}
+              >
+                Copied: {copyFeedback.value}
+              </div>
+            )}
+
             <div className="w-full h-full">
               <ErrorBoundary>
                 <ChartContainer onChartReady={handleChartReady} onError={setError} />
