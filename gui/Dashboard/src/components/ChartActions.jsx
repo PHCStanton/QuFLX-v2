@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { Camera } from 'lucide-react';
-import askAiClickSound from '../assets/Sounds/UIAlert-Positive,_high-tech.mp3';
+import askAiClickSound from '../assets/Sounds/Ask_ai_Clean2.mp3';
 import screenshotClickSound from '../assets/Sounds/screenshot.mp3';
 
 const ChartActions = ({ onOpenScreenshot, onAskAi, isCapturing, isAsking }) => {

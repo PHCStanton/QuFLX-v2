@@ -322,7 +322,7 @@ const createMarketSlice = (set, get) => ({
     if (historyState === 'not_found' || historyState === 'error' || historyState === 'empty') {
       // Don't show error yet if it's still loading or if we just selected the asset
       if (historyState === 'loading') return;
-      
+
       set({
         lastError: `No historical data available for ${asset} @ ${timeframe}. Run history collection first.`
       });
@@ -373,7 +373,7 @@ const createMarketSlice = (set, get) => ({
       }
 
       const data = await res.json();
-      
+
       // The backend returns series in data.series if using **data unpacking, 
       // or in data.data.series if returned as a nested object.
       // Based on gateway/routes/indicators.py, it should be top-level.
@@ -497,10 +497,10 @@ const createMarketSlice = (set, get) => ({
       const bootstrapRes = await fetch('http://localhost:8000/api/v1/history/bootstrap-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          asset, 
-          timeframe: timeframeMin, 
-          duration: waitTime 
+        body: JSON.stringify({
+          asset,
+          timeframe: timeframeMin,
+          duration: waitTime
         })
       });
 
@@ -511,15 +511,15 @@ const createMarketSlice = (set, get) => ({
         // Structured error response from backend
         const errorCode = result.error_code || 'unknown_error';
         const userMessage = result.user_message || result.error_message || 'History collection failed';
-        
+
         console.error(`[LoadHistory] ✗ Bootstrap failed: ${errorCode}`, result);
-        
+
         set((state) => ({
           historyCandles: { ...state.historyCandles, [asset]: [] },
           historyStatus: { ...state.historyStatus, [asset]: 'error' },
           lastError: userMessage
         }));
-        
+
         // Re-throw with user-friendly message for upstream handling
         throw new Error(userMessage);
       }
@@ -535,13 +535,13 @@ const createMarketSlice = (set, get) => ({
 
     } catch (err) {
       console.error('[LoadHistory] Failed to load history:', err);
-      
+
       set((state) => ({
         historyCandles: { ...state.historyCandles, [asset]: [] },
         historyStatus: { ...state.historyStatus, [asset]: 'error' },
         lastError: err.message || 'Failed to load history data'
       }));
-      
+
       // Re-throw for upstream error handling
       throw err;
     }
@@ -623,20 +623,22 @@ const createMarketSlice = (set, get) => ({
         ignore_assets: parseTargetAssets(filterState.ignoreAssets),
         filter_mode: filterState.filterMode
       };
-      
+
+      set({ alertsStatus: { ...get().alertsStatus, isRefreshing: true } });
+
       const payload = {
         min_pct: filterState.minPayout || 92,
         sweep_all: true,
         unstar_below: true,
         ...filterOptions
       };
-      
+
       const res = await fetch('http://localhost:8000/api/v1/assets/refresh-assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const detail = data?.detail || data?.error || `Asset refresh failed (HTTP ${res.status})`;
@@ -647,7 +649,7 @@ const createMarketSlice = (set, get) => ({
       if (data.assets) {
         set({ payoutAssets: data.assets });
         get().syncSubscriptions();
-        
+
         // Log metadata for debugging
         if (data.metadata && import.meta.env && import.meta.env.MODE === 'development') {
           const metaKeys = Object.keys(data.metadata || {});
@@ -676,9 +678,83 @@ const createMarketSlice = (set, get) => ({
 
       const data = await res.json();
       console.log('History collection started:', data);
+
+      if (get().autoRunAlertMonitor) {
+        console.log('[CollectHistory] Auto-running Alert Monitor...');
+        // Start alerts for all payout assets or selected asset
+        const assets = get().payoutAssets || [];
+        get().startAlerts(assets);
+      }
     } catch (err) {
       console.error('Failed to start history collection:', err);
       set({ lastError: `Collection Error: ${err.message}` });
+    }
+  },
+  autoRunAlertMonitor: false,
+  toggleAutoRunAlertMonitor: () => set((state) => ({ autoRunAlertMonitor: !state.autoRunAlertMonitor })),
+  alertsStatus: {
+    running: false,
+    pid: null,
+    started_at: null,
+    assets: [],
+    loading: false
+  },
+  enableTickLogging: false,
+  toggleTickLogging: () => set((state) => ({ enableTickLogging: !state.enableTickLogging })),
+  startAlerts: async (assets = []) => {
+    set((state) => ({ alertsStatus: { ...state.alertsStatus, loading: true } }));
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/alerts/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assets,
+          use_redis: get().enableTickLogging
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        set({ alertsStatus: { running: true, pid: data.pid, started_at: data.started_at, assets, loading: false } });
+      } else {
+        throw new Error(data.detail || 'Failed to start alerts');
+      }
+    } catch (err) {
+      set({ lastError: `Alerts Error: ${err.message}`, alertsStatus: { ...get().alertsStatus, loading: false } });
+    }
+  },
+  stopAlerts: async () => {
+    set((state) => ({ alertsStatus: { ...state.alertsStatus, loading: true } }));
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/alerts/stop', {
+        method: 'POST'
+      });
+      if (res.ok) {
+        set({ alertsStatus: { running: false, pid: null, started_at: null, assets: [], loading: false } });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Failed to stop alerts');
+      }
+    } catch (err) {
+      set({ lastError: `Alerts Error: ${err.message}`, alertsStatus: { ...get().alertsStatus, loading: false } });
+    }
+  },
+  checkAlertsStatus: async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/v1/alerts/status');
+      const data = await res.json();
+      if (res.ok) {
+        set({
+          alertsStatus: {
+            running: data.running,
+            pid: data.pid,
+            started_at: data.started_at,
+            assets: data.assets,
+            loading: false
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Failed to check alerts status:', err);
     }
   }
 });
@@ -803,7 +879,7 @@ const createConnectionSlice = (set, get) => ({
       });
     });
 
-  socket.on('market_data', (data) => {
+    socket.on('market_data', (data) => {
       const validation = validateMarketData(data);
       if (!validation.valid) {
         console.warn('Invalid market data ignored:', validation.error, data);
@@ -900,7 +976,9 @@ const useMarketStore = create(
       selectedAssetKey: state.selectedAssetKey,
       selectedTimeframe: state.selectedTimeframe,
       panelMode: state.panelMode,
-      activeIndicators: state.activeIndicators
+      activeIndicators: state.activeIndicators,
+      autoRunAlertMonitor: state.autoRunAlertMonitor,
+      enableTickLogging: state.enableTickLogging
     })
   })((set, get) => ({
     ...createUiSlice(set),

@@ -23,6 +23,12 @@ except ImportError:
 
 from dotenv import load_dotenv
 
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
+    print("Warning: 'redis' library not found. Redis subscription mode will be unavailable. pip install redis")
+
 # --- Configuration & Setup ---
 
 # Determine Project Root to load .env correctly
@@ -35,14 +41,8 @@ load_dotenv(dotenv_path=ENV_PATH)
 LOG_DIR = PROJECT_ROOT / "system_LOGS" / "alert_dispatch"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_DIR / "dispatch.log", encoding='utf-8')
-    ]
-)
+# Redis Config
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 logger = logging.getLogger("OTC_Dispatch")
 
 
@@ -285,6 +285,16 @@ class TickLogger:
         # Check buffer size
         if len(self.buffers[asset]) >= self.CHUNK_SIZE:
             await self.flush(asset)
+
+    async def log_tick(self, asset: str, tick: Dict):
+        """Log a single tick (e.g. from Redis)"""
+        if asset not in self.buffers:
+            self.buffers[asset] = []
+        
+        self.buffers[asset].append(tick)
+        
+        if len(self.buffers[asset]) >= self.CHUNK_SIZE:
+            await self.flush(asset)
     
     async def flush(self, asset: str):
         if asset not in self.buffers or not self.buffers[asset]:
@@ -325,6 +335,43 @@ class TickLogger:
             writer.writerows(data)
 
 
+class RedisSubscriber:
+    """Listens to Redis 'market_data' channel for live ticks."""
+    def __init__(self, redis_url: str, logger_service: TickLogger, assets: List[str]):
+        self.redis_url = redis_url
+        self.logger_service = logger_service
+        self.assets = [a.upper().replace("_", "") for a in assets]
+        self.redis_client = None
+
+    async def run(self):
+        if not redis:
+            logger.error("Redis library not available. Subscriber cannot start.")
+            return
+
+        logger.info(f"Connecting to Redis for tick logging: {self.redis_url}")
+        try:
+            self.redis_client = redis.from_url(self.redis_url, decode_responses=True)
+            pubsub = self.redis_client.pubsub()
+            await pubsub.subscribe("market_data")
+            
+            logger.info(f"Subscribed to 'market_data' for: {self.assets}")
+            
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    try:
+                        data = json.loads(message['data'])
+                        asset = data.get('asset', '').upper().replace("_", "")
+                        if not self.assets or asset in self.assets:
+                            await self.logger_service.log_tick(asset, data)
+                    except Exception as e:
+                        logger.error(f"Error processing Redis tick: {e}")
+        except Exception as e:
+            logger.error(f"Redis Subscriber Error: {e}")
+        finally:
+            if self.redis_client:
+                await self.redis_client.close()
+
+
 # --- Main Service ---
 
 class OTCDispatcher:
@@ -343,6 +390,10 @@ class OTCDispatcher:
         
         # Tick/Data Logger
         self.logger_service = TickLogger(data_dir=PROJECT_ROOT / "data" / "ticks")
+
+        # Redis Subscriber (Optional)
+        self.redis_mode = False
+        self.subscriber = RedisSubscriber(REDIS_URL, self.logger_service, self.assets)
 
         # Assuming internal API for market data
         self.market_source_url = os.getenv("QFLX_MARKET_DATA_URL", "http://localhost:8000/api/v1/history")
@@ -375,7 +426,11 @@ class OTCDispatcher:
                     if resp.status == 200:
                         data = await resp.json()
                         return data.get('candles', []) or data.get('data', [])
-                    logger.warning(f"Failed to fetch {asset}: {resp.status}")
+                    
+                    if resp.status == 404:
+                        logger.warning(f"Data not found for {asset} (404). Hint: Run 'Collect History' in Dashboard first.")
+                    else:
+                        logger.warning(f"Failed to fetch {asset}: {resp.status}")
                     return []
         except Exception as e:
             logger.error(f"Fetch Error {asset}: {e}")
@@ -433,6 +488,10 @@ class OTCDispatcher:
             logger.info("Test Mode Complete.")
             return
 
+        if self.redis_mode:
+            logger.info("Starting Redis Subscriber task...")
+            asyncio.create_task(self.subscriber.run())
+
         while True:
             try:
                 # Concurrent Checks
@@ -447,14 +506,17 @@ def main():
     parser = argparse.ArgumentParser(description="QuFLX OTC Alert Dispatcher")
     parser.add_argument("--assets", nargs="+", default=["EURUSD_OTC", "GBPUSD_OTC", "USDJPY_OTC"], help="Assets to monitor")
     parser.add_argument("--test-alert", action="store_true", help="Run a single mock alert for testing")
+    parser.add_argument("--redis", action="store_true", help="Enable real-time tick logging via Redis subscription")
     
     args = parser.parse_args()
     
     # Windows Event Loop Policy
     if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
     dispatcher = OTCDispatcher(assets=args.assets, test_mode=args.test_alert)
+    if args.redis:
+        dispatcher.redis_mode = True
     
     try:
         asyncio.run(dispatcher.run_loop())

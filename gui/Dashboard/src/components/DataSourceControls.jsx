@@ -7,13 +7,12 @@ const ActionButton = ({ icon, label, active, onClick, disabled, title }) => (
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${
-      disabled
-        ? 'bg-section-bg/20 border-border-primary text-text-secondary/50 cursor-not-allowed'
-        : active
-          ? 'bg-accent-green/20 border-accent-green text-accent-green shadow-[0_0_15px_rgba(34,197,94,0.2)]'
-          : 'bg-section-bg/80 border-border-primary hover:border-accent-green/50 hover:text-accent-green text-text-secondary'
-    }`}
+    className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${disabled
+      ? 'bg-section-bg/20 border-border-primary text-text-secondary/50 cursor-not-allowed'
+      : active
+        ? 'bg-accent-green/20 border-accent-green text-accent-green shadow-[0_0_15px_rgba(34,197,94,0.2)]'
+        : 'bg-section-bg/80 border-border-primary hover:border-accent-green/50 hover:text-accent-green text-text-secondary'
+      }`}
   >
     {icon}
     <span className="text-[10px] mt-1 font-medium">{label}</span>
@@ -66,17 +65,23 @@ const DataSourceControls = ({
   onCollectHistory,
   isBusyRefreshing,
   streamHealth,
+  autoRunAlertMonitor,
+  onToggleAutoRunAlertMonitor,
+  alertsStatus,
+  onStartAlerts,
+  onStopAlerts,
+  enableTickLogging,
+  onToggleTickLogging,
   children
 }) => {
   return (
     <div
-      className={`transition-all duration-300 ease-in-out ${
-        isCollapsed
-          ? 'h-10 min-h-0 shrink-0'
-          : isBottomCollapsed
-            ? 'flex-1 min-h-0'
-            : 'shrink-0 min-h-[140px]'
-      }`}
+      className={`transition-all duration-300 ease-in-out ${isCollapsed
+        ? 'h-10 min-h-0 shrink-0'
+        : isBottomCollapsed
+          ? 'flex-1 min-h-0'
+          : 'shrink-0 min-h-[140px]'
+        }`}
       style={{ height: isCollapsed ? 40 : isBottomCollapsed ? undefined : height }}
     >
       <Card className={`p-3 rounded-lg h-full quflx-section-light flex flex-col ${isCollapsed ? 'overflow-hidden' : 'overflow-y-auto'}`}>
@@ -126,14 +131,63 @@ const DataSourceControls = ({
               />
             </div>
 
-            <div className="mt-2 flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary">
-              <span className="text-[10px] uppercase font-bold text-text-secondary">Auto Refresh (5m)</span>
-              <ToggleSwitch checked={autoRefresh} onChange={onToggleAutoRefresh} />
+            <div className="mt-2 grid grid-cols-1 gap-1">
+              <div className="flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary">
+                <span className="text-[10px] uppercase font-bold text-text-secondary">Auto Refresh (5m)</span>
+                <ToggleSwitch checked={autoRefresh} onChange={onToggleAutoRefresh} />
+              </div>
+
+              <div className="flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary">
+                <span className="text-[10px] uppercase font-bold text-text-secondary">OTC Only</span>
+                <ToggleSwitch checked={otcOnly} onChange={onToggleOtcOnly} />
+              </div>
+
+              <div className="flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary"
+                title="Automatically start the Alert Monitor script after history collection starts">
+                <span className="text-[10px] uppercase font-bold text-text-secondary">Auto-run Alerts</span>
+                <ToggleSwitch checked={autoRunAlertMonitor} onChange={onToggleAutoRunAlertMonitor} />
+              </div>
+
+              <div className="flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary"
+                title="Enable high-frequency raw tick logging via Redis">
+                <span className="text-[10px] uppercase font-bold text-text-secondary">Tick Logging</span>
+                <ToggleSwitch checked={enableTickLogging} onChange={onToggleTickLogging} />
+              </div>
             </div>
 
-            <div className="mt-2 flex items-center justify-between p-1.5 bg-section-bg/50 rounded border border-border-primary">
-              <span className="text-[10px] uppercase font-bold text-text-secondary">OTC Only</span>
-              <ToggleSwitch checked={otcOnly} onChange={onToggleOtcOnly} />
+            {/* Alerts Control Panel */}
+            <div className="mt-2 p-2 bg-section-bg/80 rounded border border-border-primary">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-extrabold text-accent-green">Alert Monitor</span>
+                <div className={`w-2 h-2 rounded-full ${alertsStatus?.running ? 'bg-accent-green shadow-[0_0_5px_rgba(34,197,94,0.8)]' : 'bg-text-secondary/30'}`} />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onStartAlerts}
+                  disabled={alertsStatus?.running || alertsStatus?.loading}
+                  className={`flex-1 text-[9px] py-1 rounded border transition-all ${alertsStatus?.running
+                    ? 'bg-section-bg border-border-primary text-text-secondary/50'
+                    : 'bg-accent-green/10 border-accent-green/50 text-accent-green hover:bg-accent-green/20'
+                    }`}
+                >
+                  START
+                </button>
+                <button
+                  onClick={onStopAlerts}
+                  disabled={!alertsStatus?.running || alertsStatus?.loading}
+                  className={`flex-1 text-[9px] py-1 rounded border transition-all ${!alertsStatus?.running
+                    ? 'bg-section-bg border-border-primary text-text-secondary/50'
+                    : 'bg-accent-red/10 border-accent-red/30 text-accent-red hover:bg-accent-red/20'
+                    }`}
+                >
+                  STOP
+                </button>
+              </div>
+              {alertsStatus?.pid && (
+                <div className="mt-1 text-center font-mono text-[8px] text-text-secondary/60">
+                  PID: {alertsStatus.pid}
+                </div>
+              )}
             </div>
 
             {children}

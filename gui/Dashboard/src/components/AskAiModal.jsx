@@ -592,15 +592,20 @@ const AskAiModal = ({
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <label className="flex items-center gap-2 text-[12px] text-gray-500">
-                <input
-                  type="checkbox"
-                  checked={readAnswerAloud}
-                  onChange={(e) => setReadAnswerAloud(e.target.checked)}
-                  disabled={!ttsEnabled}
-                />
-                Read answer aloud
-              </label>
+              <div className={`flex items-center gap-2 ${!ttsEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="scale-75 origin-center">
+                  <NeomorphicSwitch
+                    checked={readAnswerAloud}
+                    onChange={() => setReadAnswerAloud(!readAnswerAloud)}
+                  />
+                </div>
+                <span
+                  className="text-[12px] text-gray-500 font-medium cursor-pointer"
+                  onClick={() => setReadAnswerAloud(!readAnswerAloud)}
+                >
+                  Read answer aloud
+                </span>
+              </div>
 
               {isSpeaking ? (
                 <div className="flex items-center gap-2">

@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useLayoutEffect } from 'react';
+import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react';
 import useMarketStore from '../store/marketStore';
 import { useStreamHealth } from '../hooks/useStreamHealth';
 import DataSourceControls from './DataSourceControls';
@@ -30,7 +30,23 @@ const AssetPayoutPanel = ({
         collectHistory,
         assetFilterState,
         setAssetFilterState,
+        // Alerts Integration
+        autoRunAlertMonitor,
+        toggleAutoRunAlertMonitor,
+        alertsStatus,
+        startAlerts,
+        stopAlerts,
+        checkAlertsStatus,
+        enableTickLogging,
+        toggleTickLogging,
     } = useMarketStore();
+
+    // Poll Alerts Status
+    useEffect(() => {
+        checkAlertsStatus();
+        const interval = setInterval(checkAlertsStatus, 10000);
+        return () => clearInterval(interval);
+    }, [checkAlertsStatus]);
 
     const streamHealth = useStreamHealth();
 
@@ -236,6 +252,14 @@ const AssetPayoutPanel = ({
                     onCollectHistory={collectHistory}
                     isBusyRefreshing={autoRefresh}
                     streamHealth={streamHealth}
+                    // Alerts Props
+                    autoRunAlertMonitor={autoRunAlertMonitor}
+                    onToggleAutoRunAlertMonitor={toggleAutoRunAlertMonitor}
+                    alertsStatus={alertsStatus}
+                    onStartAlerts={() => startAlerts(payoutAssets)}
+                    onStopAlerts={stopAlerts}
+                    enableTickLogging={enableTickLogging}
+                    onToggleTickLogging={toggleTickLogging}
                 >
                     <AssetFilterGroup
                         maxAssetsToStar={maxAssetsToStar}

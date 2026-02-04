@@ -241,6 +241,8 @@ app.add_middleware(
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 socket_app = socketio.ASGIApp(sio, app)
 
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, ai_voice, asset_control, ops, dev_logs, alerts
+
 # API Routers
 logger.debug(f"Registering assets router: {assets.router}")
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
@@ -254,6 +256,7 @@ app.include_router(ai_voice.router, prefix="/api/v1/ai/voice", tags=["AI"])  # C
 app.include_router(asset_control.router, prefix="/api/v1/asset-control", tags=["Asset Control"])
 app.include_router(ops.router, prefix="/api/v1/ops", tags=["Ops"])
 app.include_router(dev_logs.router, prefix="/api/v1/dev/logs", tags=["Dev Logs"])
+app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
 
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""

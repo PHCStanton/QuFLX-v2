@@ -64,7 +64,6 @@ const AiInsightsPanel = () => {
     entries: false,
     levels: false,
     confluences: false,
-    confluences: false,
     topDown: false
   });
 
