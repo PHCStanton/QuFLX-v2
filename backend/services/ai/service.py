@@ -72,10 +72,12 @@ class AIService:
         request_id: str = '-',
         asset: Optional[str] = None,
         timeframe: Optional[str] = None,
+        conversation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Ask the AI service a question with optional structured context and image.
         
         Uses the xAI/Grok API compatible with OpenAI chat completions format.
+        Leverages prompt caching by keeping the system message stable.
         """
         if not self._enabled:
             raise AIServiceError(
@@ -86,94 +88,98 @@ class AIService:
             )
 
         logger.info(
-            'AIService.ask request_id=%s model=%s asset=%s timeframe=%s image_present=%s prompt_len=%s',
+            'AIService.ask request_id=%s model=%s asset=%s timeframe=%s conversation_id=%s image_present=%s prompt_len=%s',
             request_id,
             self.model,
             asset or '-',
             timeframe or '-',
+            conversation_id or '-',
             bool(image),
             len(prompt or ''),
         )
 
+        # 1. OPTIMIZATION: SYSTEM PROMPT (Fixed Prefix)
+        # Keep this as stable as possible to allow for prefix caching.
+        system_content = (
+            "You are QuFLX AI, a high-performance trading assistant.\n\n"
+            "CORE RULES:\n"
+            "- Use ONLY the provided TradingContext (ticks, candles, indicators).\n"
+            "- DO NOT use external sources, search, or recall cached prices.\n"
+            "- If data is insufficient for a confident analysis, state so clearly.\n"
+            "- Adhere to strict risk management and functional simplicity."
+        )
+
+        # 2. DYNAMIC CONTENT (User Message)
+        # Dynamic instructions and data are moved here so they don't break the system prefix cache.
         verbosity = ''
         ui_mode = ''
-        has_custom_instructions = False
         if context:
             verbosity = str(context.get('responseVerbosity') or '').strip().lower()
             ui_mode = str(context.get('uiMode') or '').strip().lower()
-            has_custom_instructions = bool(str(context.get('customInstructions') or '').strip())
 
         prompt_text = str(prompt or '')
         prompt_len = len(prompt_text)
         has_format_constraints = bool(re.search(r'\b(output\s*format|indicators\s*used|rating\s*:\s*\w|expiry\s*:)\b', prompt_text, flags=re.IGNORECASE))
+        has_custom_instructions = context and bool(str(context.get('customInstructions') or '').strip())
 
         is_complex_request = has_custom_instructions or has_format_constraints or prompt_len >= 500 or bool(image)
         timeout_seconds = self.timeout_seconds_slow if is_complex_request else self.timeout_seconds_fast
 
-        system_content = "You are a helpful trading assistant for QuFLX."
+        # Construct dynamic user instructions
+        instruction_parts = []
         
-        # Enforce OTC Data Lock
-        system_content += "\n\nYou MUST use ONLY QuFLX-provided TradingContext (live ticks, candles, indicators). DO NOT search web, use external sources (Deriv, etc.), or recall cached prices. If data insufficient, say so."
-
-        if context and context.get('customInstructions'):
-            instr = str(context.get('customInstructions')).strip()
-            if instr:
-                system_content = f"{instr}\n\n{system_content}"
-
+        # UI Mode instructions
         if ui_mode == 'modal':
-            system_content += "\n\nThis is a quick Ask AI modal response. Keep it short, actionable, and skimmable."
+            instruction_parts.append("MODE: Quick Response. Be short, actionable, and skimmable.")
         elif ui_mode == 'insights':
-            system_content += "\n\nThis is the AI Insights panel. Provide deeper reasoning and structured follow-ups."
-
+            instruction_parts.append("MODE: Deep Analysis. Provide detailed reasoning and structured follow-ups.")
+            
+        # Verbosity instructions
         if verbosity == 'concise':
-            system_content += "\n\nStyle: concise. Use up to 6 bullet points. Include a single recommendation (Enter/Wait/Skip) and one key risk."
+            instruction_parts.append("STYLE: Concise. Max 6 bullets. One recommendation (Enter/Wait/Skip), one risk.")
         elif verbosity == 'detailed':
-            system_content += "\n\nStyle: detailed. Use sections and include assumptions, invalidation, and next steps."
+            instruction_parts.append("STYLE: Detailed. Use sections, assumptions, invalidation criteria, and next steps.")
         else:
-            system_content += "\n\nStyle: balanced. Be specific and practical without being verbose."
+            instruction_parts.append("STYLE: Balanced. Specific and practical.")
 
+        # Custom instructions
+        if has_custom_instructions:
+            instr = str(context.get('customInstructions')).strip()
+            instruction_parts.append(f"CUSTOM INSTRUCTIONS:\n{instr}")
+
+        # Market Context
         if context:
-            # Remove customInstructions from context dump to avoid clutter
             dump_ctx = dict(context)
             dump_ctx.pop('customInstructions', None)
-            context_str = json.dumps(dump_ctx, indent=2)
-            system_content += f"\n\nCurrent Market Context:\n{context_str}"
+            # Use JSON separators and sort_keys for consistent serialization (better for caching if prefix matches)
+            context_json = json.dumps(dump_ctx, separators=(',', ':'), sort_keys=True)
+            instruction_parts.append(f"TRADING CONTEXT:\n{context_json}")
 
-        # Prepare user message content
-        user_content = []
-        user_content.append({"type": "text", "text": prompt})
+        # Final User Content Assembly
+        user_text = ""
+        if instruction_parts:
+            user_text = "\n\n".join(instruction_parts) + "\n\n---\n\n"
+        user_text += f"USER PROMPT: {prompt_text}"
 
+        user_content = [{"type": "text", "text": user_text}]
         if image:
-            # Append image for vision models
             user_content.append({
                 "type": "image_url",
-                "image_url": {
-                    "url": image
-                }
+                "image_url": {"url": image}
             })
-            # If we have an image, we might want to ensure we're using a vision model?
-            # For now, we assume the default model (or user config) handles it.
-            # Grok-4 series usually handles multimodal.
 
         messages = [
-            {
-                "role": "system",
-                "content": system_content
-            },
-            {
-                "role": "user",
-                "content": user_content
-            }
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content}
         ]
 
-        max_tokens: Optional[int]
+        # 3. TOKEN LIMITS
+        max_tokens: int = 500
         if verbosity == 'concise':
             max_tokens = 250
         elif verbosity == 'detailed':
             max_tokens = 900
-        else:
-            max_tokens = 500
-
+            
         if ui_mode == 'modal':
             max_tokens = min(max_tokens, 300)
 
@@ -185,34 +191,40 @@ class AIService:
             "max_tokens": max_tokens,
         }
 
+        # 4. API CALL WITH CACHING HEADERS
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.api_key}',
+        }
+        if conversation_id:
+            # Grok-specific header for routing to same cache cluster
+            headers['x-grok-conv-id'] = conversation_id
+
         try:
             logger.info(
-                'AIService.ask timeout_seconds=%s complex=%s has_custom_instructions=%s has_format_constraints=%s ui_mode=%s verbosity=%s',
-                timeout_seconds,
+                'AIService.ask request_id=%s call complex=%s ui=%s verbosity=%s context_keys=%s',
+                request_id,
                 is_complex_request,
-                has_custom_instructions,
-                has_format_constraints,
                 ui_mode or '-',
                 verbosity or '-',
+                list((context or {}).keys()),
             )
 
             async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                 response = await client.post(
                     self.base_url,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'Authorization': f'Bearer {self.api_key}',
-                    },
+                    headers=headers,
                     json=payload,
                 )
 
             if response.status_code != 200:
                 retryable = response.status_code >= 500 or response.status_code == 429
                 logger.error(
-                    'AI provider error request_id=%s status=%s retryable=%s',
+                    'AI provider error request_id=%s status=%s retryable=%s body=%s',
                     request_id,
                     response.status_code,
                     retryable,
+                    response.text[:500],
                 )
                 raise AIServiceError(
                     code='provider_error',
@@ -223,6 +235,26 @@ class AIService:
                 )
 
             data = response.json()
+            usage = data.get('usage', {})
+            
+            # 5. TELEMETRY: CACHE MONITORING
+            # Grok usage fields: cached_tokens (or prompt_tokens_details.cached_tokens)
+            cached_tokens = usage.get('cached_tokens', 0)
+            if not cached_tokens and 'prompt_tokens_details' in usage:
+                cached_tokens = usage['prompt_tokens_details'].get('cached_tokens', 0)
+            
+            total_prompt_tokens = usage.get('prompt_tokens', 0)
+            hit_rate = (cached_tokens / total_prompt_tokens * 100) if total_prompt_tokens > 0 else 0
+
+            logger.info(
+                'AIService metrics request_id=%s cached=%d total_input=%d hit_rate=%.1f%% output=%d',
+                request_id,
+                cached_tokens,
+                total_prompt_tokens,
+                hit_rate,
+                usage.get('completion_tokens', 0),
+            )
+
             choices = data.get('choices')
             if not isinstance(choices, list) or not choices:
                 raise AIServiceError(
@@ -232,8 +264,9 @@ class AIService:
                     retryable=True,
                 )
 
-            message = choices[0].get('message') if isinstance(choices[0], dict) else None
-            content = message.get('content') if isinstance(message, dict) else None
+            message = choices[0].get('message', {})
+            content = message.get('content', '')
+            
             if not isinstance(content, str) or not content.strip():
                 raise AIServiceError(
                     code='invalid_provider_response',
@@ -247,8 +280,12 @@ class AIService:
                 'meta': {
                     'ok': True,
                     'model': data.get('model', self.model),
-                    'usage': data.get('usage', {}),
-                    'used_context_keys': list((context or {}).keys()),
+                    'usage': usage,
+                    'cache': {
+                        'hit_rate': hit_rate,
+                        'cached_tokens': cached_tokens,
+                    },
+                    'conversation_id': conversation_id,
                 },
             }
 

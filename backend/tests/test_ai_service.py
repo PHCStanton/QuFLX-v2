@@ -66,40 +66,79 @@ async def test_ask_timeout(ai_service):
 
 @pytest.mark.asyncio
 async def test_prompt_construction(ai_service):
-    # Verify that uiMode and responseVerbosity influence the system prompt and max_tokens
+    # Verify that uiMode and responseVerbosity influence the messages and max_tokens
     with patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value = AsyncMock(
             status_code=200,
             json=lambda: {
                 "choices": [{"message": {"content": "ok"}}],
-                "model": "test"
+                "model": "test",
+                "usage": {"prompt_tokens": 100}
             }
         )
         
         # Test Modal + Concise
         await ai_service.ask(
-            prompt="Test",
+            prompt="Test prompt",
             context={"uiMode": "modal", "responseVerbosity": "concise"}
         )
         
         args, kwargs = mock_post.call_args
         payload = kwargs["json"]
         system_msg = payload["messages"][0]["content"]
+        user_msg = payload["messages"][1]["content"][0]["text"]
         
-        assert "quick Ask AI modal response" in system_msg
-        assert "Style: concise" in system_msg
-        assert payload["max_tokens"] <= 250
+        # System message should be static
+        assert "QuFLX AI" in system_msg
+        assert "CORE RULES" in system_msg
+        
+        # Instructions should be in User message now for caching
+        assert "MODE: Quick Response" in user_msg
+        assert "STYLE: Concise" in user_msg
+        assert "USER PROMPT: Test prompt" in user_msg
+        assert payload["max_tokens"] <= 300
 
         # Test Insights + Detailed
         await ai_service.ask(
-            prompt="Test",
+            prompt="Deep dive",
             context={"uiMode": "insights", "responseVerbosity": "detailed"}
         )
         
         args, kwargs = mock_post.call_args
         payload = kwargs["json"]
-        system_msg = payload["messages"][0]["content"]
+        user_msg = payload["messages"][1]["content"][0]["text"]
         
-        assert "AI Insights panel" in system_msg
-        assert "Style: detailed" in system_msg
+        assert "MODE: Deep Analysis" in user_msg
+        assert "STYLE: Detailed" in user_msg
+        assert "USER PROMPT: Deep dive" in user_msg
         assert payload["max_tokens"] == 900
+
+@pytest.mark.asyncio
+async def test_cache_telemetry(ai_service):
+    # Verify that usage data and x-grok-conv-id are handled
+    with patch("httpx.AsyncClient.post") as mock_post:
+        mock_post.return_value = AsyncMock(
+            status_code=200,
+            json=lambda: {
+                "choices": [{"message": {"content": "ok"}}],
+                "model": "grok-4",
+                "usage": {
+                    "prompt_tokens": 1000,
+                    "cached_tokens": 800,
+                    "completion_tokens": 50
+                }
+            }
+        )
+        
+        result = await ai_service.ask(
+            prompt="Cached check",
+            conversation_id="test-conv-123"
+        )
+        
+        args, kwargs = mock_post.call_args
+        headers = kwargs["headers"]
+        
+        assert headers["x-grok-conv-id"] == "test-conv-123"
+        assert result["meta"]["cache"]["hit_rate"] == 80.0
+        assert result["meta"]["cache"]["cached_tokens"] == 800
+        assert result["meta"]["conversation_id"] == "test-conv-123"

@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import argparse
+import csv
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +37,17 @@ CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parents[1] # Assuming backend/scripts/script.py -> backend -> root
 ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
+
+# QuFLX utilities
+try:
+    from backend.utils.history_utils import get_recent_history_file
+    from backend.utils.asset_utils import normalize_asset
+except ImportError:
+    # Fallback if PYTHONPATH is not set correctly
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.append(str(PROJECT_ROOT))
+    from backend.utils.history_utils import get_recent_history_file
+    from backend.utils.asset_utils import normalize_asset
 
 # Logging Setup
 LOG_DIR = PROJECT_ROOT / "system_LOGS" / "alert_dispatch"
@@ -187,18 +199,20 @@ class AIOrchestrator:
 
         payload = {
             "prompt": prompt,
-            "model": "flash", # or explicit model
-            "temperature": 0.1
+            "context": {
+                "asset": context.asset,
+                "timeframe": "1m",
+                "indicators": context.technicals
+            }
         }
 
         try:
             async with aiohttp.ClientSession() as session:
-                # Assuming typical QuFLX AI Ops endpoint structure
                 async with session.post(
                     self.api_url, 
                     json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}"},
-                    timeout=10
+                    timeout=15
                 ) as response:
                     if response.status != 200:
                         logger.error(f"AI API returned {response.status}")
@@ -273,7 +287,7 @@ class TickLogger:
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.buffers = {} # {asset: [ticks]}
-        self.CHUNK_SIZE = 1000
+        self.CHUNK_SIZE = 50 # Reduced from 1000 for faster persistence
     
     async def log_ticks(self, asset: str, ticks: List[Dict]):
         if asset not in self.buffers:
@@ -306,9 +320,23 @@ class TickLogger:
         if not chunk:
             return
 
-        # Filename: asset_timestamp.csv
-        ts_start = int(chunk[0].get('time', datetime.now().timestamp()))
-        ts_end = int(chunk[-1].get('time', datetime.now().timestamp()))
+        # Robust timestamp extraction
+        def get_ts(item):
+            t = item.get('time') or item.get('timestamp')
+            if not t:
+                return int(datetime.now().timestamp())
+            try:
+                return int(float(t))
+            except (ValueError, TypeError):
+                # Handle ISO strings if they snuck in
+                try:
+                    from dateutil import parser
+                    return int(parser.parse(str(t)).timestamp())
+                except:
+                    return int(datetime.now().timestamp())
+
+        ts_start = get_ts(chunk[0])
+        ts_end = get_ts(chunk[-1])
         
         asset_dir = self.data_dir / asset
         asset_dir.mkdir(parents=True, exist_ok=True)
@@ -340,7 +368,7 @@ class RedisSubscriber:
     def __init__(self, redis_url: str, logger_service: TickLogger, assets: List[str]):
         self.redis_url = redis_url
         self.logger_service = logger_service
-        self.assets = [a.upper().replace("_", "") for a in assets]
+        self.assets = [normalize_asset(a) for a in assets]
         self.redis_client = None
 
     async def run(self):
@@ -360,7 +388,7 @@ class RedisSubscriber:
                 if message['type'] == 'message':
                     try:
                         data = json.loads(message['data'])
-                        asset = data.get('asset', '').upper().replace("_", "")
+                        asset = normalize_asset(data.get('asset', ''))
                         if not self.assets or asset in self.assets:
                             await self.logger_service.log_tick(asset, data)
                     except Exception as e:
@@ -398,8 +426,32 @@ class OTCDispatcher:
         # Assuming internal API for market data
         self.market_source_url = os.getenv("QFLX_MARKET_DATA_URL", "http://localhost:8000/api/v1/history")
 
+    def scan_available_assets(self) -> List[str]:
+        """Scans local history directory for assets with data."""
+        history_dir = PROJECT_ROOT / "data" / "data_output" / "history"
+        if not history_dir.exists():
+            return []
+        
+        found_assets = []
+        try:
+            # Check subdirectories that contain CSV files
+            for item in history_dir.iterdir():
+                if item.is_dir():
+                    # Strict: Folder name MUST be exactly equal to its normalized form
+                    # This avoids picking up 'AED_CNY_OTC_' if 'AEDCNYOTC' is the target
+                    name = item.name
+                    if name == normalize_asset(name):
+                        # Check if any .csv exists and ignore LEGACY
+                        csvs = [f for f in item.glob("*.csv") if "LEGACY" not in f.name]
+                        if csvs:
+                            found_assets.append(name)
+        except Exception as e:
+            logger.error(f"Asset Scan Error: {e}")
+            
+        return found_assets
+
     async def fetch_data(self, asset: str) -> List[Dict]:
-        """Fetches last 50 candles for asset."""
+        """Fetches last 50 candles for asset, prioritizing local CSV."""
         if self.test_mode:
              # Mock Data
              logger.info(f"Test Mode: Generating mock data for {asset}")
@@ -410,27 +462,46 @@ class OTCDispatcher:
              # Include time for logging
              return [{"time": now + (i*60), "close": base + (i * 0.0002), "high": base + (i*0.00025), "low": base + (i*0.00018)} for i in range(50)]
 
-        # Real Data
+        # --- Option A: Direct CSV Reading ---
+        try:
+            # 1. Look for local history file
+            # timeframe 1 = 1m
+            csv_path = get_recent_history_file(asset, 1)
+            
+            if csv_path and csv_path.exists():
+                import pandas as pd
+                # Run blocking I/O in thread
+                df = await asyncio.to_thread(pd.read_csv, csv_path)
+                if not df.empty:
+                    # Rename 'timestamp' to 'time' if needed to match dispatcher expectation
+                    if 'timestamp' in df.columns and 'time' not in df.columns:
+                        df = df.rename(columns={'timestamp': 'time'})
+                    
+                    # Take last 50 candles
+                    candles = df.tail(50).to_dict('records')
+                    logger.info(f"Loaded {len(candles)} candles from local CSV for {asset}")
+                    return candles
+        except Exception as e:
+            logger.error(f"Error reading local history for {asset}: {e}")
+
+        # --- Fallback: Real Data from API ---
         try:
             async with aiohttp.ClientSession() as session:
                 # Adjust timeframe/params as per QuFLX API
-                # Fetching 1m candles for scanning. 
-                # Note: User asked for TICKS logging. 
-                # If we are only fetching CANDLES here, we can only log CANDLES.
-                # To log TICKS, we would need a WebSocket or a separate Tick API call.
-                # For this implementation, we will log the fetched data (Candles) 
-                # treating them as the "data unit" for now, or assume this fetch function 
-                # might be swapped for a Tick fetcher later.
                 url = f"{self.market_source_url}/{asset}/1m?limit=50"
                 async with session.get(url, timeout=5) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        return data.get('candles', []) or data.get('data', [])
+                        candles = data.get('candles', []) or data.get('data', [])
+                        if candles:
+                             logger.info(f"Fetched {len(candles)} candles via API for {asset}")
+                        return candles
                     
                     if resp.status == 404:
-                        logger.warning(f"Data not found for {asset} (404). Hint: Run 'Collect History' in Dashboard first.")
+                         # Silencing this unless in debug mode, as we now prioritize local CSV
+                         pass
                     else:
-                        logger.warning(f"Failed to fetch {asset}: {resp.status}")
+                        logger.warning(f"Failed to fetch {asset} via API: {resp.status}")
                     return []
         except Exception as e:
             logger.error(f"Fetch Error {asset}: {e}")
@@ -480,22 +551,63 @@ class OTCDispatcher:
                 logger.info(f"AI Rejected {asset}: {ai_verdict.reason}")
 
     async def run_loop(self):
-        logger.info(f"Starting OTC Dispatcher. Monitoring: {self.assets}")
+        logger.info(f"Starting OTC Dispatcher...")
+
         if self.test_mode:
             logger.warning("⚠️ RUNNING IN TEST MODE (Mock Data) ⚠️")
-            # Run once and exit
-            await asyncio.gather(*(self.process_asset(a) for a in self.assets[:1])) # Test 1 asset
+            if not self.assets:
+                self.assets = ["EURUSD_OTC"] # Default for test
+            await asyncio.gather(*(self.process_asset(a) for a in self.assets[:1]))
             logger.info("Test Mode Complete.")
             return
 
+        # Initial Auto-Discovery if no assets provided (or even if they are, we can append)
+        # Taking "I don't want any hard coded assets" to mean we rely on auto-discovery.
+        # We will merge provided args (if any) with discovered ones.
+        discovered = self.scan_available_assets()
+        if discovered:
+            # distinct union
+            current_set = set(self.assets)
+            for a in discovered:
+                if a not in current_set:
+                    self.assets.append(a)
+            logger.info(f"Assets merged with auto-discovery: {self.assets}")
+        
+        if not self.assets:
+            logger.warning("No assets found in history folder and none provided. Waiting for 'Collect History'...")
+
         if self.redis_mode:
             logger.info("Starting Redis Subscriber task...")
+            # Ensure subscriber knows about all current assets
+            if self.subscriber:
+                self.subscriber.assets = [a.upper().replace("_", "") for a in self.assets]
             asyncio.create_task(self.subscriber.run())
 
         while True:
             try:
-                # Concurrent Checks
-                await asyncio.gather(*(self.process_asset(asset) for asset in self.assets))
+                # 1. Hot-Swap: Scan for new assets every loop
+                current_known = set(self.assets)
+                freshly_found = self.scan_available_assets()
+                new_ones = [a for a in freshly_found if a not in current_known]
+                
+                if new_ones:
+                    logger.info(f"🔥 Hot-Swap: Detected new assets: {new_ones}")
+                    self.assets.extend(new_ones)
+                    # Update Redis Subscriber whitelist if active
+                    if self.redis_mode and self.subscriber:
+                        # Append new formatted assets
+                        for na in new_ones:
+                            fmt = na.upper().replace("_", "")
+                            if fmt not in self.subscriber.assets:
+                                self.subscriber.assets.append(fmt)
+
+                if not self.assets:
+                    # Still waiting for assets
+                    pass
+                else:
+                    # 2. Process all assets
+                    await asyncio.gather(*(self.process_asset(asset) for asset in self.assets))
+            
             except Exception as e:
                 logger.error(f"Loop Error: {e}")
             
@@ -504,7 +616,7 @@ class OTCDispatcher:
 
 def main():
     parser = argparse.ArgumentParser(description="QuFLX OTC Alert Dispatcher")
-    parser.add_argument("--assets", nargs="+", default=["EURUSD_OTC", "GBPUSD_OTC", "USDJPY_OTC"], help="Assets to monitor")
+    parser.add_argument("--assets", nargs="+", default=[], help="Assets to monitor (optional, defaults to auto-discovery)")
     parser.add_argument("--test-alert", action="store_true", help="Run a single mock alert for testing")
     parser.add_argument("--redis", action="store_true", help="Enable real-time tick logging via Redis subscription")
     

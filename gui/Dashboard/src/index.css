@@ -24,7 +24,7 @@
 /* Default Theme Tiling Background Pattern */
 :root:not(.theme-dark):not(.theme-orange-dark):not(.theme-ironman):not(.theme-black-white) .bg-dashboard-bg {
   background-color: transparent !important;
-  background-image: url('./assets/textures/METAL_GRID_SILVER_BG.jpg') !important;
+  background-image: url('./assets/textures/PANEL_Desktop_Tech-ICONS_BG4.jpg') !important;
   background-repeat: repeat !important;
   background-size: auto !important;
 }

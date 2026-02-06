@@ -24,6 +24,7 @@ class AiAskRequest(BaseModel):
     timeframe: Optional[str] = Field(default=None, max_length=32)
     image_base64: Optional[str] = Field(default=None, max_length=12_000_000)
     image: Optional[str] = Field(default=None, max_length=12_000_000)
+    conversation_id: Optional[str] = Field(default=None, alias='conversationId', max_length=128)
 
     @validator('prompt', pre=True)
     def _normalize_prompt(cls, v: Any) -> str:
@@ -147,11 +148,20 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
             },
         )
 
+    # Determine conversation_id: payload > request header > stable fallback
+    conv_id = parsed.conversation_id or request.headers.get('X-Grok-Conv-ID')
+    if not conv_id:
+        # Generate stable ID for the asset/timeframe pool to maximize cache reuse across users/sessions
+        import hashlib
+        key = f"quflx-v2-{parsed.asset or 'main'}-{parsed.timeframe or '1m'}"
+        conv_id = hashlib.sha256(key.encode()).hexdigest()[:24]
+
     logger.info(
-        'AI ask request_id=%s asset=%s timeframe=%s image_present=%s context_keys=%s',
+        'AI ask request_id=%s asset=%s timeframe=%s conv_id=%s image_present=%s context_keys=%s',
         request_id,
         parsed.asset or '-',
         parsed.timeframe or '-',
+        conv_id,
         bool(image),
         len(context.keys()),
     )
@@ -167,6 +177,7 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
             request_id=request_id,
             asset=parsed.asset,
             timeframe=parsed.timeframe,
+            conversation_id=conv_id,
         )
 
         return {
