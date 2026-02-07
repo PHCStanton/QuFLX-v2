@@ -590,6 +590,10 @@ const createMarketSlice = (set, get) => ({
       socket.emit('join_room', `market_data:${assetKey}`);
     });
 
+    // Phase 3: Publish active ticker list to backend (for Allocator & Dispatcher sync)
+    // The backend gateway will forward this to Redis "ticker:active"
+    socket.emit('update_active_ticker', required);
+
     set({ subscribedAssetKeys: required });
   },
   autoRefresh: false,

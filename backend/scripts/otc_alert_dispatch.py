@@ -181,10 +181,16 @@ class AIOrchestrator:
     def __init__(self, api_url: str, api_key: str):
         self.api_url = api_url
         self.api_key = api_key
-        # Fallback/Mock URL handling if needed, but assuming direct connection to Backend Service
+        # Semaphore to limit concurrent AI requests
+        self.semaphore = asyncio.Semaphore(3)
 
     async def verify_setup(self, context: AlertContext) -> AIAnalysisResult:
         """Sends context to AI and awaits verdict."""
+        # Acquire semaphore before proceeding
+        async with self.semaphore:
+             return await self._execute_request(context)
+
+    async def _execute_request(self, context: AlertContext) -> AIAnalysisResult:
         if not self.api_url:
             logger.warning("AI URL not configured, skipping AI verification.")
             return AIAnalysisResult(False, "AI_URL_MISSING", 0.0)
@@ -207,21 +213,24 @@ class AIOrchestrator:
         }
 
         try:
+            print(f"DEBUG: AI verify_setup starting for {context.asset} at {self.api_url}")
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.api_url, 
                     json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}"},
-                    timeout=15
+                    timeout=45 # Increased for complex analysis
                 ) as response:
                     if response.status != 200:
+                        print(f"DEBUG: AI API error status={response.status}")
                         logger.error(f"AI API returned {response.status}")
                         return AIAnalysisResult(False, "AI_API_ERROR", 0.0)
                     
                     data = await response.json()
                     # Parse AI response (adjust based on actual API format)
-                    # Assuming data['content'] or similar holds the text
-                    text = data.get('content', '') or data.get('response', '')
+                    # QuFLX API returns 'answer' field
+                    text = data.get('answer', '') or data.get('content', '') or data.get('response', '')
+                    print(f"DEBUG: AI response received, text_len={len(text)}")
                     
                     # Simple Parsing Strategy if JSON is embedded in markdown
                     # For now, assume simple string check if JSON parsing fails
@@ -229,6 +238,7 @@ class AIOrchestrator:
                     return AIAnalysisResult(confirmed, text[:100], 0.8) # truncated reason
 
         except Exception as e:
+            print(f"DEBUG: AI Connection Failed error={type(e).__name__}: {e}")
             logger.error(f"AI Connection Failed: {e}")
             return AIAnalysisResult(False, f"CONNECTION_ERROR: {str(e)}", 0.0)
 
@@ -400,6 +410,34 @@ class RedisSubscriber:
                 await self.redis_client.close()
 
 
+class TickerSubscriber:
+    """Listens for active ticker updates to whitelist dispatch assets."""
+    def __init__(self, redis_url: str, logger_service):
+        self.redis_url = redis_url
+        self.active_assets = set()
+        
+    async def run(self):
+        if not redis: return
+        try:
+            client = redis.from_url(self.redis_url, decode_responses=True)
+            pubsub = client.pubsub()
+            await pubsub.subscribe("ticker:active")
+            logger.info("Subscribed to 'ticker:active' - Waiting for Frontend selections...")
+            
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    try:
+                        # Frontend sends list: ["AUDCAD_OTC", "EURUSD_OTC"]
+                        data = json.loads(message['data'])
+                        if isinstance(data, list):
+                            self.active_assets = {normalize_asset(a) for a in data}
+                            logger.info(f"Ticker Update -> Whitelist: {self.active_assets}")
+                    except Exception as e:
+                        logger.error(f"Ticker Update Error: {e}")
+        except Exception as e:
+            logger.error(f"Ticker Sub Error: {e}")
+
+
 # --- Main Service ---
 
 class OTCDispatcher:
@@ -409,7 +447,7 @@ class OTCDispatcher:
         self.scanner = MarketScanner()
         # Load from env
         self.ai = AIOrchestrator(
-            api_url=os.getenv("QFLX_AI_ENDPOINT", "http://localhost:8000/api/v1/ai/generate"),
+            api_url=os.getenv("QFLX_AI_ENDPOINT", "http://localhost:8000/api/v1/ai/ask"),
             api_key=os.getenv("QFLX_API_KEY", "")
         )
         self.discord = DiscordDispatcher(
@@ -420,11 +458,18 @@ class OTCDispatcher:
         self.logger_service = TickLogger(data_dir=PROJECT_ROOT / "data" / "ticks")
 
         # Redis Subscriber (Optional)
+        # Redis Subscribers
         self.redis_mode = False
         self.subscriber = RedisSubscriber(REDIS_URL, self.logger_service, self.assets)
+        self.ticker_sub = TickerSubscriber(REDIS_URL, self.logger_service)
 
         # Assuming internal API for market data
         self.market_source_url = os.getenv("QFLX_MARKET_DATA_URL", "http://localhost:8000/api/v1/history")
+        
+        # Cooldown Tracker: {asset: timestamp}
+        self.cooldowns: Dict[str, float] = {}
+        self.COOLDOWN_SECONDS = 300 # 5 minutes
+
 
     def scan_available_assets(self) -> List[str]:
         """Scans local history directory for assets with data."""
@@ -538,8 +583,21 @@ class OTCDispatcher:
             
             logger.info(f"Condition Met: {asset} -> {ctx.condition.value}")
             
+            # check cooldown
+            now = datetime.now().timestamp()
+            last_call = self.cooldowns.get(asset, 0)
+            if now - last_call < self.COOLDOWN_SECONDS:
+                logger.info(f"Skipping AI (Cooldown): {asset} (Wait {int(self.COOLDOWN_SECONDS - (now - last_call))}s)")
+                return
+
             # AI Check
-            ai_verdict = await self.ai.verify_setup(ctx)
+            try:
+                ai_verdict = await self.ai.verify_setup(ctx)
+                # Only update cooldown on successful call (or rejection)
+                self.cooldowns[asset] = now
+            except Exception as e:
+                logger.error(f"AI Check Failed for {asset}: {e}")
+                return
             
             if self.test_mode:
                 # Mock AI success
@@ -571,7 +629,10 @@ class OTCDispatcher:
             for a in discovered:
                 if a not in current_set:
                     self.assets.append(a)
-            logger.info(f"Assets merged with auto-discovery: {self.assets}")
+            # logger.info(f"Assets merged with auto-discovery: {self.assets}")
+        
+        # Start Ticker Listener
+        asyncio.create_task(self.ticker_sub.run())
         
         if not self.assets:
             logger.warning("No assets found in history folder and none provided. Waiting for 'Collect History'...")
@@ -605,8 +666,17 @@ class OTCDispatcher:
                     # Still waiting for assets
                     pass
                 else:
-                    # 2. Process all assets
-                    await asyncio.gather(*(self.process_asset(asset) for asset in self.assets))
+                    # 2. Process ONLY Whitelisted Assets (if active)
+                    current_pool = self.assets
+                    if self.ticker_sub.active_assets:
+                        # Filter discovered assets by Ticker whitelist
+                        current_pool = [a for a in self.assets if a in self.ticker_sub.active_assets]
+                        if not current_pool:
+                            logger.info("No active Ticker assets found. Standing by...")
+                    
+                    if current_pool:
+                        logger.info(f"Core Loop: Scanning {len(current_pool)} assets: {current_pool}")
+                        await asyncio.gather(*(self.process_asset(asset) for asset in current_pool))
             
             except Exception as e:
                 logger.error(f"Loop Error: {e}")

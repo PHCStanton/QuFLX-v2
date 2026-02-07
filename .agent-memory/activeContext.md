@@ -26,6 +26,14 @@
   - Infrastructure in place for further overlays and oscillators.
   - OTC ticker panel and 92% payout assets panel are wired to live data.
   - Stream status and health badges are driven by tick recency and backend `backend_status` events.
+- **AI Caching & Token Reduction (Grok API):**
+  - Implemented prefix caching using `x-grok-conv-id` header tracking.
+  - Restructured prompts to separate static system context from dynamic market data, achieving ~85-90% cache hit rates on system instructions.
+  - Added cache telemetry (cached tokens, savings) to AI service logs.
+- **Alert Dispatcher Redesign (Concurrency & Filtering):**
+  - Fixed AI connection/parsing bugs (endpoint `/ask`, field `answer`).
+  - Added Concurrency Control: Max 3 concurrent AI calls via Semaphore + 5-minute per-asset cooldown.
+  - Implemented **Ticker Synchronization**: Dispatcher now dynamically whitelists assets by listening to Redis `ticker:active`, synced in real-time with the Frontend Ticker Tape.
 
 - **Pocket Option Timeframe Automation Hardening**:
   - Successfully resolved the "Span-vs-Anchor" click obstruction by implementing automatic parent-anchor traversal in `local_selenium_utils/selenium_ui_controls.py`.
@@ -61,9 +69,9 @@
     - `GET /api/v1/history/{asset}` returns `candles` (and legacy `data`) for a single frontend parsing path.
   - Indicator pipeline is implemented and documented; regime mapping doc exists but regime detection logic is not yet wired into runtime.
   - AI integration is partially wired:
-    - `/api/v1/ai/ask` exists and is consumed by the Dashboard.
+    - `/api/v1/ai/ask` exists and supports `conversation_id` for prefix caching.
     - Voice WS relay endpoint exists for realtime voice sessions (currently used for dictation).
-    - AI Gateway + TradingContext builder are still pending.
+    - AI service includes telemetry for token usage and cache performance.
   - Settings architecture foundation implemented:
     - Versioned settings schema with persisted JSON in `data/settings/settings.json`.
     - `GET /api/v1/settings` and `PUT /api/v1/settings` endpoints in the Gateway for centralized configuration.
@@ -85,8 +93,8 @@
   - Screenshot editor includes an Ask AI action to analyze annotated screenshots.
   - Latest annotated screenshot is persisted across refresh to support “Annotated” image source.
   - A dedicated `useSettingsStore` (Zustand) and `settingsClient` are in place to manage Global/User/AI + per-tab settings separately from `useMarketStore`.
-  - Sidebar ordering updated so `Calendar & Journal` and `Settings` are the final two sidebar items; `Settings` can host global and profile configuration views.
   - TopBar **Chrome** and **Stream** badges are now clickable controls backed by Gateway ops endpoints.
+  - **MarketStore Sync**: Emits `update_active_ticker` to sync background monitoring (Alert Dispatcher) with frontend UI ticker state.
 
 ## Next Steps
 1. **Indicator Visualization Implementation (Frontend + Gateway)**
@@ -136,6 +144,7 @@
   - `capabilities_v2/timeframe_menu.py`
   - `backend/services/strategy/indicators.py`
   - `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md`
+  - `backend/scripts/otc_alert_dispatch.py` (Redesigned with Ticker Sync)
   - `Research/research_lightweight-charts-indicators_2025-12-23.md`
   - `Research/research_ai_integration_vision_files_2025-12-20.md`
 

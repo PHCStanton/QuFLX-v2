@@ -31,6 +31,23 @@ def register_socket_events(sio, redis_client, system_state):
         await sio.leave_room(sid, f"market_data:{asset}")
 
     @sio.event
+    async def update_active_ticker(sid, assets):
+        """Phase 3: Update global active ticker list in Redis for Dispatcher Sync"""
+        if not redis_client:
+            logger.error("Redis client not available for ticker sync")
+            return
+            
+        try:
+            # Validate list of strings
+            if isinstance(assets, list) and all(isinstance(a, str) for a in assets):
+                await redis_client.publish('ticker:active', json.dumps(assets))
+                logger.info(f"Updated ticker:active -> {assets}")
+            else:
+                logger.warning(f"Invalid format for update_active_ticker: {assets}")
+        except Exception as e:
+            logger.error(f"Error publishing ticker update: {e}")
+
+    @sio.event
     async def star_asset(sid, asset):
         """
         Handle asset starring request via Socket.IO.

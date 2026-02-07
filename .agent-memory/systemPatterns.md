@@ -18,6 +18,10 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
   - Indicator adapters (in V1 docs) and future AI Gateway act as adapters between internal data structures and external APIs (xAI).
 - **Repository Pattern**: Abstract data access for historical data (Redis Streams).
 - **Context Injection (AI)**: AI calls do not introspect the app directly; instead, the backend builds a `TradingContext` (candles, indicators, regimes, positions) and injects it into xAI requests, optionally with chart screenshots.
+- **AI Prefix Caching**: The system uses `conversation_id` mapped to `x-grok-conv-id` to cache static prompt prefixes. Prompt construction is tiered: 
+    1. Static System Instructions (Cached).
+    2. Semi-static Tool Definitions (Cached).
+    3. Dynamic Market Context (User Message).
 
 ## Data Flow
 1. **Ingest**: Collector intercepts WebSocket frame -> Normalizes to `Tick`.
@@ -97,6 +101,11 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
     - Have explicit dependency arrays.
     - Depend on stable values (e.g. `socket`, simple booleans), not large, frequently changing objects.
   - Treat React "Maximum update depth exceeded" warnings as a signal to inspect dependencies for hidden render → effect → update loops.
+
+- **Ticker-Linked Background Monitoring**:
+  - Background services (Alert Dispatcher) follow the frontend "Ticker Tape" whitelist.
+  - Pattern: Frontend `MarketStore` -> SocketIO `update_active_ticker` -> Gateway -> Redis `ticker:active` -> Dispatcher `TickerSubscriber`.
+  - Enables cost-efficient AI monitoring by limiting calls to only the assets currently visible to the trader.
 
 - **Verification discipline**
   - After changing any Gateway–Capability integration:

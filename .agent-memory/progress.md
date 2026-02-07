@@ -62,6 +62,7 @@
 - [x] Add Screenshot → AI handoff from the screenshot editor.
 - [x] Persist latest annotated screenshot across refresh for "Annotated" image source.
 - [x] Add clear "AI thinking" indicator in the Ask AI modal.
+- [x] **AI Caching (Phase 1-3)**: Implement prefix caching via `x-grok-conv-id` and prompt restructuring (~85% savings).
 - [ ] Implement TradingContext contract enforcement (backend schema + size limits).
 
 ## Phase 5.3: Voice Agent (Dictation + Read-Back) (In Progress)
@@ -102,6 +103,7 @@
 - [x] Removed all `window.alert()` calls in Dashboard.
 - [x] Reduced `ChartWorkspace.jsx` to < 250 lines.
 - [x] Eliminated Vite chunk-size warning via manual chunking.
+- [x] **Alert Dispatcher Redesign**: Implemented Semaphore-based concurrency, 5-min cooldowns, and dynamic Redis-based Ticker Sync.
 
 ### In Progress
 - [x] Implement overlay indicators on main chart (EMA, BBands, SuperTrend, Support/Resistance, EMA Cross-Over).

@@ -55,6 +55,7 @@
 ## AI Keys (Backend)
 - Backend AI service reads `XAI_API_KEY` (preferred) or `AI_API_KEY` / `GROK_API_KEY` and `AI_MODEL` / `AI_BASE_URL`.
 - Realtime voice WS relay uses the same key source (Authorization bearer) and connects to `wss://api.x.ai/v1/realtime`.
+- **Grok Prefix Caching**: Backend injects `x-grok-conv-id` into Grok API requests to enable caching of static prompt prefixes (System Prompts).
 
 ## AI Speech Read-Back (Frontend)
 - AI answer speech uses browser `speechSynthesis` with Settings:
@@ -74,6 +75,7 @@
 - **Chrome Dependency**: The Collector requires a running Chrome instance with DevTools Protocol enabled.
 - **Redis Availability**: The system cannot function without Redis.
 - **External AI Calls**: xAI requests are network-bound and must not block the core trading loop. AI integration should be best-effort and tolerant of latency/failures.
+- **Background Service Sync**: Services like Alert Dispatcher depend on Redis channel `ticker:active` for asset whitelisting from the frontend.
 
 ## Layout & Resizing Strategy
 - **Flexbox Architecture:** The Dashboard uses a nested flexbox layout for dynamic panel sizing.

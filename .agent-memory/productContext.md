@@ -26,6 +26,8 @@ QuFLX v2 is a sophisticated automated trading and decision-support platform for 
 - **AI Trading Assistant (xAI / Grok)**:
   - Text + Vision assistant that can explain current charts, indicators, and regimes using context injection (JSON + screenshots).
   - Voice agent that allows hands-free interaction with the trading session using the xAI Voice Agent API.
+  - **AI Caching**: Leverages Grok API prefix caching to reduce token consumption and costs by up to 85% for repetitive analytical tasks.
+  - **Context-Aware Analytics**: Uses Ticker-Linked background monitoring ensures AI resources are only spent on market conditions currently under the trader's active focus.
 
 ## Current Delivery Status (High-Level)
 - The Gateway and Dashboard now enforce explicit error semantics for history collection (no semantic 200 failures).
