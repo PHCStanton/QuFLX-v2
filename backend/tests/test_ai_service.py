@@ -5,9 +5,11 @@ from unittest.mock import AsyncMock, patch
 from backend.services.ai.service import AIService, AIServiceError
 
 @pytest.fixture
-def ai_service(monkeypatch):
+async def ai_service(monkeypatch):
     monkeypatch.setenv("AI_API_KEY", "test-key")
-    return AIService()
+    service = AIService()
+    yield service
+    await service.close()
 
 @pytest.mark.asyncio
 async def test_ask_success(ai_service):
@@ -24,7 +26,7 @@ async def test_ask_success(ai_service):
         "usage": {"total_tokens": 10}
     }
 
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch.object(ai_service._client, "post") as mock_post:
         mock_post.return_value = AsyncMock(
             status_code=200,
             json=lambda: mock_response
@@ -48,7 +50,7 @@ async def test_ask_missing_api_key(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ask_provider_error(ai_service):
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch.object(ai_service._client, "post") as mock_post:
         mock_post.return_value = AsyncMock(status_code=500)
         
         with pytest.raises(AIServiceError) as excinfo:
@@ -58,16 +60,31 @@ async def test_ask_provider_error(ai_service):
 
 @pytest.mark.asyncio
 async def test_ask_timeout(ai_service):
-    with patch("httpx.AsyncClient.post", side_effect=httpx.TimeoutException("Timeout")):
+    # The new version used tenacity, so we mock the client's post call
+    with patch.object(ai_service._client, "post", side_effect=httpx.TimeoutException("Timeout")) as mock_post:
         with pytest.raises(AIServiceError) as excinfo:
             await ai_service.ask(prompt="Hello")
+        
+        # Verify it retried 3 times (default in @retry)
+        assert mock_post.call_count == 3
         assert excinfo.value.code == "timeout"
         assert excinfo.value.status_code == 504
 
 @pytest.mark.asyncio
+async def test_service_close(monkeypatch):
+    monkeypatch.setenv("AI_API_KEY", "test-key")
+    service = AIService()
+    client = service._client
+    assert client is not None
+    
+    with patch.object(client, "aclose", new_callable=AsyncMock) as mock_aclose:
+        await service.close()
+        mock_aclose.assert_called_once()
+
+@pytest.mark.asyncio
 async def test_prompt_construction(ai_service):
     # Verify that uiMode and responseVerbosity influence the messages and max_tokens
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch.object(ai_service._client, "post") as mock_post:
         mock_post.return_value = AsyncMock(
             status_code=200,
             json=lambda: {
@@ -116,7 +133,7 @@ async def test_prompt_construction(ai_service):
 @pytest.mark.asyncio
 async def test_cache_telemetry(ai_service):
     # Verify that usage data and x-grok-conv-id are handled
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch.object(ai_service._client, "post") as mock_post:
         mock_post.return_value = AsyncMock(
             status_code=200,
             json=lambda: {

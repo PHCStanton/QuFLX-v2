@@ -556,6 +556,89 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
+        {/* Alerts & Notifications */}
+        <SettingsSection title="Alerts & Notifications" defaultOpen={false}>
+          <SettingRow label="Enable AI Confirmation" description="Use AI to verify scanner alerts before dispatching">
+            <NeomorphicSwitch
+              checked={settings.alerts?.enableAIConfirm || false}
+              onChange={() => updateSection('alerts', { enableAIConfirm: !settings.alerts?.enableAIConfirm })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Min AI Confidence" description="Minimum score (0-1) for AI to approve an alert">
+            <SliderInput
+              value={settings.alerts?.minAIConfidence ?? 0.7}
+              min={0}
+              max={1}
+              step={0.1}
+              onChange={(val) => updateSection('alerts', { minAIConfidence: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Pulse Candle Count" description="Number of candles used for technical analysis (default 100)">
+            <SliderInput
+              value={settings.alerts?.candleCount ?? 100}
+              min={30}
+              max={500}
+              step={10}
+              onChange={(val) => updateSection('alerts', { candleCount: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Alert Cooldown" description="Silence alerts for the same asset for X minutes">
+            <SliderInput
+              value={settings.alerts?.alertCooldownMinutes ?? 5}
+              min={1}
+              max={60}
+              step={1}
+              unit="m"
+              onChange={(val) => updateSection('alerts', { alertCooldownMinutes: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Discord Webhook URL" description="Target for alert notifications">
+            <input
+              type="text"
+              value={settings.alerts?.discordWebhookUrl || ''}
+              onChange={(e) => updateSection('alerts', { discordWebhookUrl: e.target.value })}
+              placeholder="https://discord.com/api/webhooks/..."
+              className="w-full bg-card-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+            />
+          </SettingRow>
+
+          <div className="mt-6 pt-4 border-t border-border-primary/30">
+            <h3 className="text-sm font-semibold text-text-primary mb-4 flex items-center gap-2">
+              <span className="text-accent-blue">📊</span> Tick Logging (Redis Mode)
+            </h3>
+
+            <SettingRow label="Enable Raw Tick Logging" description="Subscribe to Redis and save all ticks to CSV">
+              <NeomorphicSwitch
+                checked={settings.alerts?.enableTickLogging || false}
+                onChange={() => updateSection('alerts', { enableTickLogging: !settings.alerts?.enableTickLogging })}
+              />
+            </SettingRow>
+
+            <SettingRow label="Ticks Per File" description="Persist to a new CSV file every X ticks">
+              <SliderInput
+                value={settings.alerts?.tickChunkSize ?? 1000}
+                min={10}
+                max={5000}
+                step={50}
+                onChange={(val) => updateSection('alerts', { tickChunkSize: val })}
+              />
+            </SettingRow>
+
+            <SettingRow label="Storage Location" description="Directory relative to project root">
+              <input
+                type="text"
+                value={settings.alerts?.tickLoggingDir || 'data/ticks'}
+                onChange={(e) => updateSection('alerts', { tickLoggingDir: e.target.value })}
+                className="w-full bg-card-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+              />
+            </SettingRow>
+          </div>
+        </SettingsSection>
+
         <SettingsSection title="Screenshot & Markup" defaultOpen={false}>
           <SettingRow label="Default Tool" description="Tool selected when screenshot editor opens">
             <DropdownInput

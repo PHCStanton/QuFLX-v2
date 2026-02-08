@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 
-const SETTINGS_VERSION = 3;
+const SETTINGS_VERSION = 4;
 
 const normalizeTheme = (value) => {
   if (value === 'black-white') return 'black-white';
@@ -143,6 +143,16 @@ const defaultSettings = {
     dailyProfitTarget: 50,
     maxDrawdownPercent: 5,
   },
+  alerts: {
+    enableAIConfirm: true,
+    minAIConfidence: 0.7,
+    candleCount: 100,
+    discordWebhookUrl: '',
+    alertCooldownMinutes: 5,
+    enableTickLogging: false,
+    tickChunkSize: 1000,
+    tickLoggingDir: 'data/ticks',
+  },
   calendarJournal: {},
   strategyLab: {}
 };
@@ -198,6 +208,10 @@ const normalizeSettings = (settings) => {
       ...(defaultSettings.riskManager || {}),
       ...(s.riskManager || {}),
     },
+    alerts: {
+      ...(defaultSettings.alerts || {}),
+      ...(s.alerts || {}),
+    },
     calendarJournal: {
       ...(defaultSettings.calendarJournal || {}),
       ...(s.calendarJournal || {}),
@@ -235,6 +249,16 @@ const normalizeSettings = (settings) => {
   merged.screenshot.saveMode = normalizeScreenshotSaveMode(merged.screenshot.saveMode);
   merged.screenshot.emojiStripEnabled = Boolean(merged.screenshot.emojiStripEnabled);
 
+  merged.alerts = { ...(merged.alerts || {}) };
+  merged.alerts.enableAIConfirm = merged.alerts.enableAIConfirm !== false;
+  merged.alerts.minAIConfidence = clampNumber(merged.alerts.minAIConfidence, { min: 0, max: 1, fallback: 0.7 });
+  merged.alerts.candleCount = clampNumber(merged.alerts.candleCount, { min: 30, max: 500, fallback: 100 });
+  merged.alerts.alertCooldownMinutes = clampNumber(merged.alerts.alertCooldownMinutes, { min: 1, max: 1440, fallback: 5 });
+  merged.alerts.enableTickLogging = Boolean(merged.alerts.enableTickLogging);
+  merged.alerts.tickChunkSize = clampNumber(merged.alerts.tickChunkSize, { min: 10, max: 10000, fallback: 1000 });
+  merged.alerts.discordWebhookUrl = String(merged.alerts.discordWebhookUrl || '');
+  merged.alerts.tickLoggingDir = String(merged.alerts.tickLoggingDir || 'data/ticks');
+
   return merged;
 };
 
@@ -255,7 +279,7 @@ const useSettingsStore = create(
       try {
         const current = get().settings;
         const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
-        const response = await fetch('/api/v1/settings');
+        const response = await fetch('http://localhost:8000/api/v1/settings');
         if (response.ok) {
           const backendSettings = await response.json();
 
@@ -291,6 +315,10 @@ const useSettingsStore = create(
               ...(current.riskManager || {}),
               ...(backendSettings.riskManager || {}),
             },
+            alerts: {
+              ...(current.alerts || {}),
+              ...(backendSettings.alerts || {}),
+            },
             calendarJournal: {
               ...(current.calendarJournal || {}),
               ...(backendSettings.calendarJournal || {}),
@@ -324,7 +352,7 @@ const useSettingsStore = create(
         const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
 
         const payload = sanitizeSettingsForBackend(normalizeSettings(newSettings || current));
-        const response = await fetch('/api/v1/settings', {
+        const response = await fetch('http://localhost:8000/api/v1/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -364,6 +392,10 @@ const useSettingsStore = create(
               ...(current.riskManager || {}),
               ...(saved.riskManager || {}),
             },
+            alerts: {
+              ...(current.alerts || {}),
+              ...(saved.alerts || {}),
+            },
             calendarJournal: {
               ...(current.calendarJournal || {}),
               ...(saved.calendarJournal || {}),
@@ -395,7 +427,7 @@ const useSettingsStore = create(
           ...partial
         }
       };
-      set({ settings: section === 'global' ? normalizeSettings(nextSettings) : nextSettings });
+      set({ settings: normalizeSettings(nextSettings) });
       // Optionally auto-save to backend
       // get().saveSettings(nextSettings);
     },

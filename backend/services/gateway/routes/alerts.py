@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
-from fastapi import APIRouter, Header, Request, Body
+from fastapi import APIRouter, Header, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
+from .settings import load_settings
 
 router = APIRouter()
 logger = logging.getLogger("gateway.alerts")
@@ -86,15 +87,37 @@ async def start_alerts(request: Request, assets: List[str] = Body(default=[]), u
             
             log_f = open(log_path, "w", encoding="utf-8")
             
+            # Load user settings
+            settings = load_settings()
+            alert_settings = settings.get("alerts", {})
+            
             cmd = [sys.executable, str(script_path)]
             if assets:
                 cmd.extend(["--assets"] + assets)
             
-            if use_redis:
+            # Source of truth: Setting overrides Body if Body is False
+            final_use_redis = use_redis or alert_settings.get("enableTickLogging", False)
+            if final_use_redis:
                 cmd.append("--redis")
             
             env = dict(os.environ)
             env["PYTHONPATH"] = str(project_root)
+            
+            # Pass Alert Settings via ENV
+            env["ENABLE_AI_CONFIRM"] = str(alert_settings.get("enableAIConfirm", True)).lower()
+            env["ALERT_MIN_CONFIDENCE"] = str(alert_settings.get("minAIConfidence", 0.7))
+            env["ALERT_CANDLE_COUNT"] = str(alert_settings.get("candleCount", 100))
+            
+            discord_url = alert_settings.get("discordWebhookUrl", "").strip()
+            if discord_url:
+                env["DISCORD_WEBHOOK_URL"] = discord_url
+            
+            cooldown_min = alert_settings.get("alertCooldownMinutes", 5)
+            env["ALERT_COOLDOWN_SECONDS"] = str(int(cooldown_min) * 60)
+            
+            # Tick Logging settings
+            env["TICK_CHUNK_SIZE"] = str(alert_settings.get("tickChunkSize", 1000))
+            env["TICK_LOG_DIR"] = alert_settings.get("tickLoggingDir", "data/ticks")
             
             proc = subprocess.Popen(
                 cmd,

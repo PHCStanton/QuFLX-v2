@@ -11,6 +11,9 @@ Redis_Streaming_Integration_Package/
 # ssid
 ssid/
 
+# gui/Alert-Dispatch
+gui/Alert-Dispatch/
+
 # Copilot files / Legacy Files
 _legacy/
 legacy/*  

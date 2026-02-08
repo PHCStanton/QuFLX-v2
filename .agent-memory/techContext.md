@@ -52,10 +52,9 @@
 - `lightweight-charts`: Frontend charting.
 - `xai-sdk` or HTTP client: Integration with xAI chat/vision/voice APIs.
 
-## AI Keys (Backend)
-- Backend AI service reads `XAI_API_KEY` (preferred) or `AI_API_KEY` / `GROK_API_KEY` and `AI_MODEL` / `AI_BASE_URL`.
 - Realtime voice WS relay uses the same key source (Authorization bearer) and connects to `wss://api.x.ai/v1/realtime`.
 - **Grok Prefix Caching**: Backend injects `x-grok-conv-id` into Grok API requests to enable caching of static prompt prefixes (System Prompts).
+- **Persistent AI Client**: `AIService` utilizes a persistent `aiohttp.ClientSession` with a `TCPConnector` (keep-alive) and managed lifecycle via FastAPI lifespan.
 
 ## AI Speech Read-Back (Frontend)
 - AI answer speech uses browser `speechSynthesis` with Settings:
@@ -69,6 +68,8 @@
 - Dashboard uses a dedicated Zustand `useSettingsStore` (separate from `useMarketStore`) to manage Global, User Profile, AI Assistant, and per-tab settings in a single, structured object.
 - A small `settingsClient` module in the Dashboard handles HTTP communication with the settings endpoints.
  - `automation.historyWaitTime` is now standardized to 1–8 seconds across UI and backend validation.
+- **Alerts & Notifications**: Managed via the Settings UI and passed to `otc_alert_dispatch.py` via dynamic environment variables (`ENABLE_AI_CONFIRM`, `TICK_CHUNK_SIZE`, etc.).
+- **Tick Logging**: Supports chunked CSV persistence (default 1000 ticks/file) and Redis-mode subscription.
 
 ## Technical Constraints
 - **Latency**: Must process ticks and update charts within ~100ms for a responsive UI.

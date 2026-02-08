@@ -5,6 +5,7 @@ import re
 from typing import Any, Dict, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger("AIService")
 
@@ -60,8 +61,45 @@ class AIService:
             self.timeout_seconds_slow = default_timeout_seconds
         
         self._enabled = bool(self.api_key)
-        if not self._enabled:
+        self._client: Optional[httpx.AsyncClient] = None
+        
+        if self._enabled:
+            # Initialize persistent, pooled client
+            # max_keepalive_connections=10: keep 10 connections open for reuse
+            # max_connections=50: limit concurrency to prevent resource exhaustion
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self.timeout_seconds_slow, connect=10.0),
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=50),
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {self.api_key}',
+                }
+            )
+        else:
             logger.warning("AI_API_KEY not found in environment. AI Service disabled.")
+
+    async def close(self) -> None:
+        """Close the persistent HTTP client. Call during app shutdown."""
+        if self._client:
+            await self._client.aclose()
+            logger.info("AIService HTTP client closed.")
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type(httpx.TimeoutException),
+        reraise=True
+    )
+    async def _post_with_retry(self, url: str, **kwargs):
+        """Internal helper to execute POST with exponential backoff on timeouts."""
+        if not self._client:
+            raise AIServiceError(
+                code='client_not_initialized',
+                user_message='AI client is not initialized.',
+                status_code=500,
+                retryable=False
+            )
+        return await self._client.post(url, **kwargs)
 
     async def ask(
         self,
@@ -210,12 +248,14 @@ class AIService:
                 list((context or {}).keys()),
             )
 
-            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-                response = await client.post(
-                    self.base_url,
-                    headers=headers,
-                    json=payload,
-                )
+            # 4. API CALL WITH POOLED CLIENT AND RETRIES
+            # Use per-request timeout override
+            response = await self._post_with_retry(
+                self.base_url,
+                headers=headers,
+                json=payload,
+                timeout=timeout_seconds,
+            )
 
             if response.status_code != 200:
                 retryable = response.status_code >= 500 or response.status_code == 429

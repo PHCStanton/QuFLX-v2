@@ -138,6 +138,15 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
     - Backend ↔ xAI Voice Agent API (`wss://api.x.ai/v1/realtime`).
   - The backend voice gateway is stateless per session and integrates with the same `TradingContext` builder and tool layer used by the text assistant.
 
+- **Market Condition Scanning & Confidence (Dispatcher)**
+  - The Alert Dispatcher uses a `MarketScanner` to evaluate technical confluences.
+  - Pattern: Scan candles -> Calculate Indicators (ADX, RSI, EMA, BB, Pivots) -> Weighted Score (Confluence %) -> Optional AI Verification.
+  - This ensures only high-probability setups are dispatched to external notification channels.
+
+- **Resilient API Communication (Frontend)**
+  - All critical settings and market APIs use absolute URLs (`http://localhost:8000`) instead of relative paths.
+  - This pattern prevents the browser from incorrectly hitting the Vite dev server (returning HTML) when the proxy is misconfigured or the backend is slow to respond.
+
 
 ## PocketOption Topdown v2 Capability Pattern
 - Selenium automation for PocketOption is now centralized in `capabilities_v2/` rather than in ad-hoc scripts.

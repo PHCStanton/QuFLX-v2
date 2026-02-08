@@ -172,6 +172,7 @@ async def lifespan(app: FastAPI):
     
     # === SHUTDOWN ===
     logger.info("Shutting down API Gateway...")
+    await ai_service.close()
     if redis_client:
         await redis_client.close()
 

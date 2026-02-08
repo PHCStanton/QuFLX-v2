@@ -65,6 +65,16 @@ class RiskManagerSettings(BaseModel):
     dailyProfitTarget: int = Field(50, ge=0, le=100000)
     maxDrawdownPercent: int = Field(5, ge=0, le=100)
 
+class AlertsSettings(BaseModel):
+    enableAIConfirm: bool = True
+    minAIConfidence: float = Field(0.7, ge=0.0, le=1.0)
+    candleCount: int = Field(100, ge=30, le=500)
+    discordWebhookUrl: str = ""
+    alertCooldownMinutes: int = Field(5, ge=1, le=1440)
+    enableTickLogging: bool = False
+    tickChunkSize: int = Field(1000, ge=10, le=10000)
+    tickLoggingDir: str = "data/ticks"
+
 class PlatformSettings(BaseModel):
     global_settings: GlobalSettings = Field(default_factory=GlobalSettings, alias="global")
     automation: AutomationSettings = Field(default_factory=AutomationSettings)
@@ -73,6 +83,7 @@ class PlatformSettings(BaseModel):
     screenshot: ScreenshotSettings = Field(default_factory=ScreenshotSettings)
     userProfile: UserProfileSettings = Field(default_factory=UserProfileSettings)
     riskManager: RiskManagerSettings = Field(default_factory=RiskManagerSettings)
+    alerts: AlertsSettings = Field(default_factory=AlertsSettings)
     calendarJournal: Dict[str, Any] = Field(default_factory=dict)
     strategyLab: Dict[str, Any] = Field(default_factory=dict)
 

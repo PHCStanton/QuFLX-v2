@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import json
+import re
 import argparse
 import csv
 from dataclasses import dataclass, asdict
@@ -65,6 +66,8 @@ class MarketCondition(Enum):
     TRENDING_DOWN = "Trending Down"
     RANGING = "Ranging/Choppy"
     BREAKOUT_POTENTIAL = "Breakout Potential (Squeeze)"
+    EMA_CROSS_UP = "EMA Cross-Over (Bullish)"
+    EMA_CROSS_DOWN = "EMA Cross-Over (Bearish)"
     NEUTRAL = "Neutral"
 
 @dataclass
@@ -89,7 +92,7 @@ class AIAnalysisResult:
 class MarketScanner:
     """Analyzes raw market data to detect conditions."""
     
-    def analyze(self, candles: List[Dict]) -> Optional[Dict]:
+    def analyze(self, candles: List[Dict], candle_count: int = 100) -> Optional[Dict]:
         """
         Returns condition details if interesting, else None.
         Expects candles to have keys: 'close', 'high', 'low'.
@@ -97,81 +100,135 @@ class MarketScanner:
         if not candles or len(candles) < 30:
             return None
 
-        # Convert to Pandas Series/List for TA-Lib
-        # Note: 'ta' library works with pandas Series usually.
-        # We'll assume simple list usage or convert if needed.
-        # For performance/simplicity without pandas overhead in this script, 
-        # let's assume valid list inputs compatible with 'ta' wrapper or manual calc.
-        # Actually 'ta' requires pandas Series. ensuring pandas is available.
         try:
             import pandas as pd
+            from ta.trend import ADXIndicator, EMAIndicator
+            from ta.volatility import BollingerBands, AverageTrueRange
+            from ta.momentum import RSIIndicator
+            
             df = pd.DataFrame(candles)
             df['close'] = df['close'].astype(float)
             df['high'] = df['high'].astype(float)
             df['low'] = df['low'].astype(float)
+            
+            # Use requested candle count if available
+            df = df.tail(candle_count)
         except ImportError:
-            logger.error("Pandas is required for TA analysis. pip install pandas")
+            logger.error("Pandas/TA required for analysis. pip install pandas ta")
             return None
 
         # Calculate Indicators
         try:
-            # ADX (Trend Strength)
+            # 1. Trend & Momentum
             adx_ind = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14)
             df['adx'] = adx_ind.adx()
             
-            # Bollinger Bands (Volatility)
+            rsi_ind = RSIIndicator(close=df['close'], window=14)
+            df['rsi'] = rsi_ind.rsi()
+
+            # 2. Volatility (Bollinger + ATR for Normalization)
             bb_ind = BollingerBands(close=df['close'], window=20, window_dev=2)
             df['bb_wband'] = bb_ind.bollinger_wband()
             df['bb_high'] = bb_ind.bollinger_hband()
             df['bb_low'] = bb_ind.bollinger_lband()
             
-            # RSI (Momentum)
-            rsi_ind = RSIIndicator(close=df['close'], window=14)
-            df['rsi'] = rsi_ind.rsi()
+            atr_ind = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14)
+            df['atr'] = atr_ind.average_true_range()
+
+            # 3. EMA Cross (9/21)
+            ema9 = EMAIndicator(close=df['close'], window=9).ema_indicator()
+            ema21 = EMAIndicator(close=df['close'], window=21).ema_indicator()
+            
+            # 4. Support / Resistance (Fractal Pivots)
+            window = 5
+            df['pivot_h'] = df['high'].rolling(window=window, center=True).max()
+            df['pivot_l'] = df['low'].rolling(window=window, center=True).min()
+            
+            current_resistance = df[df['high'] == df['pivot_h']]['high'].iloc[-1] if not df[df['high'] == df['pivot_h']].empty else None
+            current_support = df[df['low'] == df['pivot_l']]['low'].iloc[-1] if not df[df['low'] == df['pivot_l']].empty else None
 
             current = df.iloc[-1]
             prev = df.iloc[-2]
 
+            # Normalization: BB Width / (ATR / Price) -> High value means expanded relative to volatility
+            # Standardized Threshold: If bb_width (as % of price) is very small relative to recent ATR
+            price = float(current['close'])
+            norm_bb_width = current['bb_wband']
+            atr_val = current['atr']
+            
             condition = MarketCondition.NEUTRAL
+            confluence_count = 0
             
             # Logic
             adx_val = current['adx']
-            bb_width = current['bb_wband']
             rsi_val = current['rsi']
-            close = current['close']
             
-            # 1. Trending
-            if adx_val > 25:
-                if close > current['bb_high']: # Simple breakout/trend check
-                    condition = MarketCondition.TRENDING_UP
-                elif close < current['bb_low']:
-                    condition = MarketCondition.TRENDING_DOWN
-                # Refined Trend Check using EMA alignment could go here
-            
-            # 2. Breakout Squeeze
-            elif bb_width < 0.05: # Threshold depends on asset scaling, usually requires normalization
-                 # Standardized width: (High-Low)/SMA
-                 condition = MarketCondition.BREAKOUT_POTENTIAL
-            
-            # 3. Ranging
-            elif adx_val < 20:
-                condition = MarketCondition.RANGING
+            # A. EMA Cross
+            ema_cross = None
+            if ema9.iloc[-1] > ema21.iloc[-1] and ema9.iloc[-2] <= ema21.iloc[-2]:
+                ema_cross = "UP"
+                confluence_count += 20
+            elif ema9.iloc[-1] < ema21.iloc[-1] and ema9.iloc[-2] >= ema21.iloc[-2]:
+                ema_cross = "DOWN"
+                confluence_count += 20
 
-            if condition == MarketCondition.NEUTRAL:
+            # B. BB Breakout / Squeeze
+            is_breakout = False
+            if adx_val > 25:
+                if price > current['bb_high']:
+                    condition = MarketCondition.TRENDING_UP
+                    confluence_count += 30
+                    is_breakout = True
+                elif price < current['bb_low']:
+                    condition = MarketCondition.TRENDING_DOWN
+                    confluence_count += 30
+                    is_breakout = True
+            
+            # C. Squeeze (Improved with Volatility context)
+            # 0.05 is usually ~5% width. If ATR-based width is compressed:
+            if current['bb_wband'] < 0.04:
+                condition = MarketCondition.BREAKOUT_POTENTIAL
+                confluence_count += 25
+
+            # D. RSI Confluence
+            if (condition == MarketCondition.TRENDING_UP and rsi_val > 60) or \
+               (condition == MarketCondition.TRENDING_DOWN and rsi_val < 40):
+                confluence_count += 15
+
+            # E. S/R Proximity
+            near_sr = None
+            if current_resistance and abs(price - current_resistance) / price < 0.001:
+                near_sr = "RESISTANCE"
+                confluence_count += 10
+            elif current_support and abs(price - current_support) / price < 0.001:
+                near_sr = "SUPPORT"
+                confluence_count += 10
+
+            if condition == MarketCondition.NEUTRAL and not ema_cross:
                 return None
+            
+            # Map EMA Cross to Condition if none set
+            if condition == MarketCondition.NEUTRAL:
+                condition = MarketCondition.EMA_CROSS_UP if ema_cross == "UP" else MarketCondition.EMA_CROSS_DOWN
 
             return {
                 "condition": condition,
+                "confidence": min(confluence_count, 100),
                 "technicals": {
                     "adx": round(float(adx_val), 2),
-                    "bb_width": round(float(bb_width), 5),
                     "rsi": round(float(rsi_val), 2),
-                    "price": float(close)
+                    "bb_width": round(float(current['bb_wband']), 5),
+                    "atr": round(float(atr_val), 6),
+                    "ema_cross": ema_cross,
+                    "near_sr": near_sr,
+                    "price": price,
+                    "support": float(current_support) if current_support else None,
+                    "resistance": float(current_resistance) if current_resistance else None
                 }
             }
 
         except Exception as e:
-            logger.error(f"Error in TA calculation: {e}")
+            logger.error(f"Error in TA calculation: {e}", exc_info=True)
             return None
 
 
@@ -183,6 +240,19 @@ class AIOrchestrator:
         self.api_key = api_key
         # Semaphore to limit concurrent AI requests
         self.semaphore = asyncio.Semaphore(3)
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=aiohttp.ClientTimeout(total=45)
+            )
+        return self._session
+
+    async def close(self):
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     async def verify_setup(self, context: AlertContext) -> AIAnalysisResult:
         """Sends context to AI and awaits verdict."""
@@ -196,11 +266,19 @@ class AIOrchestrator:
             return AIAnalysisResult(False, "AI_URL_MISSING", 0.0)
 
         prompt = (
-            f"Role: Sniper Trader. Task: Verify this setup.\n"
-            f"Asset: {context.asset}\n"
-            f"Condition: {context.condition.value}\n"
-            f"Technicals: ADX={context.technicals['adx']}, RSI={context.technicals['rsi']}\n"
-            f"Question: Is this a high-probability A+ entry? Reply JSON: {{'confirmed': bool, 'reason': str}}"
+            f"Role: Elite Sniper Trader. Task: Verify this A+ trade setup.\n\n"
+            f"Asset: {context.asset} | Timeframe: 1m | Payout: {context.payout}%\n"
+            f"Detected Condition: {context.condition.value}\n\n"
+            f"Technical Snapshot:\n"
+            f"- ADX: {context.technicals['adx']} (Trend Strength)\n"
+            f"- RSI: {context.technicals['rsi']} (Momentum)\n"
+            f"- BB Width: {context.technicals['bb_width']} (Volatility Squeeze)\n"
+            f"- EMA Cross: {context.technicals.get('ema_cross') or 'Stable'}\n"
+            f"- Near S/R: {context.technicals.get('near_sr') or 'None'}\n"
+            f"- Current Price: {context.technicals['price']}\n\n"
+            f"Question: Is this a high-probability entry? Focus on confluence.\n"
+            f"RESPOND IN RAW JSON ONLY:\n"
+            f"{{\"confirmed\": bool, \"confidence\": float, \"reason\": \"string\"}}"
         )
 
         payload = {
@@ -208,39 +286,49 @@ class AIOrchestrator:
             "context": {
                 "asset": context.asset,
                 "timeframe": "1m",
-                "indicators": context.technicals
+                "indicators": context.technicals,
+                "uiMode": "insights",
+                "responseVerbosity": "concise"
             }
         }
 
         try:
-            print(f"DEBUG: AI verify_setup starting for {context.asset} at {self.api_url}")
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.api_url, 
-                    json=payload,
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    timeout=45 # Increased for complex analysis
-                ) as response:
-                    if response.status != 200:
-                        print(f"DEBUG: AI API error status={response.status}")
-                        logger.error(f"AI API returned {response.status}")
-                        return AIAnalysisResult(False, "AI_API_ERROR", 0.0)
-                    
-                    data = await response.json()
-                    # Parse AI response (adjust based on actual API format)
-                    # QuFLX API returns 'answer' field
-                    text = data.get('answer', '') or data.get('content', '') or data.get('response', '')
-                    print(f"DEBUG: AI response received, text_len={len(text)}")
-                    
-                    # Simple Parsing Strategy if JSON is embedded in markdown
-                    # For now, assume simple string check if JSON parsing fails
-                    confirmed = "true" in text.lower() or "confirmed" in text.lower()
-                    return AIAnalysisResult(confirmed, text[:100], 0.8) # truncated reason
+            session = await self.get_session()
+            async with session.post(self.api_url, json=payload) as response:
+                if response.status != 200:
+                    logger.error(f"AI API error status={response.status}")
+                    return AIAnalysisResult(False, f"AI_API_ERROR_{response.status}", 0.0)
+                
+                data = await response.json()
+                text = data.get('answer', '') or data.get('content', '') or data.get('response', '')
+                
+                # Robust JSON Parsing
+                result = self._parse_json_result(text)
+                result.raw_response = text
+                return result
 
         except Exception as e:
-            print(f"DEBUG: AI Connection Failed error={type(e).__name__}: {e}")
             logger.error(f"AI Connection Failed: {e}")
             return AIAnalysisResult(False, f"CONNECTION_ERROR: {str(e)}", 0.0)
+
+    def _parse_json_result(self, text: str) -> AIAnalysisResult:
+        """Extracts JSON result from AI response using regex and heuristic fallbacks."""
+        # 1. Regex strategy for markdown or raw blocks
+        json_match = re.search(r'(\{.*\})', text.replace('\n', ' '), re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                return AIAnalysisResult(
+                    confirmed=bool(data.get('confirmed', False)),
+                    reason=str(data.get('reason', 'JSON parsed')),
+                    confidence=float(data.get('confidence', 0.5))
+                )
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 2. Heuristic fallback
+        confirmed = "true" in text.lower() and "not confirmed" not in text.lower()
+        return AIAnalysisResult(confirmed, text[:100], 0.5)
 
 
 class DiscordDispatcher:
@@ -249,7 +337,7 @@ class DiscordDispatcher:
     def __init__(self, webhook_url: str):
         self.webhook_url = webhook_url
         self.last_sent = {} # Dedup: {asset: timestamp}
-
+    
     async def send_alert(self, context: AlertContext, ai_result: AIAnalysisResult):
         if not self.webhook_url:
             logger.warning("Discord Webhook missing.")
@@ -261,6 +349,10 @@ class DiscordDispatcher:
         if now - last < 900: # 15 mins
             logger.info(f"Skipping alert for {context.asset} (Rate Limit)")
             return
+
+        # Shared Session
+        if not hasattr(self, '_session') or self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
 
         color = 0x22c55e if ai_result.confirmed else 0xef4444 # Green/Red
         
@@ -278,15 +370,18 @@ class DiscordDispatcher:
         payload = {"embeds": [embed]}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.webhook_url, json=payload) as resp:
-                    if resp.status in [200, 204]:
-                        logger.info(f"Alert sent for {context.asset}")
-                        self.last_sent[context.asset] = now
-                    else:
-                        logger.error(f"Discord Failed: {resp.status}")
+            async with self._session.post(self.webhook_url, json=payload) as resp:
+                if resp.status in [200, 204]:
+                    logger.info(f"Alert sent for {context.asset}")
+                    self.last_sent[context.asset] = now
+                else:
+                    logger.error(f"Discord Failed: {resp.status}")
         except Exception as e:
             logger.error(f"Discord Dispatch Error: {e}")
+
+    async def close(self):
+        if hasattr(self, '_session') and self._session and not self._session.closed:
+            await self._session.close()
 
 
 # --- Tick Logger ---
@@ -297,7 +392,12 @@ class TickLogger:
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.buffers = {} # {asset: [ticks]}
-        self.CHUNK_SIZE = 50 # Reduced from 1000 for faster persistence
+        self.CHUNK_SIZE = int(os.getenv("TICK_CHUNK_SIZE", "1000"))
+        
+        # Override data_dir if provided via ENV
+        env_dir = os.getenv("TICK_LOG_DIR")
+        if env_dir:
+            self.data_dir = Path(env_dir) if Path(env_dir).is_absolute() else PROJECT_ROOT / env_dir
     
     async def log_ticks(self, asset: str, ticks: List[Dict]):
         if asset not in self.buffers:
@@ -468,7 +568,19 @@ class OTCDispatcher:
         
         # Cooldown Tracker: {asset: timestamp}
         self.cooldowns: Dict[str, float] = {}
-        self.COOLDOWN_SECONDS = 300 # 5 minutes
+        self.COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
+        
+        # New Settings
+        self.enable_ai_confirm = os.getenv("ENABLE_AI_CONFIRM", "true").lower() == "true"
+        self.min_ai_confidence = float(os.getenv("ALERT_MIN_CONFIDENCE", "0.7"))
+        self.candle_count = int(os.getenv("ALERT_CANDLE_COUNT", "100"))
+
+    async def close(self):
+        """Gracefully shutdown all components."""
+        logger.info("Closing OTC Dispatcher components...")
+        await self.ai.close()
+        await self.discord.close()
+        # Add any other component cleanup here (e.g. redis)
 
 
     def scan_available_assets(self) -> List[str]:
@@ -496,7 +608,7 @@ class OTCDispatcher:
         return found_assets
 
     async def fetch_data(self, asset: str) -> List[Dict]:
-        """Fetches last 50 candles for asset, prioritizing local CSV."""
+        """Fetches last N candles for asset, prioritizing local CSV."""
         if self.test_mode:
              # Mock Data
              logger.info(f"Test Mode: Generating mock data for {asset}")
@@ -505,7 +617,7 @@ class OTCDispatcher:
              base = 1.0500
              now = datetime.now().timestamp()
              # Include time for logging
-             return [{"time": now + (i*60), "close": base + (i * 0.0002), "high": base + (i*0.00025), "low": base + (i*0.00018)} for i in range(50)]
+             return [{"time": now + (i*60), "close": base + (i * 0.0002), "high": base + (i*0.00025), "low": base + (i*0.00018)} for i in range(self.candle_count)]
 
         # --- Option A: Direct CSV Reading ---
         try:
@@ -522,8 +634,8 @@ class OTCDispatcher:
                     if 'timestamp' in df.columns and 'time' not in df.columns:
                         df = df.rename(columns={'timestamp': 'time'})
                     
-                    # Take last 50 candles
-                    candles = df.tail(50).to_dict('records')
+                    # Take last N candles
+                    candles = df.tail(self.candle_count).to_dict('records')
                     logger.info(f"Loaded {len(candles)} candles from local CSV for {asset}")
                     return candles
         except Exception as e:
@@ -533,7 +645,7 @@ class OTCDispatcher:
         try:
             async with aiohttp.ClientSession() as session:
                 # Adjust timeframe/params as per QuFLX API
-                url = f"{self.market_source_url}/{asset}/1m?limit=50"
+                url = f"{self.market_source_url}/{asset}/1m?limit={self.candle_count}"
                 async with session.get(url, timeout=5) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -560,7 +672,7 @@ class OTCDispatcher:
         if data_points:
             await self.logger_service.log_ticks(asset, data_points)
 
-        result = self.scanner.analyze(data_points)
+        result = self.scanner.analyze(data_points, candle_count=self.candle_count)
         if not result and not self.test_mode:
             return
 
@@ -592,9 +704,16 @@ class OTCDispatcher:
 
             # AI Check
             try:
-                ai_verdict = await self.ai.verify_setup(ctx)
-                # Only update cooldown on successful call (or rejection)
-                self.cooldowns[asset] = now
+                if self.enable_ai_confirm:
+                    ai_verdict = await self.ai.verify_setup(ctx)
+                    # Filter by Confidence
+                    if ai_verdict.confidence < self.min_ai_confidence:
+                        logger.info(f"AI low confidence for {asset} ({ai_verdict.confidence:.2f} < {self.min_ai_confidence}). Skipping.")
+                        return
+                    # Only update cooldown on successful call (or rejection)
+                    self.cooldowns[asset] = now
+                else:
+                    ai_verdict = AIAnalysisResult(True, "AI Confirmation Disabled (Force Pass)", 1.0)
             except Exception as e:
                 logger.error(f"AI Check Failed for {asset}: {e}")
                 return
@@ -696,12 +815,18 @@ def main():
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-    dispatcher = OTCDispatcher(assets=args.assets, test_mode=args.test_alert)
-    if args.redis:
-        dispatcher.redis_mode = True
-    
+    async def run_managed():
+        dispatcher = OTCDispatcher(assets=args.assets, test_mode=args.test_alert)
+        if args.redis:
+            dispatcher.redis_mode = True
+        
+        try:
+            await dispatcher.run_loop()
+        finally:
+            await dispatcher.close()
+
     try:
-        asyncio.run(dispatcher.run_loop())
+        asyncio.run(run_managed())
     except KeyboardInterrupt:
         logger.info("Dispatcher Stopped by User.")
 

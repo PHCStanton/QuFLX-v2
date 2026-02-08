@@ -86,6 +86,21 @@
 - [x] Provision Recommended Platform Settings Scaffolding in `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`.
 - [x] Align sidebar tab ordering so `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last.
 - [x] Normalize History Wait Time setting to 1–8 seconds (UI + backend validation)
+- [x] Implement Alerts & Notifications UI section in Settings Panel.
+- [x] Add dynamic environment variable passing from Gateway to Alert Dispatcher.
+
+## Phase 5.5: Alerts & Monitoring Enhancements (Completed)
+- [x] Refactor `otc_alert_dispatch.py` to include `MarketScanner` with technical Indicators (ADX, RSI, Bollinger, Pivots).
+- [x] Implement weighted Confidence Scoring for alert prioritization.
+- [x] Add `TickLogger` enhancements for configurable chunk sizes and local storage paths.
+- [x] Create `How_it_Works.md` documentation for end-users.
+- [x] Fix settings hydration bugs and API proxy issues in the Dashboard.
+
+## Phase 5.6: Backend AI Service Hardening (Completed)
+- [x] Implement persistent `aiohttp` client session with TCP connector.
+- [x] Integrate AI Service into FastAPI lifespan for managed lifecycle.
+- [x] Add retries and robust error handling for external LLM calls.
+- [x] Align dispatcher to use persistent service client.
 
 ## Phase 6: Integration & Polish (Pending)
 - [ ] System Orchestration and resilience testing (restart tolerance, degraded modes).
@@ -108,7 +123,7 @@
 ### In Progress
 - [x] Implement overlay indicators on main chart (EMA, BBands, SuperTrend, Support/Resistance, EMA Cross-Over).
 - [ ] Implement oscillator panes (RSI, MACD histogram) synchronized with main time scale.
-- [ ] Harden `/api/v1/ai/ask` contract (schema validation, structured errors, size limits).
+- [x] Harden `/api/v1/ai/ask` contract (persistent client, retries, lifespan integration).
 
 
 ## Phase 4.2: Pocket Option Topdown v2 (Timeframe + Data Collection Foundation)

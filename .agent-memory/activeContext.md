@@ -30,10 +30,18 @@
   - Implemented prefix caching using `x-grok-conv-id` header tracking.
   - Restructured prompts to separate static system context from dynamic market data, achieving ~85-90% cache hit rates on system instructions.
   - Added cache telemetry (cached tokens, savings) to AI service logs.
-- **Alert Dispatcher Redesign (Concurrency & Filtering):**
-  - Fixed AI connection/parsing bugs (endpoint `/ask`, field `answer`).
-  - Added Concurrency Control: Max 3 concurrent AI calls via Semaphore + 5-minute per-asset cooldown.
-  - Implemented **Ticker Synchronization**: Dispatcher now dynamically whitelists assets by listening to Redis `ticker:active`, synced in real-time with the Frontend Ticker Tape.
+- **Alert Dispatcher Redesign & Enhancements (Scanners + Concurrency):**
+  - Added **MarketScanner** with technical indicators: ADX (Trend Strength), RSI (Momentum), Bollinger Bands (Volatility), and Fractal Pivots (Support/Resistance).
+  - Implemented **Confidence (Confluence) Scoring**: Signals are weighted (EMA Cross 20%, BB Breakout 30%, Squeeze 25%, etc.) to prioritize high-quality alerts.
+  - Added **Alerts & Notifications Settings UI**: Full control over AI confirmation, confidence thresholds, candle counts, and cooldowns from the Settings Panel.
+  - Added **Tick Logging Controls**: User-configurable chunk sizes (default 1000) and storage directories.
+  - Implemented **Concurrency Control**: Max 3 concurrent AI calls via Semaphore + configurable per-asset cooldown (default 5 min).
+  - Implemented **Ticker Synchronization**: Dispatcher whitelists assets via Redis `ticker:active`, synced with the Frontend Ticker Tape.
+- **AI Service Refactoring (Stability & Performance):**
+  - Integrated `AIService` into the FastAPI `lifespan` for clean startup/shutdown.
+  - Implemented a persistent `aiohttp.ClientSession` with a `TCPConnector` (keep-alive) to prevent socket exhaustion.
+  - Added **Retries & Error Handling**: Robust recovery for transient network issues or LLM timeouts.
+  - Standardized all API calls to absolute URLs (`localhost:8000`) in `settingsStore.js` to ensure reliable communication.
 
 - **Pocket Option Timeframe Automation Hardening**:
   - Successfully resolved the "Span-vs-Anchor" click obstruction by implementing automatic parent-anchor traversal in `local_selenium_utils/selenium_ui_controls.py`.
@@ -144,7 +152,8 @@
   - `capabilities_v2/timeframe_menu.py`
   - `backend/services/strategy/indicators.py`
   - `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md`
-  - `backend/scripts/otc_alert_dispatch.py` (Redesigned with Ticker Sync)
+  - `backend/scripts/otc_alert_dispatch.py` (Redesigned with Technical Scanners)
+  - `backend/scripts/How_it_Works.md` (Dispatcher Documentation)
   - `Research/research_lightweight-charts-indicators_2025-12-23.md`
   - `Research/research_ai_integration_vision_files_2025-12-20.md`
 
