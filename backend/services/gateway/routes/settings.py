@@ -140,6 +140,12 @@ async def update_platform_settings(payload: Dict[str, Any] = Body(...)):
         validated = PlatformSettings(**payload)
         settings_dict = validated.model_dump(by_alias=True)
         save_settings(settings_dict)
+        
+        # Phase 2C: Notify subscribers (like the Alert Dispatcher)
+        if hasattr(request.app.state, 'redis') and request.app.state.redis:
+            await request.app.state.redis.publish("settings:updated", json.dumps(settings_dict))
+            logger.info("Published settings:updated notification")
+            
         return settings_dict
     except ValueError as e:
         logger.error(f"Validation error updating settings: {e}")

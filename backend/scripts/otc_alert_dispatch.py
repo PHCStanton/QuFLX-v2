@@ -254,6 +254,15 @@ class AIOrchestrator:
         if self._session and not self._session.closed:
             await self._session.close()
 
+    def update_config(self, enable_confirm: bool = None, min_confidence: float = None):
+        """Update AI confirmation settings in real-time."""
+        if enable_confirm is not None:
+            self.enable_confirm = enable_confirm
+            logger.info(f"AIOrchestrator: enable_confirm updated to {self.enable_confirm}")
+        if min_confidence is not None:
+            self.min_confidence = min_confidence
+            logger.info(f"AIOrchestrator: min_confidence updated to {self.min_confidence}")
+
     async def verify_setup(self, context: AlertContext) -> AIAnalysisResult:
         """Sends context to AI and awaits verdict."""
         # Acquire semaphore before proceeding
@@ -512,9 +521,10 @@ class RedisSubscriber:
 
 class TickerSubscriber:
     """Listens for active ticker updates to whitelist dispatch assets."""
-    def __init__(self, redis_url: str, logger_service):
+    def __init__(self, redis_url: str, logger_service=None):
         self.redis_url = redis_url
         self.active_assets = set()
+        self.first_whitelist_received = asyncio.Event()
         
     async def run(self):
         if not redis: return
@@ -532,6 +542,7 @@ class TickerSubscriber:
                         if isinstance(data, list):
                             self.active_assets = {normalize_asset(a) for a in data}
                             logger.info(f"Ticker Update -> Whitelist: {self.active_assets}")
+                            self.first_whitelist_received.set()
                     except Exception as e:
                         logger.error(f"Ticker Update Error: {e}")
         except Exception as e:
@@ -539,6 +550,44 @@ class TickerSubscriber:
 
 
 # --- Main Service ---
+
+class SettingsSubscriber:
+    """Listens for settings updates to reconfigure the dispatcher in real-time."""
+    def __init__(self, redis_url: str, orchestrator: AIOrchestrator, scanner: MarketScanner):
+        self.redis_url = redis_url
+        self.orchestrator = orchestrator
+        self.scanner = scanner
+        
+    async def run(self):
+        if not redis: return
+        try:
+            client = redis.from_url(self.redis_url, decode_responses=True)
+            pubsub = client.pubsub()
+            await pubsub.subscribe("settings:updated")
+            logger.info("Subscribed to 'settings:updated' - Ready for real-time config changes.")
+            
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    try:
+                        data = json.loads(message['data'])
+                        alerts_cfg = data.get("alerts", {})
+                        
+                        # Update Orchestrator
+                        enable_ai = alerts_cfg.get("enableAIConfirm")
+                        min_conf = alerts_cfg.get("minAIConfidence")
+                        self.orchestrator.update_config(enable_confirm=enable_ai, min_confidence=min_conf)
+                        
+                        # Update Scanner (e.g. candle count)
+                        candle_count = alerts_cfg.get("candleCount")
+                        if candle_count:
+                             # We'd need to update scanner.candle_count if it were stored
+                             # For now, orchestrator is the primary dynamic target
+                             pass
+                             
+                    except Exception as e:
+                        logger.error(f"Settings Update Error: {e}")
+        except Exception as e:
+            logger.error(f"Settings Sub Error: {e}")
 
 class OTCDispatcher:
     def __init__(self, assets: List[str], test_mode: bool = False):
@@ -554,14 +603,13 @@ class OTCDispatcher:
             webhook_url=os.getenv("DISCORD_WEBHOOK_URL", "")
         )
         
-        # Tick/Data Logger
         self.logger_service = TickLogger(data_dir=PROJECT_ROOT / "data" / "ticks")
-
-        # Redis Subscriber (Optional)
-        # Redis Subscribers
-        self.redis_mode = False
-        self.subscriber = RedisSubscriber(REDIS_URL, self.logger_service, self.assets)
-        self.ticker_sub = TickerSubscriber(REDIS_URL, self.logger_service)
+        self.redis_url = REDIS_URL
+        self.redis_mode = False # Default unless toggled via main()
+        
+        self.subscriber = RedisSubscriber(self.redis_url, self.logger_service, self.assets)
+        self.ticker_sub = TickerSubscriber(self.redis_url)
+        self.settings_sub = SettingsSubscriber(self.redis_url, self.ai, self.scanner)
 
         # Assuming internal API for market data
         self.market_source_url = os.getenv("QFLX_MARKET_DATA_URL", "http://localhost:8000/api/v1/history")
@@ -636,6 +684,17 @@ class OTCDispatcher:
                     
                     # Take last N candles
                     candles = df.tail(self.candle_count).to_dict('records')
+                    
+                    # Optional: Data Recency Check (Phase 2C)
+                    if candles:
+                        last_ts = candles[-1].get('time', 0)
+                        now_ts = int(datetime.now().timestamp())
+                        age = now_ts - last_ts
+                        if age > 120:  # More than 2 minutes old
+                            logger.warning(f"Data for {asset} is STALE ({age}s old).")
+                        else:
+                            logger.debug(f"Data for {asset} recency: {age}s")
+
                     logger.info(f"Loaded {len(candles)} candles from local CSV for {asset}")
                     return candles
         except Exception as e:
@@ -738,9 +797,15 @@ class OTCDispatcher:
             logger.info("Test Mode Complete.")
             return
 
-        # Initial Auto-Discovery if no assets provided (or even if they are, we can append)
-        # Taking "I don't want any hard coded assets" to mean we rely on auto-discovery.
-        # We will merge provided args (if any) with discovered ones.
+        # 0. Wait for Frontend Whitelist (30s timeout)
+        logger.info("Standing by for Frontend Ticker selection...")
+        try:
+            await asyncio.wait_for(self.ticker_sub.first_whitelist_received.wait(), timeout=30)
+            logger.info(f"Initial whitelist received: {self.ticker_sub.active_assets}")
+        except asyncio.TimeoutError:
+            logger.warning("No Ticker selection received after 30s. Entering standby mode.")
+
+        # 1. Initial Discovery
         discovered = self.scan_available_assets()
         if discovered:
             # distinct union
@@ -750,8 +815,9 @@ class OTCDispatcher:
                     self.assets.append(a)
             # logger.info(f"Assets merged with auto-discovery: {self.assets}")
         
-        # Start Ticker Listener
+        # Start Subscribers
         asyncio.create_task(self.ticker_sub.run())
+        asyncio.create_task(self.settings_sub.run())
         
         if not self.assets:
             logger.warning("No assets found in history folder and none provided. Waiting for 'Collect History'...")
@@ -781,21 +847,24 @@ class OTCDispatcher:
                             if fmt not in self.subscriber.assets:
                                 self.subscriber.assets.append(fmt)
 
-                if not self.assets:
+                if not self.assets and not self.ticker_sub.active_assets:
                     # Still waiting for assets
-                    pass
+                    logger.debug("No assets to scan, standing by...")
                 else:
-                    # 2. Process ONLY Whitelisted Assets (if active)
-                    current_pool = self.assets
-                    if self.ticker_sub.active_assets:
-                        # Filter discovered assets by Ticker whitelist
-                        current_pool = [a for a in self.assets if a in self.ticker_sub.active_assets]
-                        if not current_pool:
-                            logger.info("No active Ticker assets found. Standing by...")
+                    # 2. Process ONLY Whitelisted Assets
+                    # Intersection of what's on disk and what's selected in frontend
+                    current_pool = [a for a in self.assets if a in self.ticker_sub.active_assets]
+                    
+                    if not current_pool and self.ticker_sub.active_assets:
+                        # Maybe assets are normalized differently on disk?
+                        # Log warning if we have a whitelist but no matches
+                        logger.warning(f"Whitelist exists {self.ticker_sub.active_assets} but none found on disk.")
                     
                     if current_pool:
-                        logger.info(f"Core Loop: Scanning {len(current_pool)} assets: {current_pool}")
+                        logger.info(f"Core Loop: Scanning {len(current_pool)} selected assets: {current_pool}")
                         await asyncio.gather(*(self.process_asset(asset) for asset in current_pool))
+                    else:
+                        logger.info("No active selections found on disk. Standing by...")
             
             except Exception as e:
                 logger.error(f"Loop Error: {e}")

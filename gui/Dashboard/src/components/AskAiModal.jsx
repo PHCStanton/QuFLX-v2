@@ -419,7 +419,16 @@ const AskAiModal = ({
   const handleIntroduction = () => {
     setAnswer(AI_INTRODUCTION_TEXT);
     appendAiMessage({ role: 'assistant', content: AI_INTRODUCTION_TEXT, meta: { kind: 'introduction' } });
+
+    if (readAnswerAloud) {
+      if (!ttsEnabled) {
+        setError(readBackEnabled ? 'Voice Read-Back not supported.' : 'Enable Voice Read-Back in Settings.');
+      } else {
+        speakText(AI_INTRODUCTION_TEXT);
+      }
+    }
   };
+
 
   const handleInsertTranscript = () => {
     const merged = `${String(aiDraftPrompt || '').trim()} ${String(transcriptDraft || '').trim()}`.trim();

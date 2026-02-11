@@ -161,6 +161,7 @@ async def lifespan(app: FastAPI):
     # === STARTUP ===
     logger.info("Starting API Gateway...")
     redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    app.state.redis = redis_client
     
     # Register Socket.IO events (delegated to socket_events.py)
     register_socket_events(sio, redis_client, system_state)

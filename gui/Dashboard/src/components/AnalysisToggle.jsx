@@ -1,24 +1,38 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import clickSound from '../assets/Sounds/UIClick-Short_soft click.mp3';
 
 const AnalysisToggle = ({ onClick, active, icon: Icon, tooltip, size = 32 }) => {
-    const shadowDistance = Math.round(size * 0.1);
-    const iconSize = Math.round(size * 0.5);
+  const shadowDistance = Math.round(size * 0.1);
+  const iconSize = Math.round(size * 0.5);
+  const audioRef = useRef(null);
 
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={`neo-toggle-btn ${active ? 'active' : ''}`}
-            title={tooltip}
-            style={{
-                width: `${size}px`,
-                height: `${size}px`,
-                '--btn-size': `${size}px`,
-                '--shadow-dist': `${shadowDistance}px`,
-            }}
-        >
-            <Icon size={iconSize} className="neo-icon" />
-            <style>{`
+  const handleClick = (e) => {
+    // Play click sound
+    if (!audioRef.current) {
+      audioRef.current = new Audio(clickSound);
+      audioRef.current.volume = 0.5;
+    }
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => { }); // Ignore autoplay errors
+
+    if (onClick) onClick(e);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className={`neo-toggle-btn ${active ? 'active' : ''}`}
+      title={tooltip}
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        '--btn-size': `${size}px`,
+        '--shadow-dist': `${shadowDistance}px`,
+      }}
+    >
+      <Icon size={iconSize} className="neo-icon" />
+      <style>{`
         .neo-toggle-btn {
           --bg: #1e2128;
           --shadow-dark: rgba(0,0,0,0.6);
@@ -70,8 +84,8 @@ const AnalysisToggle = ({ onClick, active, icon: Icon, tooltip, size = 32 }) => 
           filter: drop-shadow(0 0 4px #00ff88) drop-shadow(0 0 8px rgba(0,255,136,0.4));
         }
       `}</style>
-        </button>
-    );
+    </button>
+  );
 };
 
 export default AnalysisToggle;
