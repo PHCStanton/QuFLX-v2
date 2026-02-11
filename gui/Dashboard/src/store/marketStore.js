@@ -128,7 +128,7 @@ const createTickerSlice = () => ({
   subscribedAssetKeys: [],
   quotesByAssetKey: {},
   baselineByAssetKey: {},
-  lastTickTimestamp: 0
+  alertFeed: [] // [{ asset, regime, direction, expiry, price, confluence, ai_confirmed, ai_confidence, timestamp }]
 });
 
 const createMarketSlice = (set, get) => ({
@@ -920,6 +920,13 @@ const createConnectionSlice = (set, get) => ({
           }
         };
       });
+    });
+
+    socket.on('new_alert', (data) => {
+      console.log('New In-App Alert:', data);
+      set((state) => ({
+        alertFeed: [data, ...state.alertFeed].slice(0, 50)
+      }));
     });
 
     socket.on('system_status', (data) => {

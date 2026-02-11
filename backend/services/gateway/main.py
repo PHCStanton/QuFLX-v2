@@ -263,9 +263,9 @@ app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""
     pubsub = redis_client.pubsub()
-    await pubsub.subscribe("market_data", "trading:signals", "system_status")
+    await pubsub.subscribe("market_data", "trading:signals", "system_status", "alerts:dispatched")
     
-    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status")
+    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status, alerts:dispatched")
     
     async for message in pubsub.listen():
         if message['type'] == 'message':
@@ -287,6 +287,9 @@ async def redis_listener():
                         
                 elif channel == "trading:signals":
                     await sio.emit('trading_signal', parsed_data)
+
+                elif channel == "alerts:dispatched":
+                    await sio.emit('new_alert', parsed_data)
 
                 elif channel == "system_status":
                     try:

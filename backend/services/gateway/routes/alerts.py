@@ -114,6 +114,7 @@ async def start_alerts(request: Request, assets: List[str] = Body(default=[]), u
             
             cooldown_min = alert_settings.get("alertCooldownMinutes", 5)
             env["ALERT_COOLDOWN_SECONDS"] = str(int(cooldown_min) * 60)
+            env["SCAN_INTERVAL_SECONDS"] = str(alert_settings.get("scanIntervalSeconds", 60))
             
             # Tick Logging settings
             env["TICK_CHUNK_SIZE"] = str(alert_settings.get("tickChunkSize", 1000))

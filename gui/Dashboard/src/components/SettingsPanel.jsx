@@ -575,13 +575,40 @@ const SettingsPanel = () => {
             />
           </SettingRow>
 
-          <SettingRow label="Pulse Candle Count" description="Number of candles used for technical analysis (default 100)">
+          <SettingRow label="Pulse Candle Count" description="Number of candles used for technical analysis">
+            <div className="space-y-3 w-full">
+              <div className="flex gap-2">
+                {[30, 90, 100, 200].map(val => (
+                  <button
+                    key={val}
+                    onClick={() => updateSection('alerts', { candleCount: val })}
+                    className={`px-3 py-1 rounded text-[10px] font-bold transition-all border ${(settings.alerts?.candleCount ?? 100) === val
+                        ? "bg-accent-blue text-white border-accent-blue shadow-glow-blue"
+                        : "bg-card-bg text-text-secondary border-border-primary hover:border-accent-blue/50"
+                      }`}
+                  >
+                    {val}
+                  </button>
+                ))}
+              </div>
+              <SliderInput
+                value={settings.alerts?.candleCount ?? 100}
+                min={30}
+                max={500}
+                step={10}
+                onChange={(val) => updateSection('alerts', { candleCount: val })}
+              />
+            </div>
+          </SettingRow>
+
+          <SettingRow label="Scan Interval" description="Frequency of market analysis scans (default 60s)">
             <SliderInput
-              value={settings.alerts?.candleCount ?? 100}
+              value={settings.alerts?.scanIntervalSeconds ?? 60}
               min={30}
-              max={500}
-              step={10}
-              onChange={(val) => updateSection('alerts', { candleCount: val })}
+              max={300}
+              step={30}
+              unit="s"
+              onChange={(val) => updateSection('alerts', { scanIntervalSeconds: val })}
             />
           </SettingRow>
 

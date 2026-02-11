@@ -8,7 +8,7 @@ import { Play, Square, Activity, ShieldCheck, ListChecks, Info } from 'lucide-re
 
 const AnalysisPanel = () => {
   const { running, pid, started_at, loading, startAlerts, stopAlerts } = useAlerts();
-  const { subscribedAssetKeys } = useMarketStore();
+  const { subscribedAssetKeys, alertFeed, setSelectedAsset } = useMarketStore();
   const { settings, updateSection } = useSettingsStore();
 
   const handleToggleDispatcher = async () => {
@@ -78,8 +78,8 @@ const AnalysisPanel = () => {
               onClick={handleToggleDispatcher}
               disabled={loading}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all font-bold text-sm shadow-md ${running
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/40"
-                  : "bg-accent-green text-black hover:opacity-90 border border-accent-green/50"
+                ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/40"
+                : "bg-accent-green text-black hover:opacity-90 border border-accent-green/50"
                 } disabled:opacity-50`}
             >
               {running ? <><Square size={16} fill="currentColor" /> Stop Scanner</> : <><Play size={16} fill="currentColor" /> Start Scanner</>}
@@ -88,8 +88,66 @@ const AnalysisPanel = () => {
         </div>
       </Card>
 
+      {/* Live Signal Feed (R5) */}
+      <Card className="p-4 rounded-xl flex-1 quflx-section-light border border-border-primary shadow-lg overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-border-primary/30">
+          <div className="flex items-center gap-2">
+            <Activity className="text-accent-green" size={18} />
+            <h3 className="text-xs font-bold text-text-primary uppercase tracking-tight">Live Signal Feed</h3>
+          </div>
+          <span className="text-[10px] font-bold text-text-secondary bg-section-bg px-2 py-0.5 rounded border border-border-primary">
+            Latest {alertFeed.length}
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+          {alertFeed.length > 0 ? (
+            alertFeed.map((alert, idx) => (
+              <div
+                key={`${alert.asset}-${idx}`}
+                onClick={() => setSelectedAsset(alert.asset)}
+                className={`p-2 rounded border border-border-primary/20 hover:border-accent-blue/40 cursor-pointer transition-all ${alert.direction === 'CALL' ? 'bg-accent-green/5' : 'bg-red-500/5'
+                  }`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <span className="text-[11px] font-bold text-text-primary">{alert.asset}</span>
+                  <span className={`text-[10px] font-black px-1.5 rounded ${alert.direction === 'CALL' ? 'bg-accent-green text-black' : 'bg-red-500 text-white'
+                    }`}>
+                    {alert.direction}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-text-secondary truncate max-w-[120px]">{alert.regime}</span>
+                  <span className="text-[9px] font-mono text-text-secondary">
+                    {new Date(alert.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+                <div className="mt-1 flex gap-2 overflow-x-hidden">
+                  <div className="bg-card-bg px-1.5 py-0.5 rounded text-[9px] text-text-secondary border border-border-primary/30">
+                    {alert.expiry}
+                  </div>
+                  <div className="bg-card-bg px-1.5 py-0.5 rounded text-[9px] text-text-secondary border border-border-primary/30">
+                    Score: {alert.confluence}
+                  </div>
+                  {alert.ai_confirmed && (
+                    <div className="bg-accent-blue/10 px-1.5 py-0.5 rounded text-[9px] text-accent-blue border border-accent-blue/20">
+                      AI ✓
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
+              <Info className="text-text-secondary mb-2" size={24} />
+              <p className="text-xs text-text-secondary">No signals yet.<br />Dispatcher is monitoring pool.</p>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Monitoring Whitelist Card */}
-      <Card className="p-4 rounded-xl flex-1 quflx-section-light border border-border-primary shadow-lg overflow-y-auto">
+      <Card className="p-3 rounded-xl flex-none quflx-section-light border border-border-primary shadow-sm max-h-[150px] overflow-y-auto">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-border-primary/30">
           <div className="flex items-center gap-2">
             <ListChecks className="text-accent-blue" size={18} />

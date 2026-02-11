@@ -8,7 +8,7 @@ import re
 import argparse
 import csv
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from enum import Enum
@@ -62,12 +62,16 @@ logger = logging.getLogger("OTC_Dispatch")
 # --- Data Structures ---
 
 class MarketCondition(Enum):
-    TRENDING_UP = "Trending Up"
-    TRENDING_DOWN = "Trending Down"
-    RANGING = "Ranging/Choppy"
-    BREAKOUT_POTENTIAL = "Breakout Potential (Squeeze)"
-    EMA_CROSS_UP = "EMA Cross-Over (Bullish)"
-    EMA_CROSS_DOWN = "EMA Cross-Over (Bearish)"
+    STRONG_MOMENTUM_UP = "Strong Momentum Trending (Bullish)"
+    STRONG_MOMENTUM_DOWN = "Strong Momentum Trending (Bearish)"
+    PULLBACK_BUY = "Trending Pullback (Buy Dip)"
+    PULLBACK_SELL = "Trending Pullback (Sell Rally)"
+    RANGING_OVERBOUGHT = "Ranging – Overbought (Sell)"
+    RANGING_OVERSOLD = "Ranging – Oversold (Buy)"
+    BREAKOUT_UP = "Breakout (Bullish)"
+    BREAKOUT_DOWN = "Breakout (Bearish)"
+    REVERSAL_BULLISH = "Trend Reversal (Bullish)"
+    REVERSAL_BEARISH = "Trend Reversal (Bearish)"
     NEUTRAL = "Neutral"
 
 @dataclass
@@ -76,8 +80,10 @@ class AlertContext:
     condition: MarketCondition
     price: float
     time: str
-    technicals: Dict[str, float]
-    payout: int = 0
+    technicals: Dict[str, Any]
+    payout: float = 92.0
+    direction: Optional[str] = None # CALL/PUT
+    suggested_expiry: Optional[str] = "1m"
 
 @dataclass
 class AIAnalysisResult:
@@ -90,15 +96,30 @@ class AIAnalysisResult:
 # --- Components ---
 
 class MarketScanner:
-    """Analyzes raw market data to detect conditions."""
+    """Calculates technical indicators and identifies KB market regimes."""
     
-    def analyze(self, candles: List[Dict], candle_count: int = 100) -> Optional[Dict]:
+    def __init__(self):
+        self._cache = {} # {asset: (last_timestamp, result)}
+    
+    def analyze(self, candles: List[Dict], asset: str = "unknown", candle_count: int = 100) -> Optional[Dict]:
         """
         Returns condition details if interesting, else None.
-        Expects candles to have keys: 'close', 'high', 'low'.
+        Uses a simple cache to skip recalculation if the latest candle hasn't changed.
         """
         if not candles or len(candles) < 30:
+            logger.debug(f"Scanner: {asset} - Not enough candles ({len(candles) if candles else 0})")
             return None
+            
+        last_candle = candles[-1]
+        last_ts = last_candle.get('time') or last_candle.get('timestamp') or last_candle.get('id')
+        
+        # Check Cache
+        cache_key = f"{asset}_{candle_count}"
+        if cache_key in self._cache:
+            cached_ts, cached_result = self._cache[cache_key]
+            if cached_ts == last_ts:
+                # logger.debug(f"Cache Hit: {asset}")
+                return cached_result
 
         try:
             import pandas as pd
@@ -110,9 +131,11 @@ class MarketScanner:
             df['close'] = df['close'].astype(float)
             df['high'] = df['high'].astype(float)
             df['low'] = df['low'].astype(float)
+            df['open'] = df['open'].astype(float)
             
-            # Use requested candle count if available
-            df = df.tail(candle_count)
+            # Use enough candles for EMAs, but regime detection uses candle_count
+            required_count = max(200, candle_count)
+            df = df.tail(required_count)
         except ImportError:
             logger.error("Pandas/TA required for analysis. pip install pandas ta")
             return None
@@ -135,9 +158,81 @@ class MarketScanner:
             atr_ind = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14)
             df['atr'] = atr_ind.average_true_range()
 
-            # 3. EMA Cross (9/21)
-            ema9 = EMAIndicator(close=df['close'], window=9).ema_indicator()
-            ema21 = EMAIndicator(close=df['close'], window=21).ema_indicator()
+            # 3. KB EMAs (16 & 165)
+            df['ema16'] = EMAIndicator(close=df['close'], window=16).ema_indicator()
+            df['ema165'] = EMAIndicator(close=df['close'], window=165).ema_indicator()
+            
+            # 4. Momentum & Oscillators
+            from ta.trend import MACD, CCIIndicator
+            from ta.momentum import StochasticOscillator
+            
+            macd = MACD(close=df['close'], window_slow=26, window_fast=12, window_sign=9)
+            df['macd_hist'] = macd.macd_diff()
+            df['macd'] = macd.macd()
+            
+            stoch = StochasticOscillator(high=df['high'], low=df['low'], close=df['close'], window=14, smooth_window=3)
+            df['stoch_k'] = stoch.stoch()
+            df['stoch_d'] = stoch.stoch_signal()
+            
+            df['cci'] = CCIIndicator(high=df['high'], low=df['low'], close=df['close'], window=14).cci()
+            
+            # 5. Supertrend (7, 3) Implementation
+            period = 7
+            multiplier = 3
+            df['hl2'] = (df['high'] + df['low']) / 2
+            df['atr_st'] = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=period).average_true_range()
+            
+            df['basic_ub'] = df['hl2'] + (multiplier * df['atr_st'])
+            df['basic_lb'] = df['hl2'] - (multiplier * df['atr_st'])
+            
+            df['final_ub'] = 0.0
+            df['final_lb'] = 0.0
+            for i in range(1, len(df)):
+                # Upper Band
+                if (df.index[i-1] in df.index):
+                    prev_ub = df.iloc[i-1]['final_ub']
+                    prev_close = df.iloc[i-1]['close']
+                    if df.iloc[i]['basic_ub'] < prev_ub or prev_close > prev_ub:
+                        df.at[df.index[i], 'final_ub'] = df.iloc[i]['basic_ub']
+                    else:
+                        df.at[df.index[i], 'final_ub'] = prev_ub
+                
+                # Lower Band
+                if (df.index[i-1] in df.index):
+                    prev_lb = df.iloc[i-1]['final_lb']
+                    prev_close = df.iloc[i-1]['close']
+                    if df.iloc[i]['basic_lb'] > prev_lb or prev_close < prev_lb:
+                        df.at[df.index[i], 'final_lb'] = df.iloc[i]['basic_lb']
+                    else:
+                        df.at[df.index[i], 'final_lb'] = prev_lb
+            
+            df['supertrend'] = 0.0
+            state = True # True = Up
+            for i in range(1, len(df)):
+                prev_st = df.iloc[i-1]['supertrend']
+                curr_ub = df.iloc[i]['final_ub']
+                curr_lb = df.iloc[i]['final_lb']
+                curr_close = df.iloc[i]['close']
+                
+                if state:
+                    if curr_close < curr_lb:
+                        state = False
+                        df.at[df.index[i], 'supertrend'] = curr_ub
+                    else:
+                        df.at[df.index[i], 'supertrend'] = curr_lb
+                else:
+                    if curr_close > curr_ub:
+                        state = True
+                        df.at[df.index[i], 'supertrend'] = curr_lb
+                    else:
+                        df.at[df.index[i], 'supertrend'] = curr_ub
+            
+            # 6. Candle Body Analysis (Volume Proxy)
+            df['body_size'] = (df['close'] - df['open']).abs()
+            df['total_range'] = (df['high'] - df['low']).abs()
+            df['body_ratio'] = df['body_size'] / df['total_range'].replace(0, 0.0001)
+            df['atr_14'] = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14).average_true_range()
+            df['large_body'] = df['body_size'] > (df['atr_14'] * 0.8) # Heuristic for "Large"
             
             # 4. Support / Resistance (Fractal Pivots)
             window = 5
@@ -156,77 +251,191 @@ class MarketScanner:
             norm_bb_width = current['bb_wband']
             atr_val = current['atr']
             
+            # --- KB Regime Detection Engine ---
             condition = MarketCondition.NEUTRAL
-            confluence_count = 0
+            confluence_score = 0
+            direction = None # "CALL" or "PUT"
+            suggested_expiry = "1m" # Default
             
-            # Logic
-            adx_val = current['adx']
-            rsi_val = current['rsi']
+            adx_val = current.get('adx', 0)
+            rsi_val = current.get('rsi', 0)
+            atr_val = current.get('atr', 0)
+            prev_atr = prev.get('atr', 0)
+            is_atr_spike = atr_val > (prev_atr * 1.2)
             
-            # A. EMA Cross
-            ema_cross = None
-            if ema9.iloc[-1] > ema21.iloc[-1] and ema9.iloc[-2] <= ema21.iloc[-2]:
-                ema_cross = "UP"
-                confluence_count += 20
-            elif ema9.iloc[-1] < ema21.iloc[-1] and ema9.iloc[-2] >= ema21.iloc[-2]:
-                ema_cross = "DOWN"
-                confluence_count += 20
-
-            # B. BB Breakout / Squeeze
-            is_breakout = False
-            if adx_val > 25:
-                if price > current['bb_high']:
-                    condition = MarketCondition.TRENDING_UP
-                    confluence_count += 30
-                    is_breakout = True
-                elif price < current['bb_low']:
-                    condition = MarketCondition.TRENDING_DOWN
-                    confluence_count += 30
-                    is_breakout = True
+            close = current['close']
+            ema16 = current['ema16']
+            ema165 = current['ema165']
+            st_val = current['supertrend']
+            stoch_k = current['stoch_k']
+            stoch_d = current['stoch_d']
+            macd_hist = current['macd_hist']
+            prev_macd_hist = prev['macd_hist']
             
-            # C. Squeeze (Improved with Volatility context)
-            # 0.05 is usually ~5% width. If ATR-based width is compressed:
-            if current['bb_wband'] < 0.04:
-                condition = MarketCondition.BREAKOUT_POTENTIAL
-                confluence_count += 25
+            # 1. STRONG MOMENTUM TRENDING
+            if adx_val > 30:
+                # Bullish
+                if close > ema16 and close > st_val:
+                    score = 0
+                    if adx_val > 35: score += 1
+                    if macd_hist > prev_macd_hist: score += 1
+                    if current['large_body'] and current['close'] > current['open']: score += 1
+                    if atr_val > prev_atr: score += 1
+                    
+                    # KB: Score 2+ is enough for alert, 4 is A+
+                    if score >= 2:
+                        condition = MarketCondition.STRONG_MOMENTUM_UP
+                        confluence_score = 65 + (score * 5)
+                        direction = "CALL"
+                        suggested_expiry = "3m"
+                    else:
+                        logger.debug(f"Scanner: {asset} Momentum UP ignored (Score {score}/4)")
+                # Bearish
+                elif close < ema16 and close < st_val:
+                    score = 0
+                    if adx_val > 35: score += 1
+                    if macd_hist < prev_macd_hist: score += 1
+                    if current['large_body'] and current['close'] < current['open']: score += 1
+                    if atr_val > prev_atr: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.STRONG_MOMENTUM_DOWN
+                        confluence_score = 65 + (score * 5)
+                        direction = "PUT"
+                        suggested_expiry = "3m"
+                    else:
+                        logger.debug(f"Scanner: {asset} Momentum DOWN ignored (Score {score}/4)")
 
-            # D. RSI Confluence
-            if (condition == MarketCondition.TRENDING_UP and rsi_val > 60) or \
-               (condition == MarketCondition.TRENDING_DOWN and rsi_val < 40):
-                confluence_count += 15
+            # 2. TRENDING WITH PULLBACKS (If not strong momentum)
+            if condition == MarketCondition.NEUTRAL and adx_val > 20:
+                # Loosen distance to 0.5% (from 0.2%)
+                dist_ema16 = abs(close - ema16) / ema16
+                # Bullish Pullback
+                if close > ema165 and dist_ema16 < 0.005:
+                    score = 0
+                    if 40 <= rsi_val <= 55: score += 1
+                    if close <= current['bb_low'] * 1.001: score += 1 # BB touch/rejection
+                    if atr_val >= prev_atr: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.PULLBACK_BUY
+                        confluence_score = 65 + (score * 5)
+                        direction = "CALL"
+                        suggested_expiry = "5m"
+                # Bearish Pullback
+                elif close < ema165 and dist_ema16 < 0.005:
+                    score = 0
+                    if 45 <= rsi_val <= 60: score += 1
+                    if close >= current['bb_high'] * 0.999: score += 1
+                    if atr_val >= prev_atr: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.PULLBACK_SELL
+                        confluence_score = 65 + (score * 5)
+                        direction = "PUT"
+                        suggested_expiry = "5m"
 
-            # E. S/R Proximity
-            near_sr = None
-            if current_resistance and abs(price - current_resistance) / price < 0.001:
-                near_sr = "RESISTANCE"
-                confluence_count += 10
-            elif current_support and abs(price - current_support) / price < 0.001:
-                near_sr = "SUPPORT"
-                confluence_count += 10
+            # 3. RANGING / SIDEWAYS
+            if condition == MarketCondition.NEUTRAL and adx_val < 20:
+                # Overbought (Sell)
+                if close >= current['bb_high'] * 0.998:
+                    score = 0
+                    if rsi_val > 70: score += 1
+                    if stoch_k > 80 and stoch_k < stoch_d: score += 1 # Cross down
+                    if not current['large_body']: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.RANGING_OVERBOUGHT
+                        confluence_score = 60 + (score * 5)
+                        direction = "PUT"
+                        suggested_expiry = "3m"
+                # Oversold (Buy)
+                elif close <= current['bb_low'] * 1.005: # Loosened from 1.002
+                    score = 0
+                    if rsi_val < 35: score += 1 # Loosened from 30
+                    if stoch_k < 20 and stoch_k > stoch_d: score += 1 # Cross up
+                    if not current['large_body']: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.RANGING_OVERSOLD
+                        confluence_score = 60 + (score * 5)
+                        direction = "CALL"
+                        suggested_expiry = "3m"
 
-            if condition == MarketCondition.NEUTRAL and not ema_cross:
-                return None
-            
-            # Map EMA Cross to Condition if none set
+            # 4. BREAKOUT CONDITIONS
+            if condition == MarketCondition.NEUTRAL and current['bb_wband'] < 0.04: # Squeeze
+                # Bullish Breakout
+                if close > current['bb_high'] and adx_val > 25:
+                    score = 0
+                    if is_atr_spike: score += 1
+                    if current['large_body']: score += 1
+                    if adx_val > prev['adx']: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.BREAKOUT_UP
+                        confluence_score = 65 + (score * 5)
+                        direction = "CALL"
+                        suggested_expiry = "1m"
+                # Bearish Breakout
+                elif close < current['bb_low'] and adx_val > 25:
+                    score = 0
+                    if is_atr_spike: score += 1
+                    if current['large_body']: score += 1
+                    if adx_val > prev['adx']: score += 1
+                    
+                    if score >= 2:
+                        condition = MarketCondition.BREAKOUT_DOWN
+                        confluence_score = 65 + (score * 5)
+                        direction = "PUT"
+                        suggested_expiry = "1m"
+
+            # 5. TREND REVERSAL (Lowest priority/highest risk)
             if condition == MarketCondition.NEUTRAL:
-                condition = MarketCondition.EMA_CROSS_UP if ema_cross == "UP" else MarketCondition.EMA_CROSS_DOWN
+                # Bullish Reversal
+                if rsi_val < 30 and macd_hist > prev_macd_hist:
+                    # Look for major support proximity
+                    if current_support and abs(close - current_support) / current_support < 0.001:
+                        condition = MarketCondition.REVERSAL_BULLISH
+                        confluence_score = 55
+                        direction = "CALL"
+                        suggested_expiry = "5m"
+                # Bearish Reversal
+                elif rsi_val > 70 and macd_hist < prev_macd_hist:
+                    if current_resistance and abs(close - current_resistance) / current_resistance < 0.001:
+                        condition = MarketCondition.REVERSAL_BEARISH
+                        confluence_score = 55
+                        direction = "PUT"
+                        suggested_expiry = "5m"
 
-            return {
+            if condition == MarketCondition.NEUTRAL:
+                return None
+
+            # Cache result before returning
+            final_result = {
                 "condition": condition,
-                "confidence": min(confluence_count, 100),
+                "confluence_score": confluence_score,
+                "direction": direction,
+                "suggested_expiry": suggested_expiry,
                 "technicals": {
+                    "price": price,
                     "adx": round(float(adx_val), 2),
                     "rsi": round(float(rsi_val), 2),
-                    "bb_width": round(float(current['bb_wband']), 5),
-                    "atr": round(float(atr_val), 6),
-                    "ema_cross": ema_cross,
-                    "near_sr": near_sr,
-                    "price": price,
-                    "support": float(current_support) if current_support else None,
-                    "resistance": float(current_resistance) if current_resistance else None
+                    "bb_width": round(float(current['bb_wband']), 4),
+                    "macd_hist": round(float(macd_hist), 4),
+                    "stoch_k": round(float(stoch_k), 2),
+                    "cci": round(float(current['cci']), 2),
+                    "ema16": round(float(ema16), 2),
+                    "ema165": round(float(ema165), 2),
+                    "supertrend": round(float(st_val), 2),
+                    "atr": round(float(atr_val), 4),
+                    "body_ratio": round(float(current['body_ratio']), 2),
+                    "large_body": bool(current['large_body']),
+                    "near_sr": "Support" if current_support and abs(close - current_support)/close < 0.001 else "Resistance" if current_resistance and abs(close - current_resistance)/close < 0.001 else "None",
+                    "confluence_score": confluence_score
                 }
             }
-
+            self._cache[cache_key] = (last_ts, final_result)
+            return final_result
         except Exception as e:
             logger.error(f"Error in TA calculation: {e}", exc_info=True)
             return None
@@ -274,31 +483,42 @@ class AIOrchestrator:
             logger.warning("AI URL not configured, skipping AI verification.")
             return AIAnalysisResult(False, "AI_URL_MISSING", 0.0)
 
-        prompt = (
-            f"Role: Elite Sniper Trader. Task: Verify this A+ trade setup.\n\n"
-            f"Asset: {context.asset} | Timeframe: 1m | Payout: {context.payout}%\n"
-            f"Detected Condition: {context.condition.value}\n\n"
-            f"Technical Snapshot:\n"
-            f"- ADX: {context.technicals['adx']} (Trend Strength)\n"
-            f"- RSI: {context.technicals['rsi']} (Momentum)\n"
-            f"- BB Width: {context.technicals['bb_width']} (Volatility Squeeze)\n"
-            f"- EMA Cross: {context.technicals.get('ema_cross') or 'Stable'}\n"
-            f"- Near S/R: {context.technicals.get('near_sr') or 'None'}\n"
-            f"- Current Price: {context.technicals['price']}\n\n"
-            f"Question: Is this a high-probability entry? Focus on confluence.\n"
-            f"RESPOND IN RAW JSON ONLY:\n"
-            f"{{\"confirmed\": bool, \"confidence\": float, \"reason\": \"string\"}}"
-        )
-
+        regime_label = context.condition.value
+        direction = context.direction
+        tech = context.technicals
+        
+        prompt = f"""
+        Analyze this {regime_label} setup for {context.asset} (OTC).
+        
+        ### Knowledge Base Criteria for this Regime:
+        - Direction: {direction}
+        - Required Confluences: EMA-16 trend aligned, Supertrend aligned, ADX rising, MACD momentum.
+        - Volume Proxy: ATR expansion + Large candle bodies (Body Ratio > 0.7).
+        
+        ### Current Market Data:
+        - Price: {context.price}
+        - Indicators: ADX={tech.get('adx', '---')}, RSI={tech.get('rsi', '---')}, BB_Width={tech.get('bb_width', '---')}
+        - KB Indicators: EMA16={tech.get('ema16', '---')}, Supertrend={tech.get('supertrend', '---')}, MACD_Hist={tech.get('macd_hist', '---')}
+        - Volume Proxy: Body_Ratio={tech.get('body_ratio', '---')}, Large_Body={tech.get('large_body', '---')}
+        - S/R Proximity: {tech.get('near_sr', '---')}
+        
+        ### Task:
+        Evaluate if this is an "A+" setup. 
+        - High-quality: Confirms with ≥3 signals and strong volume proxy.
+        - Low-quality: Flat MACD, price trapped in noise, or ADX stalling.
+        
+        Return JSON ONLY:
+        {{
+            "confirmed": boolean,
+            "reason": "short explanation referring to indicators",
+            "confidence": float (0.0 to 1.0)
+        }}
+        """
+        
         payload = {
+            "model": "gpt-4-turbo", # or your configured model
             "prompt": prompt,
-            "context": {
-                "asset": context.asset,
-                "timeframe": "1m",
-                "indicators": context.technicals,
-                "uiMode": "insights",
-                "responseVerbosity": "concise"
-            }
+            "json": True
         }
 
         try:
@@ -347,7 +567,7 @@ class DiscordDispatcher:
         self.webhook_url = webhook_url
         self.last_sent = {} # Dedup: {asset: timestamp}
     
-    async def send_alert(self, context: AlertContext, ai_result: AIAnalysisResult):
+    async def send_alert(self, context: AlertContext, ai_verdict: AIAnalysisResult):
         if not self.webhook_url:
             logger.warning("Discord Webhook missing.")
             return
@@ -363,21 +583,39 @@ class DiscordDispatcher:
         if not hasattr(self, '_session') or self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
 
-        color = 0x22c55e if ai_result.confirmed else 0xef4444 # Green/Red
+        direction_emoji = "📈" if context.direction == "CALL" else "📉"
+        
+        # Regime metadata (if available from tech)
+        regime_label = context.condition.value
+        
+        # Indicator strings for embed
+        tech = context.technicals
+        indicator_text = (
+            f"**ADX:** {tech.get('adx', '---')} | **RSI:** {tech.get('rsi', '---')}\n"
+            f"**MACD Hist:** {tech.get('macd_hist', '---')} | **BB Width:** {tech.get('bb_width', '---')}\n"
+            f"**EMA-16/165:** {tech.get('ema16', '---')} / {tech.get('ema165', '---')}\n"
+            f"**Supertrend:** {tech.get('supertrend', '---')}"
+        )
         
         embed = {
-            "title": f"🚨 A+ Setup: {context.asset}",
-            "description": f"**Condition:** {context.condition.value}\n**Price:** {context.price}",
-            "color": color,
+            "title": f"{direction_emoji} {context.asset} Sniper Signal",
+            "description": f"**Market Regime:** {regime_label}\n**Suggested Direction:** **{context.direction}**\n**Suggested Expiry:** **{context.suggested_expiry}**",
+            "color": 0x22c55e if context.direction == "CALL" else 0xef4444,
             "fields": [
-                {"name": "Technicals", "value": f"ADX: {context.technicals['adx']}\nRSI: {context.technicals['rsi']}", "inline": True},
-                {"name": "AI Verdict", "value": f"{'✅ CONFIRMED' if ai_result.confirmed else '❌ REJECTED'}\n*{ai_result.reason}*", "inline": False}
+                {"name": "🎯 Entry Context", "value": f"**Price:** {context.price}\n**Payout:** {context.payout}%", "inline": True},
+                {"name": "📊 Technicals", "value": indicator_text, "inline": False},
+                {"name": "🤖 AI Verdict", "value": f"**Confirmed:** {'✅' if ai_verdict.confirmed else '❌'}\n**Confidence:** {ai_verdict.confidence:.0%}\n**Reason:** {ai_verdict.reason}", "inline": False}
             ],
-            "footer": {"text": f"QuFLX OTC Sniper | Payout: {context.payout}%"}
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "footer": {"text": f"QuFLX OTC Alert Dispatcher | Confluence Score: {tech.get('confluence_score', '---')}"}
         }
-
-        payload = {"embeds": [embed]}
-
+        
+        payload = {
+            "username": "QuFLX OTC Sniper",
+            "avatar_url": "https://i.imgur.com/8N80W7I.png", # Optional: QuFLX logo
+            "embeds": [embed]
+        }
+        
         try:
             async with self._session.post(self.webhook_url, json=payload) as resp:
                 if resp.status in [200, 204]:
@@ -496,27 +734,30 @@ class RedisSubscriber:
             return
 
         logger.info(f"Connecting to Redis for tick logging: {self.redis_url}")
-        try:
-            self.redis_client = redis.from_url(self.redis_url, decode_responses=True)
-            pubsub = self.redis_client.pubsub()
-            await pubsub.subscribe("market_data")
-            
-            logger.info(f"Subscribed to 'market_data' for: {self.assets}")
-            
-            async for message in pubsub.listen():
-                if message['type'] == 'message':
-                    try:
-                        data = json.loads(message['data'])
-                        asset = normalize_asset(data.get('asset', ''))
-                        if not self.assets or asset in self.assets:
-                            await self.logger_service.log_tick(asset, data)
-                    except Exception as e:
-                        logger.error(f"Error processing Redis tick: {e}")
-        except Exception as e:
-            logger.error(f"Redis Subscriber Error: {e}")
-        finally:
-            if self.redis_client:
-                await self.redis_client.close()
+        while True:
+            try:
+                self.redis_client = redis.from_url(self.redis_url, decode_responses=True)
+                pubsub = self.redis_client.pubsub()
+                await pubsub.subscribe("market_data")
+                
+                logger.info(f"Subscribed to 'market_data' for: {self.assets}")
+                
+                async for message in pubsub.listen():
+                    if message['type'] == 'message':
+                        try:
+                            data = json.loads(message['data'])
+                            asset = normalize_asset(data.get('asset', ''))
+                            if not self.assets or asset in self.assets:
+                                await self.logger_service.log_tick(asset, data)
+                        except Exception as e:
+                            logger.error(f"Error processing Redis tick: {e}")
+            except Exception as e:
+                logger.warning(f"Redis Tick Log Connection Error: {e}. Reconnecting in 5s...")
+                await asyncio.sleep(5)
+            finally:
+                if self.redis_client:
+                    await self.redis_client.close()
+                    self.redis_client = None
 
 
 class TickerSubscriber:
@@ -528,66 +769,78 @@ class TickerSubscriber:
         
     async def run(self):
         if not redis: return
-        try:
-            client = redis.from_url(self.redis_url, decode_responses=True)
-            pubsub = client.pubsub()
-            await pubsub.subscribe("ticker:active")
-            logger.info("Subscribed to 'ticker:active' - Waiting for Frontend selections...")
-            
-            async for message in pubsub.listen():
-                if message['type'] == 'message':
-                    try:
-                        # Frontend sends list: ["AUDCAD_OTC", "EURUSD_OTC"]
-                        data = json.loads(message['data'])
-                        if isinstance(data, list):
-                            self.active_assets = {normalize_asset(a) for a in data}
-                            logger.info(f"Ticker Update -> Whitelist: {self.active_assets}")
-                            self.first_whitelist_received.set()
-                    except Exception as e:
-                        logger.error(f"Ticker Update Error: {e}")
-        except Exception as e:
-            logger.error(f"Ticker Sub Error: {e}")
+        while True:
+            try:
+                client = redis.from_url(self.redis_url, decode_responses=True)
+                pubsub = client.pubsub()
+                await pubsub.subscribe("ticker:active")
+                logger.info("Subscribed to 'ticker:active' - Waiting for Frontend selections...")
+                
+                async for message in pubsub.listen():
+                    if message['type'] == 'message':
+                        try:
+                            # Frontend sends list: ["AUDCAD_OTC", "EURUSD_OTC"]
+                            data = json.loads(message['data'])
+                            if isinstance(data, list):
+                                self.active_assets = {normalize_asset(a) for a in data}
+                                logger.info(f"Ticker Update -> Whitelist: {self.active_assets}")
+                                self.first_whitelist_received.set()
+                        except Exception as e:
+                            logger.error(f"Ticker Update Error: {e}")
+            except Exception as e:
+                logger.warning(f"Ticker Sub Connection Error: {e}. Reconnecting in 5s...")
+                await asyncio.sleep(5)
 
 
 # --- Main Service ---
 
 class SettingsSubscriber:
     """Listens for settings updates to reconfigure the dispatcher in real-time."""
-    def __init__(self, redis_url: str, orchestrator: AIOrchestrator, scanner: MarketScanner):
+    def __init__(self, redis_url: str, dispatcher: 'OTCDispatcher'):
         self.redis_url = redis_url
-        self.orchestrator = orchestrator
-        self.scanner = scanner
+        self.dispatcher = dispatcher
         
     async def run(self):
         if not redis: return
-        try:
-            client = redis.from_url(self.redis_url, decode_responses=True)
-            pubsub = client.pubsub()
-            await pubsub.subscribe("settings:updated")
-            logger.info("Subscribed to 'settings:updated' - Ready for real-time config changes.")
-            
-            async for message in pubsub.listen():
-                if message['type'] == 'message':
-                    try:
-                        data = json.loads(message['data'])
-                        alerts_cfg = data.get("alerts", {})
-                        
-                        # Update Orchestrator
-                        enable_ai = alerts_cfg.get("enableAIConfirm")
-                        min_conf = alerts_cfg.get("minAIConfidence")
-                        self.orchestrator.update_config(enable_confirm=enable_ai, min_confidence=min_conf)
-                        
-                        # Update Scanner (e.g. candle count)
-                        candle_count = alerts_cfg.get("candleCount")
-                        if candle_count:
-                             # We'd need to update scanner.candle_count if it were stored
-                             # For now, orchestrator is the primary dynamic target
-                             pass
-                             
-                    except Exception as e:
-                        logger.error(f"Settings Update Error: {e}")
-        except Exception as e:
-            logger.error(f"Settings Sub Error: {e}")
+        while True:
+            try:
+                client = redis.from_url(self.redis_url, decode_responses=True)
+                pubsub = client.pubsub()
+                await pubsub.subscribe("settings:updated")
+                logger.info("Subscribed to 'settings:updated' - Ready for real-time config changes.")
+                
+                async for message in pubsub.listen():
+                    if message['type'] == 'message':
+                        try:
+                            data = json.loads(message['data'])
+                            alerts_cfg = data.get("alerts", {})
+                            
+                            # 1. Update AI Orchestrator
+                            enable_ai = alerts_cfg.get("enableAIConfirm")
+                            min_conf = alerts_cfg.get("minAIConfidence")
+                            self.dispatcher.ai.update_config(enable_confirm=enable_ai, min_confidence=min_conf)
+                            
+                            # 2. Update Dispatcher Core
+                            candle_count = alerts_cfg.get("candleCount")
+                            if candle_count:
+                                 self.dispatcher.candle_count = int(candle_count)
+                                 logger.info(f"SettingsSync: candle_count updated to {self.dispatcher.candle_count}")
+                                 
+                            scan_interval = alerts_cfg.get("scanIntervalSeconds")
+                            if scan_interval:
+                                 self.dispatcher.scan_interval = int(scan_interval)
+                                 logger.info(f"SettingsSync: scan_interval updated to {self.dispatcher.scan_interval}s")
+                            
+                            cooldown_min = alerts_cfg.get("alertCooldownMinutes")
+                            if cooldown_min:
+                                 self.dispatcher.COOLDOWN_SECONDS = int(cooldown_min) * 60
+                                 logger.info(f"SettingsSync: COOLDOWN_SECONDS updated to {self.dispatcher.COOLDOWN_SECONDS}s")
+
+                        except Exception as e:
+                            logger.error(f"Settings Update Error: {e}")
+            except Exception as e:
+                logger.warning(f"Settings Sub Connection Error: {e}. Reconnecting in 5s...")
+                await asyncio.sleep(5)
 
 class OTCDispatcher:
     def __init__(self, assets: List[str], test_mode: bool = False):
@@ -609,7 +862,7 @@ class OTCDispatcher:
         
         self.subscriber = RedisSubscriber(self.redis_url, self.logger_service, self.assets)
         self.ticker_sub = TickerSubscriber(self.redis_url)
-        self.settings_sub = SettingsSubscriber(self.redis_url, self.ai, self.scanner)
+        self.settings_sub = SettingsSubscriber(self.redis_url, self)
 
         # Assuming internal API for market data
         self.market_source_url = os.getenv("QFLX_MARKET_DATA_URL", "http://localhost:8000/api/v1/history")
@@ -618,10 +871,24 @@ class OTCDispatcher:
         self.cooldowns: Dict[str, float] = {}
         self.COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
         
+        # Correlation Groups (R4)
+        self.correlation_groups = {
+            "AUD": ["AUDCADOTC", "AUDCHFDOTC", "AUDJPYOTC", "AUDNZDOTC", "AUDUSDOTC"],
+            "EUR": ["EURUSDOTC", "EURJPYOTC", "EURGBPOTC", "EURAUDOTC", "EURCADOTC", "EURCHFDOTC"],
+            "GBP": ["GBPUSDOTC", "GBPJPYOTC", "GBPAUDOTC", "GBPCADOTC", "GBPCHFDOTC"],
+            "USD": ["EURUSDOTC", "GBPUSDOTC", "AUDUSDOTC", "USDJPYOTC", "USDCADOTC", "USDCHFDOTC"]
+        }
+        self.group_last_alert: Dict[str, float] = {} # {group: timestamp}
+        self.GROUP_COOLDOWN = 120 # 2 minutes between correlated alerts
+        
+        # Pending Breakouts (R6)
+        self.pending_breakouts: Dict[str, Dict] = {} # {asset: {direction, timestamp, start_price}}
+        
         # New Settings
         self.enable_ai_confirm = os.getenv("ENABLE_AI_CONFIRM", "true").lower() == "true"
         self.min_ai_confidence = float(os.getenv("ALERT_MIN_CONFIDENCE", "0.7"))
         self.candle_count = int(os.getenv("ALERT_CANDLE_COUNT", "100"))
+        self.scan_interval = int(os.getenv("SCAN_INTERVAL_SECONDS", "60"))
 
     async def close(self):
         """Gracefully shutdown all components."""
@@ -665,7 +932,7 @@ class OTCDispatcher:
              base = 1.0500
              now = datetime.now().timestamp()
              # Include time for logging
-             return [{"time": now + (i*60), "close": base + (i * 0.0002), "high": base + (i*0.00025), "low": base + (i*0.00018)} for i in range(self.candle_count)]
+             return [{"time": now + (i*60), "open": base + (i * 0.0002), "close": base + ((i+1) * 0.0002), "high": base + ((i+1) * 0.00025), "low": base + (i * 0.00018), "volume": 100} for i in range(self.candle_count)]
 
         # --- Option A: Direct CSV Reading ---
         try:
@@ -682,8 +949,9 @@ class OTCDispatcher:
                     if 'timestamp' in df.columns and 'time' not in df.columns:
                         df = df.rename(columns={'timestamp': 'time'})
                     
-                    # Take last N candles
-                    candles = df.tail(self.candle_count).to_dict('records')
+                    # Request enough for EMA-165
+                    required_limit = max(200, self.candle_count)
+                    candles = df.tail(required_limit).to_dict('records')
                     
                     # Optional: Data Recency Check (Phase 2C)
                     if candles:
@@ -704,7 +972,9 @@ class OTCDispatcher:
         try:
             async with aiohttp.ClientSession() as session:
                 # Adjust timeframe/params as per QuFLX API
-                url = f"{self.market_source_url}/{asset}/1m?limit={self.candle_count}"
+                # Request at least 200 candles for EMA-165 stability
+                required_limit = max(200, self.candle_count)
+                url = f"{self.market_source_url}/{asset}/1m?limit={required_limit}"
                 async with session.get(url, timeout=5) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -731,60 +1001,169 @@ class OTCDispatcher:
         if data_points:
             await self.logger_service.log_ticks(asset, data_points)
 
-        result = self.scanner.analyze(data_points, candle_count=self.candle_count)
-        if not result and not self.test_mode:
+        # 2. Analyze (R7: Cache enabled inside scanner)
+        if self.test_mode:
+             result = {
+                 "condition": MarketCondition.STRONG_MOMENTUM_UP,
+                 "confluence_score": 85,
+                 "direction": "CALL",
+                 "suggested_expiry": "3m",
+                 "technicals": {
+                     "price": 1.0600,
+                     "adx": 45.0,
+                     "rsi": 65.0,
+                     "bb_width": 0.02,
+                     "macd_hist": 0.001,
+                     "stoch_k": 75.0,
+                     "ema16": 1.0580,
+                     "ema165": 1.0500,
+                     "supertrend": 1.0550,
+                     "near_sr": "Support",
+                     "body_ratio": 0.6,
+                     "large_body": True,
+                     "confluence_score": 85
+                 }
+             }
+        else:
+            result = self.scanner.analyze(data_points, asset=asset, candle_count=self.candle_count)
+            if not result:
+                return
+
+        # Prepare Context
+        ctx = AlertContext(
+            asset=asset,
+            condition=result['condition'],
+            price=result['technicals']['price'],
+            time=datetime.now().isoformat(),
+            technicals=result['technicals'],
+            payout=92, # Default OTC payout
+            direction=result.get('direction'),
+            suggested_expiry=result.get('suggested_expiry', '1m')
+        )
+        
+        logger.info(f"Condition Met: {asset} -> {ctx.condition.value} ({ctx.direction} {ctx.suggested_expiry})")
+        
+        # 1. Individual Cooldown
+        now = datetime.now().timestamp()
+        last_call = self.cooldowns.get(asset, 0)
+        if now - last_call < self.COOLDOWN_SECONDS:
+            logger.info(f"Skipping (Asset Cooldown): {asset} (Wait {int(self.COOLDOWN_SECONDS - (now - last_call))}s)")
             return
+            
+        # 2. Correlation Guard (R4)
+        for group, assets in self.correlation_groups.items():
+            if asset.upper().replace("_", "") in assets:
+                last_group_alert = self.group_last_alert.get(group, 0)
+                if now - last_group_alert < self.GROUP_COOLDOWN:
+                    logger.info(f"Correlation Guard: Skipping {asset} (Group {group} active alert)")
+                    return
 
-        # Force a result in test mode if scanner returns None
-        if self.test_mode and not result:
-            result = {
-                "condition": MarketCondition.TRENDING_UP,
-                "technicals": {"adx": 45.0, "bb_width": 0.02, "rsi": 65.0, "price": 1.0600}
-            }
-
-        if result:
-            ctx = AlertContext(
-                asset=asset,
-                condition=result['condition'],
-                price=result['technicals']['price'],
-                time=datetime.now().isoformat(),
-                technicals=result['technicals'],
-                payout=92 # Default OTC payout, could be fetched
-            )
-            
-            logger.info(f"Condition Met: {asset} -> {ctx.condition.value}")
-            
-            # check cooldown
-            now = datetime.now().timestamp()
-            last_call = self.cooldowns.get(asset, 0)
-            if now - last_call < self.COOLDOWN_SECONDS:
-                logger.info(f"Skipping AI (Cooldown): {asset} (Wait {int(self.COOLDOWN_SECONDS - (now - last_call))}s)")
-                return
-
-            # AI Check
-            try:
-                if self.enable_ai_confirm:
-                    ai_verdict = await self.ai.verify_setup(ctx)
-                    # Filter by Confidence
-                    if ai_verdict.confidence < self.min_ai_confidence:
-                        logger.info(f"AI low confidence for {asset} ({ai_verdict.confidence:.2f} < {self.min_ai_confidence}). Skipping.")
-                        return
-                    # Only update cooldown on successful call (or rejection)
-                    self.cooldowns[asset] = now
-                else:
-                    ai_verdict = AIAnalysisResult(True, "AI Confirmation Disabled (Force Pass)", 1.0)
-            except Exception as e:
-                logger.error(f"AI Check Failed for {asset}: {e}")
-                return
-            
-            if self.test_mode:
-                # Mock AI success
-                ai_verdict = AIAnalysisResult(True, "TEST_MODE: Perfect setup confirmed.", 0.99)
-            
-            if ai_verdict.confirmed:
-                await self.discord.send_alert(ctx, ai_verdict)
+        # 3. Confirmatory Candle Logic (R6) - Only for Breakouts
+        if ctx.condition in [MarketCondition.BREAKOUT_UP, MarketCondition.BREAKOUT_DOWN]:
+            if asset not in self.pending_breakouts:
+                logger.info(f"Breakout Pending (Waiting for confirmation): {asset}")
+                self.pending_breakouts[asset] = {
+                    "condition": ctx.condition,
+                    "price": ctx.price,
+                    "time": now
+                }
+                return # Wait for next scan
             else:
-                logger.info(f"AI Rejected {asset}: {ai_verdict.reason}")
+                # Secondary scan: Check follow-through
+                pending = self.pending_breakouts.pop(asset)
+                if ctx.condition != pending['condition']:
+                    logger.info(f"Breakout Invalidated (Condition changed): {asset}")
+                    return
+                # Check follow-through direction
+                if ctx.condition == MarketCondition.BREAKOUT_UP and ctx.price < pending['price']:
+                    logger.info(f"Breakout Fakeout (No follow-through): {asset}")
+                    return
+                elif ctx.condition == MarketCondition.BREAKOUT_DOWN and ctx.price > pending['price']:
+                    logger.info(f"Breakout Fakeout (No follow-through): {asset}")
+                    return
+                logger.info(f"Breakout Confirmed: {asset}")
+
+        # AI Check
+        try:
+            if self.enable_ai_confirm and not self.test_mode:
+                ai_verdict = await self.ai.verify_setup(ctx)
+                # Filter by Confidence
+                if ai_verdict.confidence < self.min_ai_confidence:
+                    logger.info(f"AI low confidence for {asset} ({ai_verdict.confidence:.2f} < {self.min_ai_confidence}). Skipping.")
+                    return
+                # Update cooldown only on successful AI evaluation
+                self.cooldowns[asset] = now
+            else:
+                ai_verdict = AIAnalysisResult(True, "AI Confirmation Disabled (Force Pass)", 1.0)
+        except Exception as e:
+            logger.error(f"AI Check Failed for {asset}: {e}")
+            return
+        
+        if ai_verdict.confirmed:
+            # Update cooldowns
+            self.cooldowns[asset] = now
+            for group, assets in self.correlation_groups.items():
+                if asset.upper().replace("_", "") in assets:
+                    self.group_last_alert[group] = now
+                    
+            # 1. Dispatch to Discord
+            await self.discord.send_alert(ctx, ai_verdict)
+            logger.info(f"Alert Dispatched to Discord: {asset}")
+            
+            # 2. Publish to Redis for In-App Feed (R5)
+            if redis:
+                try:
+                    client = redis.from_url(self.redis_url, decode_responses=True)
+                    alert_data = {
+                        "asset": ctx.asset,
+                        "regime": ctx.condition.value,
+                        "direction": ctx.direction,
+                        "expiry": ctx.suggested_expiry,
+                        "price": ctx.price,
+                        "confluence": ctx.technicals.get('confluence_score', 0),
+                        "ai_confirmed": ai_verdict.confirmed,
+                        "ai_confidence": ai_verdict.confidence,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    await client.publish("alerts:dispatched", json.dumps(alert_data))
+                    await client.close()
+                except Exception as e:
+                    logger.error(f"Redis Alert Publish Error: {e}")
+
+            # 3. Log to Journal (R3)
+            await self.log_alert(ctx, ai_verdict)
+        else:
+            logger.info(f"AI Rejected {asset}: {ai_verdict.reason}")
+
+    async def log_alert(self, context: AlertContext, ai_result: AIAnalysisResult):
+        """Logs dispatched alert to a local CSV for later analysis (R3)."""
+        log_file = PROJECT_ROOT / "data" / "logs" / "alert_journal.csv"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        headers = ["timestamp", "asset", "regime", "direction", "expiry", "entry_price", "payout", "confluence_score", "ai_confirmed", "ai_confidence", "ai_reason"]
+        file_exists = log_file.exists()
+        
+        try:
+            with open(log_file, 'a', newline='') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(headers)
+                
+                writer.writerow([
+                    datetime.now().isoformat(),
+                    context.asset,
+                    context.condition.value,
+                    context.direction,
+                    context.suggested_expiry,
+                    context.price,
+                    context.payout,
+                    context.technicals.get('confluence_score', 0),
+                    ai_result.confirmed,
+                    round(ai_result.confidence, 2),
+                    ai_result.reason.replace('\n', ' ')
+                ])
+        except Exception as e:
+            logger.error(f"Journal Logging Error: {e}")
 
     async def run_loop(self):
         logger.info(f"Starting OTC Dispatcher...")
@@ -831,6 +1210,9 @@ class OTCDispatcher:
 
         while True:
             try:
+                # Loop Pulse
+                logger.info(f"Scanner Heartbeat: {datetime.now().strftime('%H:%M:%S')} | Active Assets: {len(self.ticker_sub.active_assets)}")
+                
                 # 1. Hot-Swap: Scan for new assets every loop
                 current_known = set(self.assets)
                 freshly_found = self.scan_available_assets()
@@ -852,13 +1234,15 @@ class OTCDispatcher:
                     logger.debug("No assets to scan, standing by...")
                 else:
                     # 2. Process ONLY Whitelisted Assets
-                    # Intersection of what's on disk and what's selected in frontend
-                    current_pool = [a for a in self.assets if a in self.ticker_sub.active_assets]
+                    if self.test_mode:
+                        current_pool = self.assets if self.assets else ["EURUSD_OTC"]
+                    else:
+                        current_pool = [a for a in self.assets if a in self.ticker_sub.active_assets]
                     
                     if not current_pool and self.ticker_sub.active_assets:
                         # Maybe assets are normalized differently on disk?
                         # Log warning if we have a whitelist but no matches
-                        logger.warning(f"Whitelist exists {self.ticker_sub.active_assets} but none found on disk.")
+                        logger.warning(f"Whitelist exists {list(self.ticker_sub.active_assets)} but no matching history files found on disk.")
                     
                     if current_pool:
                         logger.info(f"Core Loop: Scanning {len(current_pool)} selected assets: {current_pool}")
@@ -869,8 +1253,11 @@ class OTCDispatcher:
             except Exception as e:
                 logger.error(f"Loop Error: {e}")
             
-            # Wait 60s (Live Candle Close)
-            await asyncio.sleep(60)
+            # Wait динамическая задержка based on settings
+            if self.test_mode:
+                logger.info("Test Mode: Single Scan Complete. Exiting Run Loop.")
+                break
+            await asyncio.sleep(self.scan_interval)
 
 def main():
     parser = argparse.ArgumentParser(description="QuFLX OTC Alert Dispatcher")

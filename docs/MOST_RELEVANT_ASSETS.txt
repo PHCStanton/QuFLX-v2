@@ -1,3 +1,70 @@
 MOST TRADED/RELEVANT ASSETS
 
 EURUSDOTC, GBPUSDOTC, USDJPYOTC, AUDUSDOTC, USDCADOTC, EURGBPOTC, EURJPYOTC, GBPJPYOTC, AUDJPYOTC, NZDUSDOTC, EURGBPOTC, EURTRYOTC, EUHUFOTC, EURRUBOTC
+
+FAST PREDICT for AED/CNY OTC 1m.
+Bias: [Call/Put/Neutral] (Confidence %)
+Primary Trigger: [Logic]
+Expiry: [Target]
+Pending Orders:[Stop Limit or Buy Limit Entries] (Confidence %)
+Limit response to 3 precise lines.
+
+Identify any: 
+1. Immediate Entries (Rating: X/10)
+2. Stop Limit or Buy/Sell Stop Entries (Rating: X/10)
+3. Expiry: 15s / 30s / 1m / 3m / 5m
+Confidence: High/Medium/Low
+Reason: one sentence
+Risk: one sentence
+
+SHOWS WEBSOCKET STRINGS
+python -m uvicorn backend.services.gateway.main:socket_app --host 127.0.0.1 --port 8000 --reload --log-level debug
+
+GATEWAY TERMINAL LOG OUTPUT:
+python -m backend.services.gateway.main
+Start your Backend: uvicorn backend.services.gateway.main:app
+Start the Dispatcher: python backend/scripts/otc_alert_dispatch.py
+
+# QUICK_PREDICT_PROMPT
+Identify any: 
+1. Immediate Entries (Rating: X/10): 
+- Buy/Sell
+- Specify Expiries: 15s / 30s / 1m / 3m / 5m: 
+2. Limit Orders or Stop Orders (Rating: X/10):
+- Specify Expiries: 15s / 30s / 1m / 3m / 5m:
+- Entry Values
+3. Key confluences (EMA, RSI, BB, ADX, candle structure): 
+
+Then:
+
+Confidence: High/Medium/Low for immediate Entries.
+Confidence: High/Medium/Low for a limit Orders
+Confidence: High/Medium/Low for a Stop Orders
+Reason: one sentence per Entry (Immediate, Limit & Stop)
+Key confluences (EMA, RSI, BB, ADX, candle structure)
+Risk: one sentence: 'no'
+Provide the indicators: 'no'
+
+Identify any: 
+1. Immediate Entries (Rating: X/10): 
+- Buy/Sell
+- Specify Expiries: 15s / 30s / 1m / 3m / 5m: 
+2. Limit Orders or Stop Orders (Rating: X/10):
+-Buy/Sell
+- Specify Expiries: 15s / 30s / 1m / 3m / 5m:
+- Specify Entry Values.
+3. Reply only with a short summary at the end in this format:
+	"1. Immediate:
+	- BUY/SELL
+	- x/10 Rating
+	- 15sec/30sec/1min/3min/5min/...etc
+	 2. Limit Order
+	- BUY/SELL
+	- Price
+	- x/10 Rating
+	- 15sec/30sec/1min/3min/5min/...etc
+	 3. Stop Ordering 
+	- BUY/SELL
+	- Price
+	- x/10 Rating
+	- 15sec/30sec/1min/3min/5min/...etc"
