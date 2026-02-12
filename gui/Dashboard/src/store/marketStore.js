@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { validateMarketData } from '../utils/validators';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
+import alertSignalSound from '../assets/Sounds/Digital_Pulse.mp3';
 
 const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
 
@@ -927,6 +928,12 @@ const createConnectionSlice = (set, get) => ({
       set((state) => ({
         alertFeed: [data, ...state.alertFeed].slice(0, 50)
       }));
+      // Play alert sound for new signal
+      try {
+        const audio = new Audio(alertSignalSound);
+        audio.volume = 0.6;
+        audio.play().catch(() => { });
+      } catch (e) { /* ignore audio errors */ }
     });
 
     socket.on('system_status', (data) => {
