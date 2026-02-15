@@ -85,16 +85,15 @@ const DataSourceControls = ({
       style={{ height: isCollapsed ? 40 : isBottomCollapsed ? undefined : height }}
     >
       <Card className={`p-3 rounded-lg h-full quflx-section-light flex flex-col ${isCollapsed ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-        <div className="flex items-center justify-between mb-2 shrink-0">
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          className="flex items-center justify-between mb-2 shrink-0 w-full text-left hover:bg-section-bg/50 rounded transition-colors px-1 py-1"
+          aria-expanded={!isCollapsed}
+        >
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Data Source</h3>
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            className="p-1 hover:bg-section-bg/50 rounded text-text-secondary transition-colors"
-          >
-            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-          </button>
-        </div>
+          {isCollapsed ? <ChevronDown size={14} className="text-text-secondary" /> : <ChevronUp size={14} className="text-text-secondary" />}
+        </button>
 
         {!isCollapsed && (
           <>

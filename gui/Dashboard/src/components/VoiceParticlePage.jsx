@@ -1,5 +1,50 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import understandingOtcMarketsSound from '../assets/Sounds/Understanding_OTC_Markets.mp3';
+
+class Particle {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.reset();
+    }
+    reset() {
+        this.x = this.canvas.width / 2;
+        this.y = this.canvas.height / 2;
+        this.vx = (Math.random() - 0.5) * 0.8;
+        this.vy = (Math.random() - 0.5) * 0.8;
+        this.size = Math.random() * 3 + 1.5;
+        this.hue = 180 + Math.random() * 80;
+        this.alpha = 0.6 + Math.random() * 0.4;
+        this.life = 1;
+    }
+    update(intensity) {
+        const dx = this.canvas.width / 2 - this.x;
+        const dy = this.canvas.height / 2 - this.y;
+        const dist = Math.hypot(dx, dy) || 1;
+
+        this.vx += dx / dist * 0.04;
+        this.vy += dy / dist * 0.04;
+
+        this.vx += (Math.random() - 0.5) * intensity * 1.4;
+        this.vy += (Math.random() - 0.5) * intensity * 1.4;
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        this.vx *= 0.96;
+        this.vy *= 0.96;
+
+        if (intensity < 0.05) this.alpha = Math.max(0.15, this.alpha - 0.004);
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = `hsl(${this.hue}, 80%, ${60 + this.alpha * 40}%)`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
 
 const VoiceParticlePage = () => {
     const canvasRef = useRef(null);
@@ -11,57 +56,7 @@ const VoiceParticlePage = () => {
     const animationFrameRef = useRef(null);
     const particlesRef = useRef([]);
 
-    // --- Particle Class ---
-    class Particle {
-        constructor(canvas) {
-            this.canvas = canvas;
-            this.reset();
-        }
-        reset() {
-            this.x = this.canvas.width / 2;
-            this.y = this.canvas.height / 2;
-            this.vx = (Math.random() - 0.5) * 0.8;
-            this.vy = (Math.random() - 0.5) * 0.8;
-            this.size = Math.random() * 3 + 1.5;
-            this.hue = 180 + Math.random() * 80; // cyan-green range
-            this.alpha = 0.6 + Math.random() * 0.4;
-            this.life = 1;
-        }
-        update(intensity) {
-            // Gentle centering force
-            const dx = this.canvas.width / 2 - this.x;
-            const dy = this.canvas.height / 2 - this.y;
-            const dist = Math.hypot(dx, dy) || 1;
-
-            this.vx += dx / dist * 0.04;
-            this.vy += dy / dist * 0.04;
-
-            // Voice push
-            this.vx += (Math.random() - 0.5) * intensity * 1.4;
-            this.vy += (Math.random() - 0.5) * intensity * 1.4;
-
-            this.x += this.vx;
-            this.y += this.vy;
-
-            // Dampen velocity
-            this.vx *= 0.96;
-            this.vy *= 0.96;
-
-            // Fade out slowly when quiet
-            if (intensity < 0.05) this.alpha = Math.max(0.15, this.alpha - 0.004);
-        }
-        draw(ctx) {
-            ctx.save();
-            ctx.globalAlpha = this.alpha;
-            ctx.fillStyle = `hsl(${this.hue}, 80%, ${60 + this.alpha * 40}%)`;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
-    }
-
-    const initParticles = () => {
+    const initParticles = useCallback(() => {
         if (!canvasRef.current) return;
         const particles = [];
         const count = Math.min(280, Math.floor(window.innerWidth * window.innerHeight / 9000));
@@ -69,9 +64,9 @@ const VoiceParticlePage = () => {
             particles.push(new Particle(canvasRef.current));
         }
         particlesRef.current = particles;
-    };
+    }, []);
 
-    const runLoop = () => {
+    const runLoop = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -108,7 +103,7 @@ const VoiceParticlePage = () => {
         });
 
         animationFrameRef.current = requestAnimationFrame(runLoop);
-    };
+    }, []);
 
     const setupAudio = async () => {
         if (audioCtxRef.current) return; // already setup
@@ -174,13 +169,13 @@ const VoiceParticlePage = () => {
         handleResize(); // Init
 
         return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [initParticles]);
 
     // Start Loop
     useEffect(() => {
         runLoop();
         return () => cancelAnimationFrame(animationFrameRef.current);
-    }, []);
+    }, [runLoop]);
 
     return (
         <div style={{

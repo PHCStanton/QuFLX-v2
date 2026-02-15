@@ -11,7 +11,6 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-from enum import Enum
 
 # Third-party imports
 try:
@@ -59,20 +58,9 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 logger = logging.getLogger("OTC_Dispatch")
 
 
-# --- Data Structures ---
+from backend.services.strategy.regime_detector import MarketCondition
 
-class MarketCondition(Enum):
-    STRONG_MOMENTUM_UP = "Strong Momentum Trending (Bullish)"
-    STRONG_MOMENTUM_DOWN = "Strong Momentum Trending (Bearish)"
-    PULLBACK_BUY = "Trending Pullback (Buy Dip)"
-    PULLBACK_SELL = "Trending Pullback (Sell Rally)"
-    RANGING_OVERBOUGHT = "Ranging – Overbought (Sell)"
-    RANGING_OVERSOLD = "Ranging – Oversold (Buy)"
-    BREAKOUT_UP = "Breakout (Bullish)"
-    BREAKOUT_DOWN = "Breakout (Bearish)"
-    REVERSAL_BULLISH = "Trend Reversal (Bullish)"
-    REVERSAL_BEARISH = "Trend Reversal (Bearish)"
-    NEUTRAL = "Neutral"
+# --- Data Structures ---
 
 @dataclass
 class AlertContext:
@@ -159,6 +147,130 @@ class MarketScanner:
 
 
 
+# --- Regime-Specific AI Prompt Templates ---
+# Each regime has specific confluence criteria that the AI should evaluate
+
+REGIME_PROMPTS = {
+    MarketCondition.STRONG_MOMENTUM_UP.value: """
+### Regime: Strong Momentum Trending (Bullish)
+**Required Confluences:**
+- ADX > 35 and rising
+- +DI > -DI (directional confirmation)
+- MACD histogram expanding (momentum acceleration)
+- Large bullish candle body (Body Ratio > 0.7)
+- ATR rising (volatility expansion)
+
+**Volume Proxy:** ATR expansion + Large candle bodies
+**Risk:** Chasing momentum — needs all 3+ signals
+""",
+    MarketCondition.STRONG_MOMENTUM_DOWN.value: """
+### Regime: Strong Momentum Trending (Bearish)
+**Required Confluences:**
+- ADX > 35 and rising
+- -DI > +DI (directional confirmation)
+- MACD histogram contracting (momentum acceleration down)
+- Large bearish candle body (Body Ratio > 0.7)
+- ATR rising (volatility expansion)
+
+**Volume Proxy:** ATR expansion + Large candle bodies
+**Risk:** Chasing momentum — needs all 3+ signals
+""",
+    MarketCondition.PULLBACK_BUY.value: """
+### Regime: Trending Pullback (Buy Dip)
+**Required Confluences:**
+- Price > EMA-89 (macro uptrend bias)
+- Price near EMA-16 (pullback to short-term trend)
+- RSI 40-55 (not oversold, just cooling off)
+- Price near BB lower band
+- ATR stable or rising
+
+**Volume Proxy:** ATR normalization for pullback distance
+**Risk:** False pullback in ranging market — confirm macro trend with EMA-89
+""",
+    MarketCondition.PULLBACK_SELL.value: """
+### Regime: Trending Pullback (Sell Rally)
+**Required Confluences:**
+- Price < EMA-89 (macro downtrend bias)
+- Price near EMA-16 (pullback to short-term trend)
+- RSI 45-60 (not overbought, just bouncing)
+- Price near BB upper band
+- ATR stable or rising
+
+**Volume Proxy:** ATR normalization for pullback distance
+**Risk:** False pullback in ranging market — confirm macro trend with EMA-89
+""",
+    MarketCondition.RANGING_OVERBOUGHT.value: """
+### Regime: Ranging / Sideways (Overbought Sell)
+**Required Confluences:**
+- ADX < 20 (weak trend, ranging market)
+- RSI > 75 (OTC-tuned overbought threshold)
+- Stoch K > 80 and crossing below D
+- Price at/above BB upper band
+- Small candle bodies (indecision)
+
+**Volume Proxy:** Low ATR, small body ratio
+**Risk:** Breakout can invalidate — watch for ADX spike
+""",
+    MarketCondition.RANGING_OVERSOLD.value: """
+### Regime: Ranging / Sideways (Oversold Buy)
+**Required Confluences:**
+- ADX < 20 (weak trend, ranging market)
+- RSI < 35 (OTC-tuned oversold threshold)
+- Stoch K < 20 and crossing above D
+- Price at/below BB lower band
+- Small candle bodies (indecision)
+
+**Volume Proxy:** Low ATR, small body ratio
+**Risk:** Breakout can invalidate — watch for ADX spike
+""",
+    MarketCondition.BREAKOUT_UP.value: """
+### Regime: Breakout (Bullish)
+**Required Confluences:**
+- BB width < 0.04 (squeeze condition)
+- Price breaks above BB upper band
+- ADX > 25 and rising (trend emerging)
+- ATR spike (volatility expansion)
+- Large bullish candle body
+
+**Volume Proxy:** ATR spike + Large body
+**Risk:** False breakout — needs ADX confirmation
+""",
+    MarketCondition.BREAKOUT_DOWN.value: """
+### Regime: Breakout (Bearish)
+**Required Confluences:**
+- BB width < 0.04 (squeeze condition)
+- Price breaks below BB lower band
+- ADX > 25 and rising (trend emerging)
+- ATR spike (volatility expansion)
+- Large bearish candle body
+
+**Volume Proxy:** ATR spike + Large body
+**Risk:** False breakout — needs ADX confirmation
+""",
+    MarketCondition.REVERSAL_BULLISH.value: """
+### Regime: Trend Reversal (Bullish)
+**Required Confluences:**
+- RSI < 30 (extreme oversold)
+- MACD histogram turning positive
+- Price near support level
+- Divergence signals (if available)
+
+**Volume Proxy:** ATR spike at reversal point
+**Risk:** HIGH — catching falling knife, needs S/R confirmation
+""",
+    MarketCondition.REVERSAL_BEARISH.value: """
+### Regime: Trend Reversal (Bearish)
+**Required Confluences:**
+- RSI > 70 (extreme overbought)
+- MACD histogram turning negative
+- Price near resistance level
+- Divergence signals (if available)
+
+**Volume Proxy:** ATR spike at reversal point
+**Risk:** HIGH — catching falling knife, needs S/R confirmation
+"""
+}
+
 
 class AIOrchestrator:
     """Handles communication with the AI Service."""
@@ -182,14 +294,7 @@ class AIOrchestrator:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    def update_config(self, enable_confirm: bool = None, min_confidence: float = None):
-        """Update AI confirmation settings in real-time."""
-        if enable_confirm is not None:
-            self.enable_confirm = enable_confirm
-            logger.info(f"AIOrchestrator: enable_confirm updated to {self.enable_confirm}")
-        if min_confidence is not None:
-            self.min_confidence = min_confidence
-            logger.info(f"AIOrchestrator: min_confidence updated to {self.min_confidence}")
+
 
     async def verify_setup(self, context: AlertContext) -> AIAnalysisResult:
         """Sends context to AI and awaits verdict."""
@@ -206,38 +311,53 @@ class AIOrchestrator:
         direction = context.direction
         tech = context.technicals
         
-        prompt = f"""
-        Analyze this {regime_label} setup for {context.asset} (OTC).
+        # Get regime-specific prompt template
+        regime_criteria = REGIME_PROMPTS.get(regime_label, "")
         
-        ### Knowledge Base Criteria for this Regime:
-        - Direction: {direction}
-        - Required Confluences: EMA-16 trend aligned, Supertrend aligned, ADX rising, MACD momentum.
-        - Volume Proxy: ATR expansion + Large candle bodies (Body Ratio > 0.7).
+        if not regime_criteria:
+            logger.warning(f"No prompt template found for regime: {regime_label}, using generic")
+            regime_criteria = """
+### Regime: Unknown
+**Required Confluences:** Check ADX, RSI, MACD, and trend alignment.
+**Volume Proxy:** ATR expansion + Large candle bodies.
+"""
+        
+        prompt = f"""
+        Analyze this {regime_label} setup for {context.asset} (OTC Binary Options, 1-minute timeframe).
+        
+        {regime_criteria}
         
         ### Current Market Data:
         - Price: {context.price}
-        - Indicators: ADX={tech.get('adx', '---')}, RSI={tech.get('rsi', '---')}, BB_Width={tech.get('bb_width', '---')}
-        - KB Indicators: EMA16={tech.get('ema16', '---')}, Supertrend={tech.get('supertrend', '---')}, MACD_Hist={tech.get('macd_hist', '---')}
-        - Volume Proxy: Body_Ratio={tech.get('body_ratio', '---')}, Large_Body={tech.get('large_body', '---')}
+        - Core Indicators: ADX={tech.get('adx', '---')}, RSI={tech.get('rsi', '---')}, BB_Width={tech.get('bb_width', '---')}
+        - Trend: EMA16={tech.get('ema16', '---')}, EMA89={tech.get('ema89', '---')}, Supertrend={tech.get('supertrend', '---')}
+        - Momentum: MACD_Hist={tech.get('macd_hist', '---')}, Stoch_K={tech.get('stoch_k', '---')}
+        - Volume Proxy: Body_Ratio={tech.get('body_ratio', '---')}, Large_Body={tech.get('large_body', '---')}, ATR={tech.get('atr', '---')}
         - S/R Proximity: {tech.get('near_sr', '---')}
+        - Confluence Score: {tech.get('confluence_score', '---')}
         
         ### Task:
-        Evaluate if this is an "A+" setup. 
-        - High-quality: Confirms with ≥3 signals and strong volume proxy.
-        - Low-quality: Flat MACD, price trapped in noise, or ADX stalling.
+        Evaluate if this is an "A+" setup based on the regime-specific confluences above.
+        - **A+ Setup:** ≥3 strong confluences aligned, volume proxy confirms, no conflicting signals.
+        - **Reject:** Missing key confluences, flat momentum, or price trapped in noise.
         
         Return JSON ONLY:
         {{
             "confirmed": boolean,
-            "reason": "short explanation referring to indicators",
+            "reason": "short explanation referring to specific indicators from the regime criteria",
             "confidence": float (0.0 to 1.0)
         }}
         """
         
         payload = {
-            "model": "gpt-4-turbo", # or your configured model
             "prompt": prompt,
-            "json": True
+            "context": {
+                "asset": context.asset,
+                "regime": regime_label,
+                "direction": direction,
+                "uiMode": "alert_verification",
+                "responseVerbosity": "concise"
+            }
         }
 
         try:
@@ -285,21 +405,18 @@ class DiscordDispatcher:
     def __init__(self, webhook_url: str):
         self.webhook_url = webhook_url
         self.last_sent = {} # Dedup: {asset: timestamp}
+        self._session = None  # Initialize to None for clarity
     
-    async def send_alert(self, context: AlertContext, ai_verdict: AIAnalysisResult):
+    async def send_alert(self, context: AlertContext, ai_verdict: AIAnalysisResult) -> bool:
         if not self.webhook_url:
             logger.warning("Discord Webhook missing.")
-            return
+            return False
 
-        # Rate Limit Check (e.g., 1 alert per asset per 15 mins)
-        now = datetime.now().timestamp()
-        last = self.last_sent.get(context.asset, 0)
-        if now - last < 900: # 15 mins
-            logger.info(f"Skipping alert for {context.asset} (Rate Limit)")
-            return
+        # Rate Limit Check - REMOVED (dispatcher-level cooldown is the single source of truth)
+        # The OTCDispatcher.COOLDOWN_SECONDS handles rate limiting at line 900-904
 
         # Shared Session
-        if not hasattr(self, '_session') or self._session is None or self._session.closed:
+        if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
 
         direction_emoji = "📈" if context.direction == "CALL" else "📉"
@@ -312,7 +429,7 @@ class DiscordDispatcher:
         indicator_text = (
             f"**ADX:** {tech.get('adx', '---')} | **RSI:** {tech.get('rsi', '---')}\n"
             f"**MACD Hist:** {tech.get('macd_hist', '---')} | **BB Width:** {tech.get('bb_width', '---')}\n"
-            f"**EMA-16/165:** {tech.get('ema16', '---')} / {tech.get('ema165', '---')}\n"
+            f"**EMA-16/89:** {tech.get('ema16', '---')} / {tech.get('ema89', '---')}\n"
             f"**Supertrend:** {tech.get('supertrend', '---')}"
         )
         
@@ -338,15 +455,17 @@ class DiscordDispatcher:
         try:
             async with self._session.post(self.webhook_url, json=payload) as resp:
                 if resp.status in [200, 204]:
-                    logger.info(f"Alert sent for {context.asset}")
-                    self.last_sent[context.asset] = now
+                    logger.info(f"✅ Discord alert delivered: {context.asset}")
+                    return True
                 else:
-                    logger.error(f"Discord Failed: {resp.status}")
+                    logger.error(f"❌ Discord delivery failed: {context.asset} (HTTP {resp.status})")
+                    return False
         except Exception as e:
-            logger.error(f"Discord Dispatch Error: {e}")
+            logger.error(f"❌ Discord dispatch exception for {context.asset}: {e}")
+            return False
 
     async def close(self):
-        if hasattr(self, '_session') and self._session and not self._session.closed:
+        if self._session and not self._session.closed:
             await self._session.close()
 
 
@@ -509,6 +628,9 @@ class TickerSubscriber:
             except Exception as e:
                 logger.warning(f"Ticker Sub Connection Error: {e}. Reconnecting in 5s...")
                 await asyncio.sleep(5)
+            finally:
+                if 'client' in locals():
+                    await client.close()
 
 
 # --- Main Service ---
@@ -525,19 +647,34 @@ class SettingsSubscriber:
             try:
                 client = redis.from_url(self.redis_url, decode_responses=True)
                 pubsub = client.pubsub()
-                await pubsub.subscribe("settings:updated")
-                logger.info("Subscribed to 'settings:updated' - Ready for real-time config changes.")
+                await pubsub.subscribe("settings:updated", "system:commands")
+                logger.info("Subscribed to 'settings:updated' and 'system:commands' - Ready for real-time config changes and reset signals.")
                 
                 async for message in pubsub.listen():
                     if message['type'] == 'message':
                         try:
                             data = json.loads(message['data'])
+                            
+                            # Handle System Commands (Phase 4 #15)
+                            if message['channel'] == "system:commands":
+                                if data.get("command") == "reset_scanner":
+                                    logger.info("📡 Received reset_scanner command via Redis.")
+                                    await self.dispatcher.reset_scanner()
+                                continue
+
+                            # Handle Settings Updates
                             alerts_cfg = data.get("alerts", {})
                             
-                            # 1. Update AI Orchestrator
+                            # 1. Update AI Settings (directly on dispatcher)
                             enable_ai = alerts_cfg.get("enableAIConfirm")
+                            if enable_ai is not None:
+                                self.dispatcher.enable_ai_confirm = enable_ai
+                                logger.info(f"SettingsSync: enable_ai_confirm → {enable_ai}")
+                            
                             min_conf = alerts_cfg.get("minAIConfidence")
-                            self.dispatcher.ai.update_config(enable_confirm=enable_ai, min_confidence=min_conf)
+                            if min_conf is not None:
+                                self.dispatcher.min_ai_confidence = float(min_conf)
+                                logger.info(f"SettingsSync: min_ai_confidence → {min_conf}")
                             
                             # 2. Update Dispatcher Core
                             candle_count = alerts_cfg.get("candleCount")
@@ -560,6 +697,9 @@ class SettingsSubscriber:
             except Exception as e:
                 logger.warning(f"Settings Sub Connection Error: {e}. Reconnecting in 5s...")
                 await asyncio.sleep(5)
+            finally:
+                if 'client' in locals():
+                    await client.close()
 
 class OTCDispatcher:
     def __init__(self, assets: List[str], test_mode: bool = False):
@@ -608,38 +748,107 @@ class OTCDispatcher:
         self.min_ai_confidence = float(os.getenv("ALERT_MIN_CONFIDENCE", "0.7"))
         self.candle_count = int(os.getenv("ALERT_CANDLE_COUNT", "100"))
         self.scan_interval = int(os.getenv("SCAN_INTERVAL_SECONDS", "60"))
+        self._redis_client = None  # Persistent Redis client for alert publishing
+        self._scan_counter = 0  # Throttle filesystem scans (every 5th cycle)
+        self._asset_tasks: Dict[str, asyncio.Task] = {}  # Per-asset worker tasks (Phase 4 #14)
+        self.asset_folder_map: Dict[str, str] = {}  # normalized_name -> raw_folder_name
+
+
+    async def _get_redis_client(self):
+        """Get or create persistent Redis client for alert publishing."""
+        if self._redis_client is None:
+            self._redis_client = redis.from_url(self.redis_url, decode_responses=True)
+        return self._redis_client
+
+    async def reset_scanner(self):
+        """Clears all active monitoring tasks and assets (Phase 4 #15)."""
+        logger.info("♻️ Resetting Scanner Monitoring Pool...")
+        
+        # 1. Cancel all worker tasks
+        for asset, task in self._asset_tasks.items():
+            if not task.done():
+                task.cancel()
+                logger.info(f"Stop: Cancelled worker for {asset}")
+        self._asset_tasks.clear()
+        
+        # 2. Reset internal lists & Whitelist
+        self.ticker_sub.active_assets = set()
+        
+        # 3. Reset Redis subscriber whitelist
+        if self.redis_mode and self.subscriber:
+            self.subscriber.assets = []
+            
+        # 4. Immediate Discovery Re-Sync (Fix: Blind spot on reset)
+        self.assets = self.scan_available_assets()
+        self._scan_counter = 0 
+        
+        logger.info(f"✅ Scanner reset complete. Discovered {len(self.assets)} assets on disk. Waiting for whitelist...")
+
+    async def _asset_worker(self, asset: str):
+        """Independently loops for a single asset (Phase 4 #14)."""
+        # asset is NORMALIZED here. folder name is retrieved via map
+        folder_name = self.asset_folder_map.get(asset, asset)
+        logger.info(f"🚀 Started independent worker for {asset} (Folder: {folder_name})")
+        
+        # Phase 4 #16: Immediate scan on discovery
+        try:
+            await self.process_asset(asset)
+        except Exception as e:
+            logger.error(f"Initial scan error for {asset}: {e}")
+
+        while True:
+            try:
+                await asyncio.sleep(self.scan_interval)
+                await self.process_asset(asset)
+            except asyncio.CancelledError:
+                logger.info(f"Worker for {asset} was cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Worker Loop Error for {asset}: {e}")
+                await asyncio.sleep(5)  # Backoff on persistent errors
 
     async def close(self):
         """Gracefully shutdown all components."""
         logger.info("Closing OTC Dispatcher components...")
         await self.ai.close()
         await self.discord.close()
-        # Add any other component cleanup here (e.g. redis)
+        if self._redis_client:
+            await self._redis_client.close()
+            logger.info("Persistent Redis client closed")
 
 
     def scan_available_assets(self) -> List[str]:
-        """Scans local history directory for assets with data."""
+        """Scans local history directory for assets, populating normalized mapping."""
         history_dir = PROJECT_ROOT / "data" / "data_output" / "history"
         if not history_dir.exists():
             return []
         
-        found_assets = []
+        found_normalized = []
         try:
-            # Check subdirectories that contain CSV files
+            # Clear old mapping
+            self.asset_folder_map.clear()
+            
             for item in history_dir.iterdir():
                 if item.is_dir():
-                    # Strict: Folder name MUST be exactly equal to its normalized form
-                    # This avoids picking up 'AED_CNY_OTC_' if 'AEDCNYOTC' is the target
-                    name = item.name
-                    if name == normalize_asset(name):
-                        # Check if any .csv exists and ignore LEGACY
-                        csvs = [f for f in item.glob("*.csv") if "LEGACY" not in f.name]
-                        if csvs:
-                            found_assets.append(name)
+                    raw_name = item.name
+                    norm_name = normalize_asset(raw_name)
+                    
+                    # Preference: Exact match folder name wins over underscored version if both exist
+                    if norm_name in self.asset_folder_map:
+                        if raw_name != norm_name:
+                             continue # Keep the exact match one
+
+                    # Check if any .csv exists and ignore LEGACY
+                    csvs = [f for f in item.glob("*.csv") if "LEGACY" not in f.name]
+                    if csvs:
+                        if norm_name not in found_normalized:
+                            found_normalized.append(norm_name)
+                        self.asset_folder_map[norm_name] = raw_name
+                        
         except Exception as e:
             logger.error(f"Asset Scan Error: {e}")
             
-        return found_assets
+        return found_normalized
 
     async def fetch_data(self, asset: str) -> List[Dict]:
         """Fetches last N candles for asset, prioritizing local CSV."""
@@ -657,7 +866,9 @@ class OTCDispatcher:
         try:
             # 1. Look for local history file
             # timeframe 1 = 1m
-            csv_path = get_recent_history_file(asset, 1)
+            # Use raw folder name from map if possible
+            folder_name = self.asset_folder_map.get(asset, asset)
+            csv_path = get_recent_history_file(folder_name, 1)
             
             if csv_path and csv_path.exists():
                 import pandas as pd
@@ -713,12 +924,14 @@ class OTCDispatcher:
             return []
 
     async def process_asset(self, asset: str):
-        """Pipeline for a single asset."""
+        """Pipeline for a single asset (normalized name)."""
         data_points = await self.fetch_data(asset)
         
         # Log Data (Buffered)
         if data_points:
-            await self.logger_service.log_ticks(asset, data_points)
+            # Use raw folder name for logging to preserve consistency
+            folder_name = self.asset_folder_map.get(asset, asset)
+            await self.logger_service.log_ticks(folder_name, data_points)
 
         # 2. Analyze (R7: Cache enabled inside scanner)
         if self.test_mode:
@@ -735,7 +948,7 @@ class OTCDispatcher:
                      "macd_hist": 0.001,
                      "stoch_k": 75.0,
                      "ema16": 1.0580,
-                     "ema165": 1.0500,
+                    "ema89": 1.0500,
                      "supertrend": 1.0550,
                      "near_sr": "Support",
                      "body_ratio": 0.6,
@@ -810,13 +1023,12 @@ class OTCDispatcher:
                 if ai_verdict.confidence < self.min_ai_confidence:
                     logger.info(f"AI low confidence for {asset} ({ai_verdict.confidence:.2f} < {self.min_ai_confidence}). Skipping.")
                     return
-                # Update cooldown only on successful AI evaluation
-                self.cooldowns[asset] = now
             else:
                 ai_verdict = AIAnalysisResult(True, "AI Confirmation Disabled (Force Pass)", 1.0)
         except Exception as e:
             logger.error(f"AI Check Failed for {asset}: {e}")
             return
+        
         
         if ai_verdict.confirmed:
             # Update cooldowns
@@ -826,13 +1038,18 @@ class OTCDispatcher:
                     self.group_last_alert[group] = now
                     
             # 1. Dispatch to Discord
-            await self.discord.send_alert(ctx, ai_verdict)
-            logger.info(f"Alert Dispatched to Discord: {asset}")
+            discord_ok = await self.discord.send_alert(ctx, ai_verdict)
+            
+            if not discord_ok:
+                logger.warning(f"⚠️ Discord delivery FAILED for {asset} — alert not journaled or published")
+                return
+            
+            logger.info(f"✅ Alert dispatched to Discord: {asset}")
             
             # 2. Publish to Redis for In-App Feed (R5)
             if redis:
                 try:
-                    client = redis.from_url(self.redis_url, decode_responses=True)
+                    client = await self._get_redis_client()
                     alert_data = {
                         "asset": ctx.asset,
                         "regime": ctx.condition.value,
@@ -845,42 +1062,46 @@ class OTCDispatcher:
                         "timestamp": datetime.now().isoformat()
                     }
                     await client.publish("alerts:dispatched", json.dumps(alert_data))
-                    await client.close()
                 except Exception as e:
-                    logger.error(f"Redis Alert Publish Error: {e}")
+                    logger.error(f"❌ Redis alert publish error for {asset}: {e}")
 
-            # 3. Log to Journal (R3)
+            # 3. Log to Journal (R3) - Only if Discord delivery succeeded
             await self.log_alert(ctx, ai_verdict)
         else:
             logger.info(f"AI Rejected {asset}: {ai_verdict.reason}")
+
+    def _write_alert_csv(self, log_file: Path, file_exists: bool, context: AlertContext, ai_result: AIAnalysisResult):
+        """Sync helper to write alert to CSV (called via asyncio.to_thread)."""
+        headers = ["timestamp", "asset", "regime", "direction", "expiry", "entry_price", "payout", "confluence_score", "ai_confirmed", "ai_confidence", "ai_reason"]
+        
+        with open(log_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(headers)
+            
+            writer.writerow([
+                datetime.now().isoformat(),
+                context.asset,
+                context.condition.value,
+                context.direction,
+                context.suggested_expiry,
+                context.price,
+                context.payout,
+                context.technicals.get('confluence_score', 0),
+                ai_result.confirmed,
+                round(ai_result.confidence, 2),
+                ai_result.reason.replace('\n', ' ')
+            ])
 
     async def log_alert(self, context: AlertContext, ai_result: AIAnalysisResult):
         """Logs dispatched alert to a local CSV for later analysis (R3)."""
         log_file = PROJECT_ROOT / "data" / "logs" / "alert_journal.csv"
         log_file.parent.mkdir(parents=True, exist_ok=True)
         
-        headers = ["timestamp", "asset", "regime", "direction", "expiry", "entry_price", "payout", "confluence_score", "ai_confirmed", "ai_confidence", "ai_reason"]
         file_exists = log_file.exists()
         
         try:
-            with open(log_file, 'a', newline='') as f:
-                writer = csv.writer(f)
-                if not file_exists:
-                    writer.writerow(headers)
-                
-                writer.writerow([
-                    datetime.now().isoformat(),
-                    context.asset,
-                    context.condition.value,
-                    context.direction,
-                    context.suggested_expiry,
-                    context.price,
-                    context.payout,
-                    context.technicals.get('confluence_score', 0),
-                    ai_result.confirmed,
-                    round(ai_result.confidence, 2),
-                    ai_result.reason.replace('\n', ' ')
-                ])
+            await asyncio.to_thread(self._write_alert_csv, log_file, file_exists, context, ai_result)
         except Exception as e:
             logger.error(f"Journal Logging Error: {e}")
 
@@ -929,54 +1150,86 @@ class OTCDispatcher:
 
         while True:
             try:
-                # Loop Pulse
-                logger.info(f"Scanner Heartbeat: {datetime.now().strftime('%H:%M:%S')} | Active Assets: {len(self.ticker_sub.active_assets)}")
+                # 1. Reactive Discovery: If requested assets aren't known, scan disk immediately
+                # This fixes the lag when a new history is created/loaded
+                active_requested = self.ticker_sub.active_assets
+                missing_on_disk = [a for a in active_requested if a not in self.assets]
                 
-                # 1. Hot-Swap: Scan for new assets every loop
-                current_known = set(self.assets)
-                freshly_found = self.scan_available_assets()
-                new_ones = [a for a in freshly_found if a not in current_known]
-                
-                if new_ones:
-                    logger.info(f"🔥 Hot-Swap: Detected new assets: {new_ones}")
-                    self.assets.extend(new_ones)
-                    # Update Redis Subscriber whitelist if active
-                    if self.redis_mode and self.subscriber:
-                        # Append new formatted assets
-                        for na in new_ones:
-                            fmt = na.upper().replace("_", "")
+                if missing_on_disk:
+                    logger.info(f"🔎 Reactive Discovery: Searching disk for missing assets: {missing_on_disk}")
+                    self.assets = self.scan_available_assets()
+                    self._scan_counter = 0 # Reset throttle since we just scanned
+
+                # 2. Hot-Swap: Periodic discovery scan (throttled)
+                self._scan_counter += 1
+                if self._scan_counter >= 5:
+                    self._scan_counter = 0
+                    current_known = set(self.assets)
+                    freshly_found = self.scan_available_assets()
+                    new_ones = [a for a in freshly_found if a not in current_known]
+                    
+                    if new_ones:
+                        logger.info(f"🔥 Hot-Swap: Detected new assets: {new_ones}")
+                        self.assets.extend(new_ones)
+                        # Sync logic for subscriber...
+                        if self.redis_mode and self.subscriber:
+                            for na in new_ones:
+                                fmt = na.upper().replace("_", "")
+                                if fmt not in self.subscriber.assets:
+                                    self.subscriber.assets.append(fmt)
+
+                # 3. Reconcile Workers with Whitelist (Phase 4 #14)
+                desired_assets = [a for a in self.assets if a in self.ticker_sub.active_assets]
+                desired_set = set(desired_assets)
+                current_running_set = set(self._asset_tasks.keys())
+
+                # A. Start New Workers
+                for asset in desired_set:
+                    if asset not in current_running_set or self._asset_tasks[asset].done():
+                        self._asset_tasks[asset] = asyncio.create_task(self._asset_worker(asset))
+                        # Update subscriber if missing
+                        if self.redis_mode and self.subscriber:
+                            fmt = asset.upper().replace("_", "")
                             if fmt not in self.subscriber.assets:
                                 self.subscriber.assets.append(fmt)
 
-                if not self.assets and not self.ticker_sub.active_assets:
-                    # Still waiting for assets
-                    logger.debug("No assets to scan, standing by...")
+                # B. Stop Obsolete Workers
+                for asset in current_running_set:
+                    if asset not in desired_set:
+                        logger.info(f"🛑 Stopping worker for {asset} (Removed from whitelist)")
+                        self._asset_tasks[asset].cancel()
+                        del self._asset_tasks[asset]
+
+                # 3. Management Pulse & Heartbeat
+                active_workers = [a for a, t in self._asset_tasks.items() if not t.done()]
+                
+                # Standby Logging (Throttled)
+                if not active_workers:
+                    if self._scan_counter == 0:
+                        logger.info("Standing by... (Waiting for Frontend selection)")
                 else:
-                    # 2. Process ONLY Whitelisted Assets
-                    if self.test_mode:
-                        current_pool = self.assets if self.assets else ["EURUSD_OTC"]
-                    else:
-                        current_pool = [a for a in self.assets if a in self.ticker_sub.active_assets]
-                    
-                    if not current_pool and self.ticker_sub.active_assets:
-                        # Maybe assets are normalized differently on disk?
-                        # Log warning if we have a whitelist but no matches
-                        logger.warning(f"Whitelist exists {list(self.ticker_sub.active_assets)} but no matching history files found on disk.")
-                    
-                    if current_pool:
-                        logger.info(f"Core Loop: Scanning {len(current_pool)} selected assets: {current_pool}")
-                        await asyncio.gather(*(self.process_asset(asset) for asset in current_pool))
-                    else:
-                        logger.info("No active selections found on disk. Standing by...")
-            
+                    logger.info(f"Scanner Pulse | Active Workers: {len(active_workers)} | Whitelist: {len(self.ticker_sub.active_assets)}")
+                
+                # 4. Continuous Heartbeat (Phase 4 Pulse Fix)
+                if self.redis_mode:
+                    try:
+                        client = await self._get_redis_client()
+                        heartbeat = {
+                            "type": "scan:confirmed",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "assets_scanned": active_workers,
+                            "scan_interval": self.scan_interval,
+                            "scan_duration_ms": 100 if active_workers else 0 # Placeholder for UI visibility
+                        }
+                        await client.publish("scan:heartbeat", json.dumps(heartbeat))
+                    except Exception as e:
+                        logger.error(f"Heartbeat error: {e}")
+
             except Exception as e:
-                logger.error(f"Loop Error: {e}")
+                logger.error(f"Management Loop Error: {e}")
             
-            # Wait динамическая задержка based on settings
-            if self.test_mode:
-                logger.info("Test Mode: Single Scan Complete. Exiting Run Loop.")
-                break
-            await asyncio.sleep(self.scan_interval)
+            # Management loop runs every 10s (workers have their own timers)
+            await asyncio.sleep(10)
 
 def main():
     parser = argparse.ArgumentParser(description="QuFLX OTC Alert Dispatcher")

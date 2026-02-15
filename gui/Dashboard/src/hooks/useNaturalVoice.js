@@ -311,7 +311,7 @@ const useNaturalVoice = ({ onError, voice = 'Ara', sampleRate = 24000 } = {}) =>
                 }
             };
         });
-    }, [wsUrl, voice, sampleRate, reportError, schedulePcm16Audio, status]);
+    }, [wsUrl, reportError, schedulePcm16Audio, status, sessionUpdateMessage]);
 
     const sendSpeakRequest = (ws, text) => {
         // Send conversation item with the text

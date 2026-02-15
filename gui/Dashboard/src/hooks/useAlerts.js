@@ -31,7 +31,7 @@ const useAlerts = () => {
             } else {
                 setStatus(prev => ({ ...prev, loading: false, error: data.detail }));
             }
-        } catch (err) {
+        } catch {
             setStatus(prev => ({ ...prev, loading: false, error: 'Failed to fetch status' }));
         }
     }, []);
@@ -53,7 +53,7 @@ const useAlerts = () => {
             const data = await res.json();
             await fetchStatus();
             return data.ok;
-        } catch (err) {
+        } catch {
             setStatus(prev => ({ ...prev, loading: false, error: 'Failed to start' }));
             return false;
         }
@@ -68,7 +68,7 @@ const useAlerts = () => {
             const data = await res.json();
             await fetchStatus();
             return data.ok;
-        } catch (err) {
+        } catch {
             setStatus(prev => ({ ...prev, loading: false, error: 'Failed to stop' }));
             return false;
         }

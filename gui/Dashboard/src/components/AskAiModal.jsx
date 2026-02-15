@@ -20,7 +20,7 @@ const PRESETS = [
     id: 'standard_top_down',
     title: 'Standard Top-Down',
     description: 'Balanced 1m–5m entry analysis',
-    promptTemplate: ({ asset, timeframe }) => `You are Jarvis, precise top-down A+ entry validator for Pocket Option OTC on QuFLX.
+    promptTemplate: () => `You are Jarvis, precise top-down A+ entry validator for Pocket Option OTC on QuFLX.
 Rules:
 - Use ONLY QuFLX live context (multi-TF snapshots, current price, payout, time left).
 - Step 1 – HTF (1h/15m/5m): overall bias (trend/strength via ADX + EMA position), major S/R.
@@ -43,7 +43,7 @@ Biggest Risk: one sentence`
     id: 'full_report',
     title: 'Full Confluence Report',
     description: 'Deep dive for Insights Panel',
-    promptTemplate: ({ asset, timeframe }) => `You are compiling a complete top-down report for ${asset} OTC on QuFLX v2.
+    promptTemplate: ({ asset }) => `You are compiling a complete top-down report for ${asset} OTC on QuFLX v2.
 Rules:
 - Use ONLY provided multi-TF context (1h, 15m, 5m, 1m snapshots, current price, payout, time left).
 - Structure:
@@ -58,7 +58,7 @@ Keep total under 180 words. Be decisive — no hedging.`
     id: 'blitz_15s',
     title: '15s/30s Blitz',
     description: 'Ultra-fast scalp validator',
-    promptTemplate: ({ asset, timeframe }) => `Fast 15s/30s MTF validator for Pocket Option OTC.
+    promptTemplate: () => `Fast 15s/30s MTF validator for Pocket Option OTC.
 Rules:
 - ONLY QuFLX live context.
 - HTF quick bias check (15m/5m only).

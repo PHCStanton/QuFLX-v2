@@ -45,7 +45,7 @@ class IndicatorSet:
     # Trend Indicators
     sma_20: Optional[float] = None
     ema_16: Optional[float] = None
-    ema_165: Optional[float] = None
+    ema_89: Optional[float] = None  # Fibonacci period, works with 100-candle payloads
     ema_21: Optional[float] = None
     ema_50: Optional[float] = None
     ema_100: Optional[float] = None
@@ -103,8 +103,7 @@ class TechnicalIndicatorsPipeline:
             'rsi_period_2': 21,
             'sma_period': 20,
             'ema_fast': 16,
-            'ema_fast': 16,
-            'ema_slow': 165,
+            'ema_slow': 89,  # Fibonacci period for 100-candle payloads
             'ema_cross_fast': 21,
             'ema_cross_med': 50,
             'ema_cross_slow': 100,
@@ -169,7 +168,7 @@ class TechnicalIndicatorsPipeline:
         try:
             df['sma_20'] = df['close'].rolling(window=self.params['sma_period']).mean()
             df['ema_16'] = df['close'].ewm(span=self.params['ema_fast']).mean()
-            df['ema_165'] = df['close'].ewm(span=self.params['ema_slow']).mean()
+            df['ema_89'] = df['close'].ewm(span=self.params['ema_slow']).mean()  # Fibonacci period
             
             # WMA
             weights = np.arange(1, self.params['wma_period'] + 1)
@@ -203,7 +202,7 @@ class TechnicalIndicatorsPipeline:
                     df['bb_lower'] = bb_data[f"BBL_{self.params['bb_period']}_{self.params['bb_std']}"]
                     df['bb_middle'] = bb_data[f"BBM_{self.params['bb_period']}_{self.params['bb_std']}"]
                     df['bb_upper'] = bb_data[f"BBU_{self.params['bb_period']}_{self.params['bb_std']}"]
-                    df['bb_width'] = bb_data[f"BBB_{self.params['bb_period']}_{self.params['bb_std']}"]
+                    df['bb_width'] = bb_data[f"BBB_{self.params['bb_period']}_{self.params['bb_std']}"] / 100
                     df['bb_percent'] = bb_data[f"BBP_{self.params['bb_period']}_{self.params['bb_std']}"]
             else:
                 df['bb_middle'] = df['close'].rolling(window=self.params['bb_period']).mean()
@@ -588,7 +587,7 @@ class TechnicalIndicatorsPipeline:
                 
                 sma_20=self._safe_float(df_row.get('sma_20')),
                 ema_16=self._safe_float(df_row.get('ema_16')),
-                ema_165=self._safe_float(df_row.get('ema_165')),
+                ema_89=self._safe_float(df_row.get('ema_89')),
                 ema_21=self._safe_float(df_row.get('ema_21')),
                 ema_50=self._safe_float(df_row.get('ema_50')),
                 ema_100=self._safe_float(df_row.get('ema_100')),

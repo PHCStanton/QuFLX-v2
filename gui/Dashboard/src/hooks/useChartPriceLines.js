@@ -88,7 +88,9 @@ const useChartPriceLines = ({
             linesRef.current.forEach(line => {
                 try {
                     candleSeries.removePriceLine(line);
-                } catch (e) { /* ignore */ }
+                } catch (err) {
+                    console.warn('Failed to remove price line', err);
+                }
             });
             linesRef.current = [];
         };

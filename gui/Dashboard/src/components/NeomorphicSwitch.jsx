@@ -1,6 +1,10 @@
+import { useId } from 'react';
 import clickSound from '../assets/Sounds/UIClick-Camera_snapshot.mp3';
 
-const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel }) => {
+const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel, id }) => {
+  const uniqueId = useId();
+  const inputId = id || `switch-${uniqueId}`;
+
   const handleChange = (e) => {
     const audio = new Audio(clickSound);
     audio.play().catch(() => { });
@@ -9,8 +13,10 @@ const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel }) => {
 
   return (
     <div className="flex flex-col items-center gap-1 group">
-      <label className="relative inline-block w-[60px] h-[30px] cursor-pointer select-none">
+      <label htmlFor={inputId} className="relative inline-block w-[60px] h-[30px] cursor-pointer select-none">
         <input
+          id={inputId}
+          name={inputId}
           type="checkbox"
           className="hidden"
           checked={checked}

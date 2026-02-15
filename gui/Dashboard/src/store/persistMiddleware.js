@@ -23,6 +23,7 @@ export const QFLX_PERSIST_KEYS = {
   market: 'quflx-market',
   settings: 'quflx-settings',
   user: 'quflx-user',
+  profiles: 'quflx-profiles',
   rightPanelWidthPx: 'quflx.ui.rightPanelWidthPx',
   lastAnnotatedScreenshotDataUrl: 'quflx:lastAnnotatedScreenshotDataUrl'
 };

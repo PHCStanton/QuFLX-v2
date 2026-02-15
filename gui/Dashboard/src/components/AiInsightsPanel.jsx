@@ -1,9 +1,9 @@
-import Card from './Card';
+import { CollapsibleCard } from './Card';
 import AssetPayoutPanel from './AssetPayoutPanel';
 import { Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AnalysisToggle from './AnalysisToggle';
-import { BuySellIcon, EntryIcon, LevelsIcon, TopDownIcon, IndicatorsIcon } from './AnalysisIcons';
+import { EntryIcon, LevelsIcon, TopDownIcon, IndicatorsIcon } from './AnalysisIcons';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import useAskAi from '../hooks/useAskAi';
@@ -244,14 +244,17 @@ const AiInsightsPanel = () => {
         />
       </div>
 
-      {/* AI Insights Chat Section */}
-      <Card className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light">
-        <div className="flex items-center justify-between gap-2 mb-2">
+      <CollapsibleCard
+        className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light"
+        headerClassName="mb-2"
+        headerLeft={
           <div>
             <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">AI Insights</h3>
             <div className="text-[11px] text-gray-500 mt-0.5">Image: {imageSourceLabel}</div>
           </div>
-          <div className="flex items-center gap-2">
+        }
+        headerRight={
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             {isSpeaking ? (
               <>
                 {readBackMode === 'browser' && (
@@ -280,8 +283,8 @@ const AiInsightsPanel = () => {
               Clear
             </button>
           </div>
-        </div>
-
+        }
+      >
         <div className="flex flex-col gap-2">
           {Array.isArray(aiMessages) && aiMessages.length ? (
             <div className="space-y-2 max-h-[55vh] overflow-auto pr-1">
@@ -431,7 +434,7 @@ const AiInsightsPanel = () => {
             </div>
           </div>
         </div>
-      </Card >
+      </CollapsibleCard>
     </div >
   );
 };

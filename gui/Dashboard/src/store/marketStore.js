@@ -140,6 +140,7 @@ const createMarketSlice = (set, get) => ({
     ignoreAssets: '',
     filterMode: null
   },
+  scanHeartbeat: null, // Last Asset Scan Confirmed data
   setAssetFilterState: (state) => set({ assetFilterState: state }),
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
@@ -933,7 +934,14 @@ const createConnectionSlice = (set, get) => ({
         const audio = new Audio(alertSignalSound);
         audio.volume = 0.6;
         audio.play().catch(() => { });
-      } catch (e) { /* ignore audio errors */ }
+      } catch (err) {
+        console.warn('Alert sound failed to play', err);
+      }
+    });
+
+    socket.on('scan_heartbeat', (data) => {
+      console.log('Scan Heartbeat:', data);
+      set({ scanHeartbeat: { ...data, receivedAt: Date.now() } });
     });
 
     socket.on('system_status', (data) => {

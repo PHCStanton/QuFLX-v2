@@ -1,13 +1,14 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 
-const TooltipRow = ({ label, value, color, className = '' }) => (
+const TooltipRow = React.memo(({ label, value, color, className = '' }) => (
   <div className={`flex justify-between items-center text-xs gap-3 ${className}`}>
     <span className="text-gray-400 font-medium">{label}</span>
     <span className="font-mono font-bold" style={{ color: color || '#e5e7eb' }}>
       {value}
     </span>
   </div>
-);
+));
+TooltipRow.displayName = 'TooltipRow';
 
 const ChartTooltip = ({ 
   visible, 

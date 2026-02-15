@@ -39,6 +39,42 @@ def _json_error(*, status_code: int, detail: str, user_message: str = None) -> J
         }
     )
 
+def _client_host(request: Request) -> str:
+    if request.client is None:
+        return ""
+    return request.client.host or ""
+
+def _is_local_client(host: str) -> bool:
+    return host in {"127.0.0.1", "::1", "testclient"}
+
+def _check_dev_gate(request: Request, ops_token: Optional[str]) -> Optional[JSONResponse]:
+    if os.getenv("QFLX_ENABLE_OPS") != "1":
+        return _json_error(
+            status_code=403,
+            detail="QFLX_ENABLE_OPS is not enabled",
+            user_message="Alerts controls are disabled. Enable local ops to use this feature."
+        )
+
+    host = _client_host(request)
+    if not _is_local_client(host):
+        return _json_error(
+            status_code=403,
+            detail=f"Alerts endpoints are local-only. client_host={host}",
+            user_message="Alerts controls are only allowed from the local machine."
+        )
+
+    expected_token = os.getenv("QFLX_OPS_TOKEN", "").strip()
+    if expected_token:
+        provided = (ops_token or "").strip()
+        if provided != expected_token:
+            return _json_error(
+                status_code=403,
+                detail="Missing or invalid ops token",
+                user_message="Ops token required to use local controls."
+            )
+
+    return None
+
 def _cleanup_if_exited():
     proc = _registry.get("proc")
     if proc is None:
@@ -51,24 +87,31 @@ def _cleanup_if_exited():
             _registry["proc"] = None
             _registry["pid"] = None
             _registry["log_file"] = None
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.error(f"Alerts cleanup failed: {exc}")
 
 def _stop_process(proc: subprocess.Popen):
     try:
         proc.terminate()
         proc.wait(timeout=3)
-    except Exception:
+    except Exception as exc:
+        logger.error(f"Alerts terminate failed: {exc}")
         try:
             proc.kill()
             proc.wait(timeout=3)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error(f"Alerts kill failed: {exc}")
 
 @router.post("/start")
-async def start_alerts(request: Request, assets: List[str] = Body(default=[]), use_redis: bool = Body(default=False, embed=True)):
-    # Simple security check (local only) or similar to ops.py if needed
-    # For now keeping it simple as per context
+async def start_alerts(
+    request: Request,
+    assets: List[str] = Body(default=[]),
+    use_redis: bool = Body(default=False, embed=True),
+    x_qflx_ops_token: Optional[str] = Header(default=None)
+):
+    gate_err = _check_dev_gate(request, x_qflx_ops_token)
+    if gate_err is not None:
+        return gate_err
     
     try:
         async with _alerts_lock:
@@ -141,7 +184,10 @@ async def start_alerts(request: Request, assets: List[str] = Body(default=[]), u
         return _json_error(status_code=500, detail=str(e), user_message="Failed to start alert dispatcher")
 
 @router.post("/stop")
-async def stop_alerts():
+async def stop_alerts(request: Request, x_qflx_ops_token: Optional[str] = Header(default=None)):
+    gate_err = _check_dev_gate(request, x_qflx_ops_token)
+    if gate_err is not None:
+        return gate_err
     try:
         async with _alerts_lock:
             _cleanup_if_exited()
@@ -165,7 +211,10 @@ async def stop_alerts():
         return _json_error(status_code=500, detail=str(e))
 
 @router.get("/status")
-async def get_alerts_status():
+async def get_alerts_status(request: Request, x_qflx_ops_token: Optional[str] = Header(default=None)):
+    gate_err = _check_dev_gate(request, x_qflx_ops_token)
+    if gate_err is not None:
+        return gate_err
     async with _alerts_lock:
         _cleanup_if_exited()
         return {

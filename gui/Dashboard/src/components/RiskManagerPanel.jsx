@@ -1,4 +1,4 @@
-import Card from './Card';
+import { CollapsibleCard } from './Card';
 import AssetPayoutPanel from './AssetPayoutPanel';
 
 const RiskManagerPanel = () => {
@@ -13,10 +13,13 @@ const RiskManagerPanel = () => {
         />
       </div>
 
-      <Card className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light">
-        <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wider">Risk Manager</h3>
+      <CollapsibleCard
+        className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light"
+        headerClassName="mb-2"
+        headerLeft={<h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Risk Manager</h3>}
+      >
         <p className="text-sm text-gray-400">Risk management tools will appear here. No charts will be displayed in this view.</p>
-      </Card>
+      </CollapsibleCard>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import Card from './Card';
-import { Upload, FileText, TrendingUp, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { CollapsibleCard } from './Card';
+import { Upload, FileText, TrendingUp, AlertCircle, Loader } from 'lucide-react';
 import { getApiBaseUrl } from '../api/apiBase';
 
 const StrategyLabPanel = () => {
@@ -25,123 +25,7 @@ const StrategyLabPanel = () => {
     }
   }, []);
 
-  // Handle drop
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileUpload(e.dataTransfer.files[0]);
-    }
-  }, []);
-
-  // Handle file input change
-  const handleFileInputChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      handleFileUpload(e.target.files[0]);
-    }
-  };
-
-  // Upload file to backend
-  const handleFileUpload = async (file) => {
-    if (!file.name.endsWith('.csv')) {
-      setError('Only CSV files are supported');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setRegime(null);
-    setEntries([]);
-    setStats(null);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      // Check if response is OK
-      if (!response.ok) {
-        const text = await response.text();
-        let errorMsg = `Upload failed (${response.status})`;
-        try {
-          const errorData = JSON.parse(text);
-          errorMsg = errorData.detail || errorMsg;
-        } catch {
-          errorMsg = text || errorMsg;
-        }
-        throw new Error(errorMsg);
-      }
-
-      // Parse JSON response
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        console.error('JSON parse error:', jsonError);
-        const text = await response.text();
-        throw new Error(`Invalid server response: ${text.substring(0, 100)}`);
-      }
-
-      if (!data.ok) {
-        throw new Error(data.detail || 'Upload failed');
-      }
-
-      setUploadedFile({
-        name: file.name,
-        rows: data.rows,
-        dateRange: data.date_range,
-      });
-      setFileId(data.file_id);
-
-      // Auto-analyze after upload
-      await analyzeRegime(data.file_id);
-    } catch (err) {
-      console.error('Upload error:', err);
-      setError(err.message || 'Upload failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Analyze regime
-  const analyzeRegime = async (fid) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_id: fid || fileId }),
-      });
-
-      const data = await response.json();
-
-      if (!data.ok) {
-        throw new Error(data.detail || 'Analysis failed');
-      }
-
-      setRegime(data);
-
-      // Auto-identify entries after regime detection
-      if (data.is_tradeable) {
-        await identifyEntries(fid);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Identify entry signals
-  const identifyEntries = async (fid) => {
+  const identifyEntries = useCallback(async (fid) => {
     setLoading(true);
     setError(null);
 
@@ -165,6 +49,113 @@ const StrategyLabPanel = () => {
     } finally {
       setLoading(false);
     }
+  }, [fileId]);
+
+  const analyzeRegime = useCallback(async (fid) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fid || fileId }),
+      });
+
+      const data = await response.json();
+
+      if (!data.ok) {
+        throw new Error(data.detail || 'Analysis failed');
+      }
+
+      setRegime(data);
+
+      if (data.is_tradeable) {
+        await identifyEntries(fid);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [fileId, identifyEntries]);
+
+  const handleFileUpload = useCallback(async (file) => {
+    if (!file.name.endsWith('.csv')) {
+      setError('Only CSV files are supported');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setRegime(null);
+    setEntries([]);
+    setStats(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        let errorMsg = `Upload failed (${response.status})`;
+        try {
+          const errorData = JSON.parse(text);
+          errorMsg = errorData.detail || errorMsg;
+        } catch {
+          errorMsg = text || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        const text = await response.text();
+        throw new Error(`Invalid server response: ${text.substring(0, 100)}`);
+      }
+
+      if (!data.ok) {
+        throw new Error(data.detail || 'Upload failed');
+      }
+
+      setUploadedFile({
+        name: file.name,
+        rows: data.rows,
+        dateRange: data.date_range,
+      });
+      setFileId(data.file_id);
+
+      await analyzeRegime(data.file_id);
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError(err.message || 'Upload failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [analyzeRegime]);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  }, [handleFileUpload]);
+
+  const handleFileInputChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFileUpload(e.target.files[0]);
+    }
   };
 
   // Reset state
@@ -182,9 +173,9 @@ const StrategyLabPanel = () => {
 
   return (
     <div className="col-span-3 flex flex-col gap-3 h-full min-h-0">
-      {/* Header */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between">
+      <CollapsibleCard
+        className="p-4"
+        headerLeft={
           <div>
             <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">
               Strategy Lab
@@ -193,20 +184,27 @@ const StrategyLabPanel = () => {
               Upload historical data to test regime detection and entry strategies
             </p>
           </div>
-          {uploadedFile && (
-            <button
-              onClick={handleReset}
-              className="px-3 py-1.5 text-xs bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary rounded-lg transition-colors"
-            >
-              Reset
-            </button>
-          )}
-        </div>
-      </Card>
+        }
+        headerRight={
+          uploadedFile ? (
+            <div onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={handleReset}
+                className="px-3 py-1.5 text-xs bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary rounded-lg transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          ) : null
+        }
+      />
 
-      {/* Upload Zone */}
       {!uploadedFile && (
-        <Card className="p-6 flex-1">
+        <CollapsibleCard
+          className="p-6 flex-1"
+          headerClassName="mb-4"
+          headerLeft={<h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">Upload Zone</h3>}
+        >
           <div
             className={`border-2 border-dashed rounded-xl p-8 transition-all ${dragActive
               ? 'border-accent-primary bg-accent-primary/5'
@@ -250,14 +248,17 @@ const StrategyLabPanel = () => {
               <p className="text-xs text-red-400">{error}</p>
             </div>
           )}
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* Analysis Results */}
       {uploadedFile && (
         <div className="flex-1 flex flex-col gap-3 min-h-0">
-          {/* File Info */}
-          <Card className="p-4">
+          <CollapsibleCard
+            className="p-4"
+            headerClassName="mb-3"
+            headerLeft={<h4 className="text-sm font-semibold text-text-primary">File Info</h4>}
+          >
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-accent-primary" />
               <div className="flex-1">
@@ -268,43 +269,48 @@ const StrategyLabPanel = () => {
               </div>
               {loading && <Loader className="w-4 h-4 text-accent-primary animate-spin" />}
             </div>
-          </Card>
+          </CollapsibleCard>
 
-          {/* Regime Display */}
           {regime && (
-            <Card className="p-4">
-              <div className="flex items-start gap-3">
-                <TrendingUp className="w-5 h-5 text-accent-primary mt-0.5" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-semibold text-text-primary">Market Regime</h4>
-                    <span className={`px-2 py-1 text-xs rounded-full ${regime.is_tradeable
-                      ? 'bg-green-500/10 text-green-400'
-                      : 'bg-gray-500/10 text-gray-400'
-                      }`}>
-                      {regime.is_tradeable ? 'Tradeable' : 'Neutral'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-text-primary font-medium mb-1">{regime.regime}</p>
-                  <div className="flex items-center gap-4 text-xs text-text-secondary">
-                    <span>Direction: <span className="text-text-primary">{regime.direction || 'N/A'}</span></span>
-                    <span>Confidence: <span className="text-text-primary">{regime.confluence_score || 0}%</span></span>
-                    <span>Expiry: <span className="text-text-primary">{regime.suggested_expiry || 'N/A'}</span></span>
-                  </div>
+            <CollapsibleCard
+              className="p-4"
+              headerClassName="mb-3"
+              headerLeft={
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-accent-primary" />
+                  <h4 className="text-sm font-semibold text-text-primary">Market Regime</h4>
                 </div>
+              }
+              headerRight={
+                <span className={`px-2 py-1 text-xs rounded-full ${regime.is_tradeable
+                  ? 'bg-green-500/10 text-green-400'
+                  : 'bg-gray-500/10 text-gray-400'
+                  }`}>
+                  {regime.is_tradeable ? 'Tradeable' : 'Neutral'}
+                </span>
+              }
+            >
+              <p className="text-sm text-text-primary font-medium mb-1">{regime.regime}</p>
+              <div className="flex items-center gap-4 text-xs text-text-secondary">
+                <span>Direction: <span className="text-text-primary">{regime.direction || 'N/A'}</span></span>
+                <span>Confidence: <span className="text-text-primary">{regime.confluence_score || 0}%</span></span>
+                <span>Expiry: <span className="text-text-primary">{regime.suggested_expiry || 'N/A'}</span></span>
               </div>
-            </Card>
+            </CollapsibleCard>
           )}
 
-          {/* Entry Signals Table */}
           {entries.length > 0 && (
-            <Card className="p-4 flex-1 flex flex-col min-h-0">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-text-primary">Entry Signals</h4>
+            <CollapsibleCard
+              className="p-4 flex-1 flex flex-col min-h-0"
+              headerClassName="mb-3"
+              headerLeft={<h4 className="text-sm font-semibold text-text-primary">Entry Signals</h4>}
+              headerRight={
                 <span className="text-xs text-text-secondary">
                   {entries.length} signal{entries.length !== 1 ? 's' : ''} found
                 </span>
-              </div>
+              }
+              bodyClassName="flex-1 flex flex-col min-h-0"
+            >
               <div className="flex-1 overflow-y-auto min-h-0">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-card-bg border-b border-border-primary">
@@ -364,17 +370,20 @@ const StrategyLabPanel = () => {
                   </div>
                 </div>
               )}
-            </Card>
+            </CollapsibleCard>
           )}
 
-          {/* No Entries Message */}
           {regime && regime.is_tradeable && entries.length === 0 && !loading && (
-            <Card className="p-6 flex-1 flex items-center justify-center">
+            <CollapsibleCard
+              className="p-6 flex-1 flex items-center justify-center"
+              headerClassName="mb-3"
+              headerLeft={<h4 className="text-sm font-semibold text-text-primary">Entry Signals</h4>}
+            >
               <div className="text-center text-text-secondary">
                 <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No entry signals found for this regime</p>
               </div>
-            </Card>
+            </CollapsibleCard>
           )}
 
           {/* Error Display */}

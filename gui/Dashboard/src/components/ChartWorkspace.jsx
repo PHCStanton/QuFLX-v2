@@ -104,7 +104,7 @@ const ChartWorkspace = () => {
 
     // Initialize Volume Series (Overlay at bottom)
     const volSeries = chart.addSeries(HistogramSeries, {
-      color: '#26a69a',
+      color: 'rgba(38, 166, 153, 0.25)',
       priceFormat: { type: 'volume' },
       priceScaleId: '', // Same scale as main chart (overlay)
     });

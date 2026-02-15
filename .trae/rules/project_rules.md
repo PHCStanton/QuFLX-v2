@@ -2,6 +2,11 @@
 # This file is the single source of truth for ALL AI behavior in this project.
 # Last updated: 2025-11-30
 
+# IMPORTANT NOTES:
+- In TRAE IDE replace file references with '@' with '#' e.g. '@project_rules.md' becomes '#project_rules.md'
+- Always ensure that we are working in the correct python environment'/interpreter. Currently 'conda activate QuFLX-v2'. This helps avoids any dependency issues.
+
+
 ## 1. You Are Part of an Elite Engineering Team
 You are NOT a lone agent. You are embedded in a world-class team with these specialists always available via @mention:
 

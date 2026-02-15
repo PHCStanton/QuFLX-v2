@@ -48,7 +48,19 @@ const AssetListView = ({
         isCollapsed ? 'h-10 flex-none overflow-hidden' : 'flex-1'
       }`}
     >
-      <div className="flex justify-between items-center mb-2 shrink-0">
+      <div
+        className="flex justify-between items-center mb-2 shrink-0 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onClick={onToggleCollapsed}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggleCollapsed();
+          }
+        }}
+        aria-expanded={!isCollapsed}
+      >
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
             {panelMode === 'list' ? `${minPayout}% Payout Assets` : 'OTC Ticker'}
@@ -69,16 +81,21 @@ const AssetListView = ({
 
         <div className="flex items-center gap-2">
           {!isCollapsed && (
-            <NeomorphicSwitch
-              checked={panelMode === 'ticker'}
-              onChange={onTogglePanelMode}
-              leftLabel={`${minPayout}% Assets`}
-              rightLabel="Ticker View"
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <NeomorphicSwitch
+                checked={panelMode === 'ticker'}
+                onChange={onTogglePanelMode}
+                leftLabel={`${minPayout}% Assets`}
+                rightLabel="Ticker View"
+              />
+            </div>
           )}
           <button
             type="button"
-            onClick={onToggleCollapsed}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapsed();
+            }}
             className="p-1 hover:bg-section-bg/50 rounded text-text-secondary transition-colors"
             title={isCollapsed ? 'Expand' : 'Collapse'}
           >

@@ -59,113 +59,83 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate all technical indicators needed for regime detection.
     
+    **NOW USES UNIFIED PIPELINE** from indicators.py to eliminate duplication.
+    
     Args:
         df: DataFrame with columns: open, high, low, close, volume (optional)
         
     Returns:
-        DataFrame with all indicators added as columns
+        DataFrame with all indicators added as columns (mapped to regime detector naming)
     """
-    # Ensure required columns are float
-    df['close'] = df['close'].astype(float)
-    df['high'] = df['high'].astype(float)
-    df['low'] = df['low'].astype(float)
-    df['open'] = df['open'].astype(float)
+    # Import unified pipeline
+    from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
     
-    # 1. Trend & Momentum
-    adx_ind = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14)
-    df['adx'] = adx_ind.adx()
+    # Initialize and run pipeline
+    pipeline = TechnicalIndicatorsPipeline()
+    result_df = pipeline.calculate_indicators(df)
     
-    rsi_ind = RSIIndicator(close=df['close'], window=14)
-    df['rsi'] = rsi_ind.rsi()
+    # Map Pipeline B column names to regime detector's expected names
+    # Pipeline B uses underscored names (ema_16), regime detector uses non-underscored (ema16)
+    if 'ema_16' in result_df.columns:
+        result_df['ema16'] = result_df['ema_16']
+    if 'ema_89' in result_df.columns:
+        result_df['ema89'] = result_df['ema_89']
+    if 'macd_histogram' in result_df.columns:
+        result_df['macd_hist'] = result_df['macd_histogram']
+    if 'bb_upper' in result_df.columns:
+        result_df['bb_high'] = result_df['bb_upper']
+    if 'bb_lower' in result_df.columns:
+        result_df['bb_low'] = result_df['bb_lower']
+    if 'bb_width' in result_df.columns:
+        result_df['bb_wband'] = result_df['bb_width']
+    if 'atr_14' in result_df.columns:
+        result_df['atr'] = result_df['atr_14']
+    if 'rsi_14' in result_df.columns:
+        result_df['rsi'] = result_df['rsi_14']
+    
+    # Add regime-specific columns not calculated by the unified pipeline
+    # These are specific to regime detection logic
+    
+    # Candle Body Analysis (Volume Proxy)
+    result_df['body_size'] = (result_df['close'] - result_df['open']).abs()
+    result_df['total_range'] = (result_df['high'] - result_df['low']).abs()
+    result_df['body_ratio'] = result_df['body_size'] / result_df['total_range'].replace(0, 0.0001)
+    
+    # Large body flag (Body Ratio > 0.7 AND ATR expansion)
+    if 'atr' in result_df.columns:
+        atr_median = result_df['atr'].rolling(window=14).median()
+        result_df['large_body'] = (result_df['body_ratio'] > 0.7) & (result_df['atr'] > atr_median * 1.1)
+    else:
+        result_df['large_body'] = result_df['body_ratio'] > 0.7
+    
+    if 'resistance_level' in result_df.columns:
+        result_df['pivot_h'] = result_df['resistance_level']
+    if 'support_level' in result_df.columns:
+        result_df['pivot_l'] = result_df['support_level']
+    
+    return result_df
 
-    # 2. Volatility (Bollinger + ATR for Normalization)
-    bb_ind = BollingerBands(close=df['close'], window=20, window_dev=2)
-    df['bb_wband'] = bb_ind.bollinger_wband()
-    df['bb_high'] = bb_ind.bollinger_hband()
-    df['bb_low'] = bb_ind.bollinger_lband()
-    
-    atr_ind = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14)
-    df['atr'] = atr_ind.average_true_range()
 
-    # 3. KB EMAs (16 & 165)
-    df['ema16'] = EMAIndicator(close=df['close'], window=16).ema_indicator()
-    df['ema165'] = EMAIndicator(close=df['close'], window=165).ema_indicator()
+def calculate_weighted_score(signals: Dict[str, bool], weights: Dict[str, float]) -> float:
+    """
+    Calculate weighted confluence score from binary signals.
     
-    # 4. Momentum & Oscillators
-    macd = MACD(close=df['close'], window_slow=26, window_fast=12, window_sign=9)
-    df['macd_hist'] = macd.macd_diff()
-    df['macd'] = macd.macd()
+    Replaces the old "2 out of 3-4" binary counting with a weighted model
+    where stronger signals (ADX, MACD) contribute more than weaker ones (oscillators).
     
-    stoch = StochasticOscillator(high=df['high'], low=df['low'], close=df['close'], window=14, smooth_window=3)
-    df['stoch_k'] = stoch.stoch()
-    df['stoch_d'] = stoch.stoch_signal()
-    
-    df['cci'] = CCIIndicator(high=df['high'], low=df['low'], close=df['close'], window=14).cci()
-    
-    # 5. Supertrend (7, 3) Implementation
-    period = 7
-    multiplier = 3
-    df['hl2'] = (df['high'] + df['low']) / 2
-    df['atr_st'] = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=period).average_true_range()
-    
-    df['basic_ub'] = df['hl2'] + (multiplier * df['atr_st'])
-    df['basic_lb'] = df['hl2'] - (multiplier * df['atr_st'])
-    
-    df['final_ub'] = 0.0
-    df['final_lb'] = 0.0
-    for i in range(1, len(df)):
-        # Upper Band
-        if (df.index[i-1] in df.index):
-            prev_ub = df.iloc[i-1]['final_ub']
-            prev_close = df.iloc[i-1]['close']
-            if df.iloc[i]['basic_ub'] < prev_ub or prev_close > prev_ub:
-                df.at[df.index[i], 'final_ub'] = df.iloc[i]['basic_ub']
-            else:
-                df.at[df.index[i], 'final_ub'] = prev_ub
+    Args:
+        signals: Dict of signal_name -> bool (True if signal is present)
+        weights: Dict of signal_name -> weight (0.0 to 1.0, should sum to 1.0)
         
-        # Lower Band
-        if (df.index[i-1] in df.index):
-            prev_lb = df.iloc[i-1]['final_lb']
-            prev_close = df.iloc[i-1]['close']
-            if df.iloc[i]['basic_lb'] > prev_lb or prev_close < prev_lb:
-                df.at[df.index[i], 'final_lb'] = df.iloc[i]['basic_lb']
-            else:
-                df.at[df.index[i], 'final_lb'] = prev_lb
+    Returns:
+        Weighted score from 0-100
+    """
+    total_score = 0.0
+    for signal_name, is_present in signals.items():
+        if is_present and signal_name in weights:
+            total_score += weights[signal_name] * 100  # Convert to 0-100 scale
     
-    df['supertrend'] = 0.0
-    state = True  # True = Up
-    for i in range(1, len(df)):
-        prev_st = df.iloc[i-1]['supertrend']
-        curr_ub = df.iloc[i]['final_ub']
-        curr_lb = df.iloc[i]['final_lb']
-        curr_close = df.iloc[i]['close']
-        
-        if state:
-            if curr_close < curr_lb:
-                state = False
-                df.at[df.index[i], 'supertrend'] = curr_ub
-            else:
-                df.at[df.index[i], 'supertrend'] = curr_lb
-        else:
-            if curr_close > curr_ub:
-                state = True
-                df.at[df.index[i], 'supertrend'] = curr_lb
-            else:
-                df.at[df.index[i], 'supertrend'] = curr_ub
-    
-    # 6. Candle Body Analysis (Volume Proxy)
-    df['body_size'] = (df['close'] - df['open']).abs()
-    df['total_range'] = (df['high'] - df['low']).abs()
-    df['body_ratio'] = df['body_size'] / df['total_range'].replace(0, 0.0001)
-    df['atr_14'] = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14).average_true_range()
-    df['large_body'] = df['body_size'] > (df['atr_14'] * 0.8)  # Heuristic for "Large"
-    
-    # 7. Support / Resistance (Fractal Pivots)
-    window = 5
-    df['pivot_h'] = df['high'].rolling(window=window, center=True).max()
-    df['pivot_l'] = df['low'].rolling(window=window, center=True).min()
-    
-    return df
+    return round(total_score, 1)
 
 
 def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
@@ -197,18 +167,31 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
     price = float(current['close'])
     close = current['close']
     adx_val = current.get('adx', 0)
+    plus_di = current.get('plus_di', 0)   # R5: Directional Movement Indicator
+    minus_di = current.get('minus_di', 0)  # R5: Directional Movement Indicator
     rsi_val = current.get('rsi', 0)
     atr_val = current.get('atr', 0)
     prev_atr = prev.get('atr', 0)
     is_atr_spike = atr_val > (prev_atr * 1.2)
     
     ema16 = current['ema16']
-    ema165 = current['ema165']
+    ema89 = current['ema89']  # Fibonacci period, works with 100-candle payloads
     st_val = current['supertrend']
     stoch_k = current['stoch_k']
     stoch_d = current['stoch_d']
     macd_hist = current['macd_hist']
     prev_macd_hist = prev['macd_hist']
+    
+    # R4: Weighted Confluence Model
+    # ADX 25%, MACD 20%, Body/Volume 20%, Supertrend 15%, Oscillator 10%, ATR 10%
+    WEIGHTS = {
+        'adx': 0.25,
+        'macd': 0.20,
+        'body_volume': 0.20,
+        'supertrend': 0.15,
+        'oscillator': 0.10,
+        'atr': 0.10
+    }
     
     # --- KB Regime Detection Engine ---
     condition = MarketCondition.NEUTRAL
@@ -216,44 +199,60 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
     direction = None  # "CALL" or "PUT"
     suggested_expiry = "1m"  # Default
     
-    # 1. STRONG MOMENTUM TRENDING
+    # 1. STRONG MOMENTUM TRENDING (R4 + R5: Weighted Scoring + Directional Confirmation)
     if adx_val > 30:
         # Bullish
         if close > ema16 and close > st_val:
-            score = 0
-            if adx_val > 35: score += 1
-            if macd_hist > prev_macd_hist: score += 1
-            if current['large_body'] and current['close'] > current['open']: score += 1
-            if atr_val > prev_atr: score += 1
+            signals = {
+                'adx': adx_val > 35,  # 25% weight
+                'macd': macd_hist > prev_macd_hist,  # 20% weight
+                'body_volume': current['large_body'] and current['close'] > current['open'],  # 20% weight
+                'supertrend': close > st_val,  # 15% weight (already checked above)
+                'oscillator': plus_di > minus_di,  # R5: +DI > -DI (10% weight)
+                'atr': atr_val > prev_atr  # 10% weight
+            }
             
-            if score >= 2:
+            weighted_score = calculate_weighted_score(signals, WEIGHTS)
+            
+            # R4: Raised threshold from 60-65 → 70
+            if weighted_score >= 70:
                 condition = MarketCondition.STRONG_MOMENTUM_UP
-                confluence_score = 65 + (score * 5)
+                confluence_score = int(weighted_score)
                 direction = "CALL"
                 suggested_expiry = "3m"
             else:
-                logger.debug(f"Momentum UP ignored (Score {score}/4)")
+                logger.debug(f"Momentum UP ignored (Weighted Score {weighted_score:.1f}/100, need ≥70)")
         # Bearish
         elif close < ema16 and close < st_val:
-            score = 0
-            if adx_val > 35: score += 1
-            if macd_hist < prev_macd_hist: score += 1
-            if current['large_body'] and current['close'] < current['open']: score += 1
-            if atr_val > prev_atr: score += 1
+            signals = {
+                'adx': adx_val > 35,  # 25% weight
+                'macd': macd_hist < prev_macd_hist,  # 20% weight
+                'body_volume': current['large_body'] and current['close'] < current['open'],  # 20% weight
+                'supertrend': close < st_val,  # 15% weight (already checked above)
+                'oscillator': minus_di > plus_di,  # R5: -DI > +DI (10% weight)
+                'atr': atr_val > prev_atr  # 10% weight
+            }
             
-            if score >= 2:
+            weighted_score = calculate_weighted_score(signals, WEIGHTS)
+            
+            # R4: Raised threshold from 60-65 → 70
+            if weighted_score >= 70:
                 condition = MarketCondition.STRONG_MOMENTUM_DOWN
-                confluence_score = 65 + (score * 5)
+                confluence_score = int(weighted_score)
                 direction = "PUT"
                 suggested_expiry = "3m"
             else:
-                logger.debug(f"Momentum DOWN ignored (Score {score}/4)")
+                logger.debug(f"Momentum DOWN ignored (Weighted Score {weighted_score:.1f}/100, need ≥70)")
 
     # 2. TRENDING WITH PULLBACKS (If not strong momentum)
     if condition == MarketCondition.NEUTRAL and adx_val > 20:
+        # R6: ATR-Normalized Pullback Distance (replaces fixed 0.005)
+        # Multiplier of 2.0 allows for reasonable pullback depth across volatility regimes
+        atr_normalized_threshold = (atr_val * 2.0) / close if close > 0 else 0.005
         dist_ema16 = abs(close - ema16) / ema16
+        
         # Bullish Pullback
-        if close > ema165 and dist_ema16 < 0.005:
+        if close > ema89 and dist_ema16 < atr_normalized_threshold:  # Macro uptrend bias (EMA-89)
             score = 0
             if 40 <= rsi_val <= 55: score += 1
             if close <= current['bb_low'] * 1.001: score += 1
@@ -265,7 +264,7 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
                 direction = "CALL"
                 suggested_expiry = "5m"
         # Bearish Pullback
-        elif close < ema165 and dist_ema16 < 0.005:
+        elif close < ema89 and dist_ema16 < atr_normalized_threshold:  # Macro downtrend bias (EMA-89)
             score = 0
             if 45 <= rsi_val <= 60: score += 1
             if close >= current['bb_high'] * 0.999: score += 1
@@ -282,7 +281,7 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
         # Overbought (Sell)
         if close >= current['bb_high'] * 0.998:
             score = 0
-            if rsi_val > 70: score += 1
+            if rsi_val > 75: score += 1  # OTC-tuned: 35/75 (binary options push further than Forex)
             if stoch_k > 80 and stoch_k < stoch_d: score += 1
             if not current['large_body']: score += 1
             
@@ -361,7 +360,7 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
         "stoch_k": round(float(stoch_k), 2),
         "cci": round(float(current['cci']), 2),
         "ema16": round(float(ema16), 2),
-        "ema165": round(float(ema165), 2),
+        "ema89": round(float(ema89), 2),
         "supertrend": round(float(st_val), 2),
         "atr": round(float(atr_val), 4),
         "body_ratio": round(float(current['body_ratio']), 2),

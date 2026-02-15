@@ -72,7 +72,7 @@ const useTickAggregation = ({
 
       if (volumeSeries) {
         const vol = Number(c.volume || c.tick_volume || 0); // Handle historical volume if present
-        const color = close >= open ? '#26a69a' : '#ef5350';
+        const color = close >= open ? 'rgba(38, 166, 153, 0.5)' : 'rgba(239, 83, 80, 0.5)';
         mappedVolume.push({ time, value: vol, color });
       }
     });
@@ -145,7 +145,7 @@ const useTickAggregation = ({
         candleSeries.update(candle);
 
         if (volumeSeries) {
-          const color = candle.close >= candle.open ? '#26a69a' : '#ef5350';
+          const color = candle.close >= candle.open ? 'rgba(38, 166, 153, 0.25)' : 'rgba(239, 83, 80, 0.25)';
           volumeSeries.update({
             time: candleTime,
             value: currentVolumeRef.current,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import useSettingsStore from '../store/settingsStore';
 import useMarketStore from '../store/marketStore';
 import useUserStore from '../store/userStore';
@@ -16,7 +16,7 @@ import { indicatorOptions } from '../config/chartOptions';
 import useTextToSpeech from '../utils/useTextToSpeech';
 
 const SettingsPanel = () => {
-  const { settings, updateSection, resetAll, fetchSettings, saveSettings } = useSettingsStore();
+  const { settings, updateSection, resetAll, saveSettings } = useSettingsStore();
   const { assetFilterState, setAssetFilterState, activeIndicators, setActiveIndicators } = useMarketStore();
   const { user, updateUser } = useUserStore();
   const sidebarSkinFileInputRef = useRef(null);
@@ -95,10 +95,6 @@ const SettingsPanel = () => {
   const sidebarSkinPreviewUrl = useMemo(() => {
     return settings.global.sidebarSkinDataUrl || '';
   }, [settings.global.sidebarSkinDataUrl]);
-
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
 
   const handleSave = async () => {
     const success = await saveSettings();

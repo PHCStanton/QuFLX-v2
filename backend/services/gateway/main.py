@@ -243,7 +243,7 @@ app.add_middleware(
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 socket_app = socketio.ASGIApp(sio, app)
 
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, ai_voice, asset_control, ops, dev_logs, alerts, strategy
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, profiles, ai, ai_voice, asset_control, ops, dev_logs, alerts, strategy
 
 # API Routers
 logger.debug(f"Registering assets router: {assets.router}")
@@ -253,6 +253,7 @@ app.include_router(history.router, prefix="/api/v1/history", tags=["History"])
 app.include_router(screenshots.router, prefix="/api/v1/screenshots", tags=["Screenshots"])
 app.include_router(indicators.router, prefix="/api/v1/indicators", tags=["Indicators"])
 app.include_router(settings.router, prefix="/api/v1/settings", tags=["Settings"])
+app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 app.include_router(ai.router, prefix="/api/v1/ai", tags=["AI"])
 app.include_router(ai_voice.router, prefix="/api/v1/ai/voice", tags=["AI"])  # Check if ai_voice is imported
 app.include_router(asset_control.router, prefix="/api/v1/asset-control", tags=["Asset Control"])
@@ -264,9 +265,9 @@ app.include_router(strategy.router, prefix="/api/v1/strategy", tags=["Strategy L
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""
     pubsub = redis_client.pubsub()
-    await pubsub.subscribe("market_data", "trading:signals", "system_status", "alerts:dispatched")
+    await pubsub.subscribe("market_data", "trading:signals", "system_status", "alerts:dispatched", "scan:heartbeat")
     
-    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status, alerts:dispatched")
+    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status, alerts:dispatched, scan:heartbeat")
     
     async for message in pubsub.listen():
         if message['type'] == 'message':
@@ -291,6 +292,9 @@ async def redis_listener():
 
                 elif channel == "alerts:dispatched":
                     await sio.emit('new_alert', parsed_data)
+
+                elif channel == "scan:heartbeat":
+                    await sio.emit('scan_heartbeat', parsed_data)
 
                 elif channel == "system_status":
                     try:

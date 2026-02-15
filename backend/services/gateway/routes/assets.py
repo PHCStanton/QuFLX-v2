@@ -22,6 +22,18 @@ async def refresh_assets(payload: Dict[str, Any] = Body(...)):
     Executes V2 capability: RefreshAssets with configurable parameters
     """
     logger.info(f"DEBUG: Entered refresh_assets with payload: {payload}")
+    
+    # Send reset signal to Alert Dispatcher (Phase 4 #15)
+    try:
+        import redis
+        from backend.services.gateway.main import REDIS_URL
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+        r.publish("system:commands", json.dumps({"command": "reset_scanner", "target": "all"}))
+        r.close()
+        logger.info("📡 Sent reset_scanner signal to Redis")
+    except Exception as e:
+         logger.warning(f"Could not send reset_scanner signal: {e}")
+
     try:
         # Validate and bound input parameters (Fail Fast - CORE_PRINCIPLES #9)
         min_pct = max(1, min(100, int(payload.get("min_pct", 92))))

@@ -1,4 +1,4 @@
-import Card from './Card';
+import { CollapsibleCard } from './Card';
 import AssetPayoutPanel from './AssetPayoutPanel';
 
 const LiveTradingPanel = () => {
@@ -13,10 +13,13 @@ const LiveTradingPanel = () => {
         />
       </div>
 
-      <Card className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light">
-        <h3 className="text-xs font-semibold text-text-secondary mb-2 uppercase tracking-wider">Live Trading</h3>
+      <CollapsibleCard
+        className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light"
+        headerClassName="mb-2"
+        headerLeft={<h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Live Trading</h3>}
+      >
         <p className="text-sm text-gray-400">Live trading controls will appear here.</p>
-      </Card>
+      </CollapsibleCard>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import clickSound from '../assets/Sounds/UIClick-Short_soft click.mp3';
 
 const AnalysisToggle = ({ onClick, active, icon: Icon, tooltip, size = 32 }) => {
