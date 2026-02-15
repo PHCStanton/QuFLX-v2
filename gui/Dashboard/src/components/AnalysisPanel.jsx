@@ -9,13 +9,22 @@ import { Play, Square, Activity, ShieldCheck, ListChecks, Info } from 'lucide-re
 
 const AnalysisPanel = () => {
   const [isPoolOpen, setIsPoolOpen] = useState(false);
-  const [isFeedOpen, setIsFeedOpen] = useState(true);
 
   const { running, pid, started_at, loading, startAlerts, stopAlerts } = useAlerts();
   const { subscribedAssetKeys, alertFeed, setSelectedAsset, scanHeartbeat } = useMarketStore();
   const { settings, updateSection } = useSettingsStore();
 
-  const isHeartbeatActive = scanHeartbeat && (Date.now() - scanHeartbeat.receivedAt < 120000); // Active if < 2m old
+  const isHeartbeatActive = scanHeartbeat && (Date.now() - scanHeartbeat.receivedAt < 120000);
+
+  const latestAlertByAsset = alertFeed.reduce((acc, alert) => {
+    acc[alert.asset] = alert;
+    return acc;
+  }, {});
+
+  const combinedAssets = Array.from(new Set([
+    ...subscribedAssetKeys,
+    ...alertFeed.map(alert => alert.asset)
+  ]));
 
   const handleToggleDispatcher = async () => {
     if (running) {
@@ -122,35 +131,86 @@ const AnalysisPanel = () => {
           </>
         }
         headerRight={
-          <span className="text-[10px] font-bold text-text-secondary bg-section-bg px-2 py-0.5 rounded border border-border-primary">
-            {subscribedAssetKeys.length} Assets
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-text-secondary bg-section-bg px-2 py-0.5 rounded border border-border-primary">
+              {subscribedAssetKeys.length} Assets
+            </span>
+            <span className="text-[10px] font-bold text-text-secondary bg-section-bg px-2 py-0.5 rounded border border-border-primary">
+              Signals {alertFeed.length}
+            </span>
+          </div>
         }
       >
-        {subscribedAssetKeys.length > 0 ? (
+        {combinedAssets.length > 0 ? (
           <div className="space-y-1">
-            {subscribedAssetKeys.map(asset => {
-              // Check if backend confirms this asset is being scanned
+            {combinedAssets.map(asset => {
               const isConfirmed = scanHeartbeat?.assets_scanned?.includes(asset);
+              const alert = latestAlertByAsset[asset];
+              const isSignal = Boolean(alert);
 
               return (
-                <div key={asset} className="flex items-center justify-between py-1.5 px-2 hover:bg-card-bg/50 rounded transition-colors group">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-1.5 h-1.5 rounded-full transition-colors ${isConfirmed
-                        ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse"
-                        : "bg-yellow-500/50"
-                        }`}
-                      title={isConfirmed ? "Active Monitoring" : "Pending / Connecting..."}
-                    />
-                    <span className={`text-xs font-mono tracking-wide ${isConfirmed ? "text-text-primary" : "text-text-secondary"}`}>
-                      {asset}
-                    </span>
+                <div
+                  key={asset}
+                  onClick={() => setSelectedAsset(asset)}
+                  className={`p-2 rounded transition-all border border-border-primary/20 hover:border-accent-blue/40 cursor-pointer ${isSignal ? "" : "hover:bg-card-bg/50"}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full transition-colors ${isSignal
+                          ? alert.direction === 'CALL'
+                            ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]"
+                            : "bg-red-500/70"
+                          : isConfirmed
+                            ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse"
+                            : "bg-yellow-500/50"
+                          }`}
+                        title={isSignal ? "Signal Identified" : isConfirmed ? "Active Monitoring" : "Pending / Connecting..."}
+                      />
+                      <span className={`text-xs font-mono tracking-wide ${isSignal || isConfirmed ? "text-text-primary" : "text-text-secondary"}`}>
+                        {asset}
+                      </span>
+                      {isSignal && (
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-accent-blue">
+                          Signal
+                        </span>
+                      )}
+                    </div>
+                    {isSignal ? (
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black px-1.5 rounded ${alert.direction === 'CALL' ? 'bg-accent-green text-black' : 'bg-red-500 text-white'
+                          }`}>
+                          {alert.direction}
+                        </span>
+                        <span className="text-[9px] font-mono text-text-secondary">
+                          {new Date(alert.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className={`text-[9px] font-bold uppercase tracking-widest transition-opacity ${isConfirmed ? "text-accent-green opacity-100" : "text-yellow-500 opacity-80"
+                        }`}>
+                        {isConfirmed ? "Active" : "Pending"}
+                      </span>
+                    )}
                   </div>
-                  <span className={`text-[9px] font-bold uppercase tracking-widest transition-opacity ${isConfirmed ? "text-accent-green opacity-100" : "text-yellow-500 opacity-80"
-                    }`}>
-                    {isConfirmed ? "Active" : "Pending"}
-                  </span>
+                  {isSignal && (
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[10px] text-text-secondary truncate max-w-[140px]">{alert.regime}</span>
+                      <div className="flex gap-2 overflow-x-hidden">
+                        <div className="bg-card-bg px-1.5 py-0.5 rounded text-[9px] text-text-secondary border border-border-primary/30">
+                          {alert.expiry}
+                        </div>
+                        <div className="bg-card-bg px-1.5 py-0.5 rounded text-[9px] text-text-secondary border border-border-primary/30">
+                          Score: {alert.confluence}
+                        </div>
+                        {alert.ai_confirmed && (
+                          <div className="bg-accent-blue/10 px-1.5 py-0.5 rounded text-[9px] text-accent-blue border border-accent-blue/20">
+                            AI ✓
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -162,72 +222,8 @@ const AnalysisPanel = () => {
           </div>
         )}
       </CollapsibleCard>
-
-      <CollapsibleCard
-        isOpen={isFeedOpen}
-        onToggle={() => setIsFeedOpen(!isFeedOpen)}
-        className={`p-4 rounded-xl quflx-section-light border border-border-primary shadow-lg overflow-hidden flex flex-col transition-all duration-300 ${isFeedOpen ? 'flex-1' : 'flex-none h-fit'
-          }`}
-        headerClassName="mb-4 pb-2 border-b border-border-primary/30"
-        headerLeft={
-          <>
-            <Activity className="text-accent-green" size={18} />
-            <h3 className="text-xs font-bold text-text-primary uppercase tracking-tight">Live Signal Feed</h3>
-          </>
-        }
-        headerRight={
-          <span className="text-[10px] font-bold text-text-secondary bg-section-bg px-2 py-0.5 rounded border border-border-primary">
-            Latest {alertFeed.length}
-          </span>
-        }
-        bodyClassName="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1"
-      >
-        {alertFeed.length > 0 ? (
-          alertFeed.map((alert, idx) => (
-            <div
-              key={`${alert.asset}-${idx}`}
-              onClick={() => setSelectedAsset(alert.asset)}
-              className={`p-2 rounded border border-border-primary/20 hover:border-accent-blue/40 cursor-pointer transition-all ${alert.direction === 'CALL' ? 'bg-accent-green/5' : 'bg-red-500/5'
-                }`}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-[11px] font-bold text-text-primary">{alert.asset}</span>
-                <span className={`text-[10px] font-black px-1.5 rounded ${alert.direction === 'CALL' ? 'bg-accent-green text-black' : 'bg-red-500 text-white'
-                  }`}>
-                  {alert.direction}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-text-secondary truncate max-w-[120px]">{alert.regime}</span>
-                <span className="text-[9px] font-mono text-text-secondary">
-                  {new Date(alert.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-              </div>
-              <div className="mt-1 flex gap-2 overflow-x-hidden">
-                <div className="bg-card-bg px-1.5 py-0.5 rounded text-[9px] text-text-secondary border border-border-primary/30">
-                  {alert.expiry}
-                </div>
-                <div className="bg-card-bg px-1.5 py-0.5 rounded text-[9px] text-text-secondary border border-border-primary/30">
-                  Score: {alert.confluence}
-                </div>
-                {alert.ai_confirmed && (
-                  <div className="bg-accent-blue/10 px-1.5 py-0.5 rounded text-[9px] text-accent-blue border border-accent-blue/20">
-                    AI ✓
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
-            <Info className="text-text-secondary mb-2" size={24} />
-            <p className="text-xs text-text-secondary">No signals yet.<br />Dispatcher is monitoring pool.</p>
-          </div>
-        )}
-      </CollapsibleCard>
     </div>
   );
 };
 
 export default AnalysisPanel;
-

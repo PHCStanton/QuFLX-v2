@@ -27,15 +27,15 @@ const NeomorphicSwitch = ({ checked, onChange, leftLabel, rightLabel, id }) => {
           style={{
             background: checked
               ? `linear-gradient(135deg, rgb(var(--accent-primary)) 0%, rgba(var(--accent-glow), 0.7) 100%)`
-              : 'rgba(var(--accent-glow), 0.1)',
-            border: `1px solid rgba(var(--accent-glow), ${checked ? '0.6' : '0.2'})`
+              : 'linear-gradient(135deg, rgba(var(--accent-glow), 0.22) 0%, rgba(255,255,255,0.04) 100%)',
+            border: `1px solid rgba(var(--accent-glow), ${checked ? '0.6' : '0.35'})`
           }}>
         </div>
 
         {/* Knob */}
-        <div className={`absolute top-[3px] left-[3px] w-[24px] h-[24px] rounded-full transition-all duration-400 cubic-bezier(0.68,-0.55,0.27,1.55) z-10 shadow-[3px_3px_6px_rgba(0,0,0,0.8),-1px_-1px_3px_rgba(255,255,255,0.1)] ${checked ? 'translate-x-[30px]' : ''}`}
-          style={{ backgroundColor: '#121212' }}>
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/5 to-transparent opacity-30"></div>
+        <div className={`absolute top-[3px] left-[3px] w-[24px] h-[24px] rounded-full transition-all duration-400 cubic-bezier(0.68,-0.55,0.27,1.55) z-10 ${checked ? 'translate-x-[30px] shadow-[3px_3px_6px_rgba(0,0,0,0.8),-1px_-1px_3px_rgba(255,255,255,0.1)]' : 'shadow-[2px_2px_6px_rgba(0,0,0,0.6),0_0_0_2px_rgba(255,255,255,0.35)]'}`}
+          style={{ backgroundColor: checked ? '#121212' : '#000000ff', border: checked ? '1px solid rgba(255, 255, 255, 0.72)' : '1px solid rgba(255,255,255,0.6)' }}>
+          <div className={`absolute inset-0 rounded-full ${checked ? 'bg-gradient-to-br from-white/5 to-transparent opacity-30' : 'bg-gradient-to-br from-white/60 to-white/10 opacity-80'}`}></div>
         </div>
 
         {/* Glow */}

@@ -717,7 +717,8 @@ class OTCDispatcher:
         
         self.logger_service = TickLogger(data_dir=PROJECT_ROOT / "data" / "ticks")
         self.redis_url = REDIS_URL
-        self.redis_mode = False # Default unless toggled via main()
+        self.redis_mode = False
+        self.enable_tick_logging = os.getenv("ENABLE_TICK_LOGGING", "false").lower() == "true"
         
         self.subscriber = RedisSubscriber(self.redis_url, self.logger_service, self.assets)
         self.ticker_sub = TickerSubscriber(self.redis_url)
@@ -775,7 +776,7 @@ class OTCDispatcher:
         self.ticker_sub.active_assets = set()
         
         # 3. Reset Redis subscriber whitelist
-        if self.redis_mode and self.subscriber:
+        if self.enable_tick_logging and self.subscriber:
             self.subscriber.assets = []
             
         # 4. Immediate Discovery Re-Sync (Fix: Blind spot on reset)
@@ -1141,12 +1142,13 @@ class OTCDispatcher:
         if not self.assets:
             logger.warning("No assets found in history folder and none provided. Waiting for 'Collect History'...")
 
-        if self.redis_mode:
+        if self.enable_tick_logging and redis:
             logger.info("Starting Redis Subscriber task...")
-            # Ensure subscriber knows about all current assets
             if self.subscriber:
                 self.subscriber.assets = [a.upper().replace("_", "") for a in self.assets]
             asyncio.create_task(self.subscriber.run())
+        elif self.enable_tick_logging and not redis:
+            logger.error("Tick logging enabled but redis library is unavailable.")
 
         while True:
             try:
@@ -1211,7 +1213,7 @@ class OTCDispatcher:
                     logger.info(f"Scanner Pulse | Active Workers: {len(active_workers)} | Whitelist: {len(self.ticker_sub.active_assets)}")
                 
                 # 4. Continuous Heartbeat (Phase 4 Pulse Fix)
-                if self.redis_mode:
+                if self.redis_mode and redis:
                     try:
                         client = await self._get_redis_client()
                         heartbeat = {
@@ -1245,8 +1247,9 @@ def main():
 
     async def run_managed():
         dispatcher = OTCDispatcher(assets=args.assets, test_mode=args.test_alert)
+        dispatcher.redis_mode = redis is not None
         if args.redis:
-            dispatcher.redis_mode = True
+            dispatcher.enable_tick_logging = True
         
         try:
             await dispatcher.run_loop()

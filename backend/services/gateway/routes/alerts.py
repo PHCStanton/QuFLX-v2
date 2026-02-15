@@ -160,6 +160,7 @@ async def start_alerts(
             env["SCAN_INTERVAL_SECONDS"] = str(alert_settings.get("scanIntervalSeconds", 60))
             
             # Tick Logging settings
+            env["ENABLE_TICK_LOGGING"] = str(final_use_redis).lower()
             env["TICK_CHUNK_SIZE"] = str(alert_settings.get("tickChunkSize", 1000))
             env["TICK_LOG_DIR"] = alert_settings.get("tickLoggingDir", "data/ticks")
             
