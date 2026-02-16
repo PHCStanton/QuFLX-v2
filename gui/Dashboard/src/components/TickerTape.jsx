@@ -18,18 +18,24 @@ const formatPct = (pct) => {
 
 const buildItems = (assets, quotesByAssetKey) => {
   const list = (assets || []).filter(Boolean);
-  return list.map((label) => {
+  const seen = new Set();
+  return list.reduce((acc, label) => {
     const assetKey = normalizeAsset(label);
+    if (!assetKey || seen.has(assetKey)) {
+      return acc;
+    }
+    seen.add(assetKey);
     const quote = quotesByAssetKey?.[assetKey];
     const price = Number(quote?.price);
     const changePct = Number(quote?.changePct);
-    return {
+    acc.push({
       assetKey,
       label,
       price,
       changePct,
-    };
-  });
+    });
+    return acc;
+  }, []);
 };
 
 const TickerTape = ({ assets, quotesByAssetKey }) => {

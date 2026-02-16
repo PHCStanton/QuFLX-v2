@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
 import {
   fetchDevLogsIndex,
   fetchDevLogsState,
@@ -15,18 +16,34 @@ const formatBytes = (bytes) => {
   return `${mb.toFixed(1)} MB`;
 };
 
-const DevLogsPage = () => {
+const formatDurationMs = (value) => {
+  if (!Number.isFinite(value)) return '-';
+  const seconds = Math.max(0, Math.round(value / 1000));
+  return `${seconds}s`;
+};
+
+const DevLogsPage = ({
+  title = 'Dev Logs',
+  description = '',
+  defaultService = 'gateway',
+  defaultFile = 'gateway.log',
+  initialFilter = '',
+  quickFilters = [],
+  showHeartbeatPanel = false
+}) => {
   const [index, setIndex] = useState(null);
   const [state, setState] = useState(null);
-  const [selectedService, setSelectedService] = useState('gateway');
-  const [selectedFile, setSelectedFile] = useState('gateway.log');
+  const [selectedService, setSelectedService] = useState(defaultService);
+  const [selectedFile, setSelectedFile] = useState(defaultFile);
   const [lines, setLines] = useState(200);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshMs, setRefreshMs] = useState(1500);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(initialFilter);
   const [content, setContent] = useState([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [heartbeat, setHeartbeat] = useState(null);
+  const [copyStatus, setCopyStatus] = useState('');
 
   const timerRef = useRef(null);
 
@@ -130,15 +147,80 @@ const DevLogsPage = () => {
     }
   };
 
+  const resolveServiceSelection = useCallback((serviceName) => {
+    if (!Array.isArray(services) || services.length === 0) return;
+    const svc = services.find((s) => s.name === serviceName);
+    if (!svc) {
+      setError(`Service "${serviceName}" not found.`);
+      return;
+    }
+    const nextFiles = Array.isArray(svc.files) ? svc.files : [];
+    setSelectedService(serviceName);
+    if (!nextFiles.length) {
+      setSelectedFile('');
+      return;
+    }
+    const nextFile = nextFiles.find((f) => f.name === selectedFile)?.name || nextFiles[0].name;
+    setSelectedFile(nextFile);
+  }, [services, selectedFile]);
+
+  const handleCopyLastLines = async () => {
+    setError('');
+    setCopyStatus('');
+    try {
+      if (!selectedService || !selectedFile) {
+        throw new Error('Select a service and file first.');
+      }
+      if (!navigator?.clipboard) {
+        throw new Error('Clipboard API unavailable in this context.');
+      }
+      const targetLines = 200;
+      const data = await fetchDevLogTail({ service: selectedService, file: selectedFile, lines: targetLines });
+      const linesArr = Array.isArray(data.content) ? data.content : [];
+      await navigator.clipboard.writeText(linesArr.join('\n'));
+      setContent(linesArr);
+      setLines(targetLines);
+      setCopyStatus(`Copied ${linesArr.length} lines`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      window.setTimeout(() => setCopyStatus(''), 2000);
+    }
+  };
+
+  useEffect(() => {
+    if (!showHeartbeatPanel) return;
+    const socket = io('http://localhost:8000', {
+      transports: ['websocket', 'polling'],
+      autoConnect: true
+    });
+    const onHeartbeat = (data) => {
+      setHeartbeat({ ...data, receivedAt: Date.now() });
+    };
+    socket.on('scan_heartbeat', onHeartbeat);
+    return () => {
+      socket.off('scan_heartbeat', onHeartbeat);
+      socket.disconnect();
+    };
+  }, [showHeartbeatPanel]);
+
+  const heartbeatAgeMs = heartbeat ? Date.now() - heartbeat.receivedAt : null;
+  const heartbeatIntervalMs = heartbeat ? Number(heartbeat.scan_interval || 60) * 1000 : null;
+  const heartbeatStaleMs = heartbeatIntervalMs ? heartbeatIntervalMs * 3 : null;
+  const heartbeatStale = heartbeat && heartbeatStaleMs ? heartbeatAgeMs > heartbeatStaleMs : false;
+
   return (
     <div className="min-h-screen bg-dashboard-bg text-white p-4">
       <div className="max-w-6xl mx-auto space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold">Dev Logs</h1>
+            <h1 className="text-xl font-bold">{title}</h1>
             <div className="text-xs text-gray-400 mt-1">
               Base: {index?.base_dir || '-'} · Gateway level: {state?.gateway_log_level || '-'} · Debug errors: {String(!!state?.debug_errors)}
             </div>
+            {description ? (
+              <div className="text-xs text-gray-500 mt-1">{description}</div>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2">
@@ -248,6 +330,56 @@ const DevLogsPage = () => {
                 className="w-full bg-black/30 border border-gray-800 rounded px-2 py-1.5 text-sm"
               />
             </div>
+            {quickFilters.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {quickFilters.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setFilter(item.value)}
+                    className="px-2.5 py-1 text-[11px] rounded bg-[#0f1419] border border-gray-800 text-gray-200 hover:bg-gray-800"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setFilter('')}
+                  className="px-2.5 py-1 text-[11px] rounded bg-[#0f1419] border border-gray-800 text-gray-400 hover:bg-gray-800"
+                >
+                  Clear
+                </button>
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <div className="text-[11px] text-gray-500 uppercase tracking-wider">Quick Switch</div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => resolveServiceSelection('alert_dispatch')}
+                  className="px-2.5 py-1 text-[11px] rounded bg-[#0f1419] border border-gray-800 text-gray-200 hover:bg-gray-800"
+                >
+                  Alert Dispatch
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resolveServiceSelection('gateway');
+                    setFilter('AI');
+                  }}
+                  className="px-2.5 py-1 text-[11px] rounded bg-[#0f1419] border border-gray-800 text-gray-200 hover:bg-gray-800"
+                >
+                  Gateway AI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveServiceSelection('gateway')}
+                  className="px-2.5 py-1 text-[11px] rounded bg-[#0f1419] border border-gray-800 text-gray-200 hover:bg-gray-800"
+                >
+                  Gateway
+                </button>
+              </div>
+            </div>
 
             <div className="text-[11px] text-gray-500">
               Requires Gateway env: QFLX_ENABLE_DEV_LOGS=1 (local-only)
@@ -255,10 +387,47 @@ const DevLogsPage = () => {
           </div>
 
           <div className="lg:col-span-2 bg-[#0f1419] border border-gray-800 rounded-xl p-4">
+            {showHeartbeatPanel ? (
+              <div className="mb-4 rounded-lg border border-gray-800 bg-black/20 p-3">
+                <div className="text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">Heartbeat</div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-300">
+                  <div>
+                    <div className="text-[11px] text-gray-500">Last Seen</div>
+                    <div>{heartbeat ? new Date(heartbeat.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500">Status</div>
+                    <div className={heartbeatStale ? 'text-red-400' : 'text-emerald-300'}>
+                      {heartbeat ? (heartbeatStale ? 'Stale' : 'Sync') : 'Waiting'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500">Age</div>
+                    <div>{formatDurationMs(heartbeatAgeMs)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-gray-500">Stale After</div>
+                    <div>{formatDurationMs(heartbeatStaleMs)}</div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Output</div>
-              <div className="text-[11px] text-gray-500">{isLoading ? 'Loading…' : `${filteredLines.length}/${content.length} lines`}</div>
+              <div className="flex items-center gap-2">
+                <div className="text-[11px] text-gray-500">{isLoading ? 'Loading…' : `${filteredLines.length}/${content.length} lines`}</div>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyLastLines()}
+                  className="px-2 py-1 text-[11px] rounded bg-[#0f1419] border border-gray-800 text-gray-200 hover:bg-gray-800"
+                >
+                  Copy 200
+                </button>
+              </div>
             </div>
+            {copyStatus ? (
+              <div className="text-[11px] text-emerald-300 mb-2">{copyStatus}</div>
+            ) : null}
             <pre className="text-xs text-gray-200 whitespace-pre-wrap break-words max-h-[70vh] overflow-auto">
               {filteredLines.join('\n')}
             </pre>

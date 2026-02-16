@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { validateMarketData } from '../utils/validators';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
-import alertSignalSound from '../assets/Sounds/Digital_Pulse.mp3';
+import alertSignalSound from '../assets/Sounds/TopGun_Clip_Music_Voice.mp3';
 
 const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
 
@@ -127,6 +127,7 @@ const createTickerSlice = () => ({
   marketData: {},
   tickerMaxAssets: 15,
   subscribedAssetKeys: [],
+  monitoringAssetKeys: [],
   quotesByAssetKey: {},
   baselineByAssetKey: {},
   alertFeed: [] // [{ asset, regime, direction, expiry, price, confluence, ai_confirmed, ai_confidence, timestamp }]
@@ -145,6 +146,15 @@ const createMarketSlice = (set, get) => ({
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
   selectedAssetLoading: false,
+  addMonitoredAsset: (asset) => {
+    const assetKey = normalizeAsset(asset);
+    if (!assetKey) return;
+    const current = get().monitoringAssetKeys || [];
+    const nextMonitoring = uniq([...current, assetKey]);
+    set({ monitoringAssetKeys: nextMonitoring });
+    const required = get().computeRequiredAssetKeys(get().selectedAssetKey);
+    get().applySubscriptions(required);
+  },
   setSelectedAsset: async (asset) => {
     if (!asset) return;
     const nextAssetKey = normalizeAsset(asset);
@@ -562,26 +572,25 @@ const createMarketSlice = (set, get) => ({
     get().syncSubscriptions();
   },
   computeRequiredAssetKeys: (overrideSelectedAssetKey) => {
-    const { panelMode, payoutAssets, selectedAssetKey, tickerMaxAssets } = get();
+    const { panelMode, payoutAssets, selectedAssetKey, tickerMaxAssets, monitoringAssetKeys } = get();
     const nextAssetKey = overrideSelectedAssetKey ?? selectedAssetKey;
 
     if (panelMode !== 'ticker') {
-      return uniq([nextAssetKey]);
+      return uniq([nextAssetKey, ...(monitoringAssetKeys || [])]);
     }
 
     const tickerKeys = (payoutAssets || [])
       .slice(0, tickerMaxAssets)
       .map((a) => normalizeAsset(a));
 
-    return uniq([...tickerKeys, nextAssetKey]);
+    return uniq([...tickerKeys, nextAssetKey, ...(monitoringAssetKeys || [])]);
   },
-  syncSubscriptions: (overrideSelectedAssetKey) => {
+  applySubscriptions: (assetKeys) => {
     const { socket, subscribedAssetKeys } = get();
     if (!socket || !socket.connected) return;
-
-    const required = get().computeRequiredAssetKeys(overrideSelectedAssetKey);
-    const toJoin = required.filter((k) => !subscribedAssetKeys.includes(k));
-    const toLeave = subscribedAssetKeys.filter((k) => !required.includes(k));
+    const normalized = uniq((assetKeys || []).map((k) => normalizeAsset(k)).filter(Boolean));
+    const toJoin = normalized.filter((k) => !subscribedAssetKeys.includes(k));
+    const toLeave = subscribedAssetKeys.filter((k) => !normalized.includes(k));
 
     toLeave.forEach((assetKey) => {
       socket.emit('leave_room', `market_data:${assetKey}`);
@@ -592,11 +601,16 @@ const createMarketSlice = (set, get) => ({
       socket.emit('join_room', `market_data:${assetKey}`);
     });
 
-    // Phase 3: Publish active ticker list to backend (for Allocator & Dispatcher sync)
-    // The backend gateway will forward this to Redis "ticker:active"
-    socket.emit('update_active_ticker', required);
+    socket.emit('update_active_ticker', normalized);
 
-    set({ subscribedAssetKeys: required });
+    set({ subscribedAssetKeys: normalized });
+  },
+  syncSubscriptions: (overrideSelectedAssetKey) => {
+    const { socket } = get();
+    if (!socket || !socket.connected) return;
+
+    const required = get().computeRequiredAssetKeys(overrideSelectedAssetKey);
+    get().applySubscriptions(required);
   },
   autoRefresh: false,
   refreshInterval: null,

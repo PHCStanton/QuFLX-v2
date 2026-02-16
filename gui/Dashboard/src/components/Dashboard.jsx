@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import useMarketStore from '../store/marketStore';
-import useSettingsStore from '../store/settingsStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import ChartWorkspace from './ChartWorkspace';
@@ -11,7 +10,6 @@ import ErrorToast from './ErrorToast';
 
 const Dashboard = () => {
   const { connectSocket, disconnectSocket, activeTab } = useMarketStore();
-  const { settings, fetchSettings } = useSettingsStore();
 
   const containerRef = useRef(null);
   const isDraggingRef = useRef(false);
@@ -93,35 +91,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     connectSocket();
-    fetchSettings();
     return () => disconnectSocket();
-  }, [connectSocket, disconnectSocket, fetchSettings]);
-
-  // Apply theme to document root globally
-  useEffect(() => {
-    const root = window.document.documentElement;
-    // Remove all theme classes first
-    root.classList.remove('theme-light', 'theme-dark', 'theme-orange-dark', 'theme-ironman', 'theme-black-white', 'dark');
-
-    let targetTheme = settings.global.theme;
-
-    root.classList.add('dark');
-    if (targetTheme === 'dark') {
-      root.classList.add('theme-dark');
-    }
-    if (targetTheme === 'orange-dark') {
-      root.classList.add('theme-orange-dark');
-    }
-    if (targetTheme === 'ironman') {
-      root.classList.add('theme-ironman');
-    }
-    if (targetTheme === 'black-white') {
-      root.classList.add('theme-black-white');
-    }
-
-    // Apply global font size
-    root.style.setProperty('--app-font-size', `${settings.global.fontSize || 13}px`);
-  }, [settings.global.theme, settings.global.fontSize]);
+  }, [connectSocket, disconnectSocket]);
 
   return (
     <div className="flex h-screen bg-dashboard-bg text-text-primary overflow-hidden font-sans">

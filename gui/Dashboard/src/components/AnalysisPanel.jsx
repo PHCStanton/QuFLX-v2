@@ -11,7 +11,7 @@ const AnalysisPanel = () => {
   const [isPoolOpen, setIsPoolOpen] = useState(false);
 
   const { running, pid, started_at, loading, startAlerts, stopAlerts } = useAlerts();
-  const { subscribedAssetKeys, alertFeed, setSelectedAsset, scanHeartbeat } = useMarketStore();
+  const { subscribedAssetKeys, alertFeed, setSelectedAsset, scanHeartbeat, addMonitoredAsset } = useMarketStore();
   const { settings, updateSection } = useSettingsStore();
 
   const isHeartbeatActive = scanHeartbeat && (Date.now() - scanHeartbeat.receivedAt < 120000);
@@ -60,7 +60,10 @@ const AnalysisPanel = () => {
             {running && (
               <div
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-card-bg/50 border border-border-primary/50 group cursor-help transition-all"
-                title={scanHeartbeat ? `Last Scan (${scanHeartbeat.scan_duration_ms}ms): ${scanHeartbeat.assets_scanned?.join(', ') || 'None'}` : "Waiting for heartbeat..."}
+                title={scanHeartbeat
+                  ? `Last Scan (${scanHeartbeat.scan_duration_ms}ms) | Active: ${scanHeartbeat.assets_scanned?.join(', ') || 'None'} | Whitelist: ${scanHeartbeat.assets_whitelisted?.join(', ') || 'None'}`
+                  : "Waiting for heartbeat..."
+                }
               >
                 <div className={`w-1.5 h-1.5 rounded-full ${isHeartbeatActive ? "bg-accent-green animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-text-secondary"}`} />
                 <span className="text-[9px] font-bold text-text-secondary uppercase tracking-wider">
@@ -151,7 +154,10 @@ const AnalysisPanel = () => {
               return (
                 <div
                   key={asset}
-                  onClick={() => setSelectedAsset(asset)}
+                  onClick={() => {
+                    addMonitoredAsset(asset);
+                    setSelectedAsset(asset);
+                  }}
                   className={`p-2 rounded transition-all border border-border-primary/20 hover:border-accent-blue/40 cursor-pointer ${isSignal ? "" : "hover:bg-card-bg/50"}`}
                 >
                   <div className="flex items-center justify-between">
