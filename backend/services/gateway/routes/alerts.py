@@ -124,7 +124,7 @@ async def start_alerts(
                 return _json_error(status_code=404, detail=f"Script not found: {script_path}")
 
             ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            log_dir = project_root / "data" / "data_output" / "logs"
+            log_dir = project_root / "system_LOGS" / "alert_dispatch"
             log_dir.mkdir(parents=True, exist_ok=True)
             log_path = log_dir / f"alerts_{ts}.log"
             

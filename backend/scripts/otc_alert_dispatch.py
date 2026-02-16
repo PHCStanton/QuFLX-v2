@@ -55,6 +55,13 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Redis Config
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)sZ | %(levelname)s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 logger = logging.getLogger("OTC_Dispatch")
 
 
@@ -1220,6 +1227,8 @@ class OTCDispatcher:
                             "type": "scan:confirmed",
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "assets_scanned": active_workers,
+                            "assets_whitelisted": sorted(self.ticker_sub.active_assets),
+                            "assets_known": sorted(self.assets),
                             "scan_interval": self.scan_interval,
                             "scan_duration_ms": 100 if active_workers else 0 # Placeholder for UI visibility
                         }
