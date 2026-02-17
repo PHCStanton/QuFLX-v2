@@ -359,6 +359,33 @@ test('Alerts controls start and stop', async ({ page }) => {
   await expect(page.getByText('PID: 1234')).toHaveCount(0);
 });
 
+test('Monitoring pool remove and clear actions update list', async ({ page }) => {
+  const state = createState();
+  await setupCoreRoutes(page, state);
+
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const mod = await import('/src/store/marketStore.js');
+    const store = mod.default;
+    store.setState({
+      activeTab: 'analysis',
+      monitoringAssetKeys: ['EURUSDOTC', 'GBPUSDOTC'],
+      selectedAssetKey: ''
+    });
+  });
+
+  await page.getByRole('button', { name: 'Monitoring Pool' }).click();
+  const pool = page.getByTestId('monitoring-pool');
+  await expect(pool.getByText('EURUSDOTC')).toBeVisible();
+
+  await pool.getByRole('button', { name: 'Remove EURUSDOTC' }).click();
+  await expect(pool.getByText('EURUSDOTC')).toHaveCount(0);
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await pool.getByRole('button', { name: 'Clear Monitor Pool', exact: true }).click();
+  await expect(pool.getByText('GBPUSDOTC')).toHaveCount(0);
+});
+
 test('Screenshot annotation controls update and close', async ({ page }) => {
   const state = createState();
   await setupCoreRoutes(page, state);

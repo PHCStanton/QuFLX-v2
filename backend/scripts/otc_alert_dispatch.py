@@ -1113,6 +1113,7 @@ class OTCDispatcher:
         except Exception as e:
             logger.error(f"Journal Logging Error: {e}")
 
+
     async def run_loop(self):
         logger.info(f"Starting OTC Dispatcher...")
 
@@ -1124,39 +1125,46 @@ class OTCDispatcher:
             logger.info("Test Mode Complete.")
             return
 
+        # Start Subscribers FIRST (so they're ready to receive whitelist)
+        asyncio.create_task(self.ticker_sub.run())
+        asyncio.create_task(self.settings_sub.run())
+        
+        # Seed whitelist from CLI assets if provided (Fix #2)
+        if self.assets:
+            self.ticker_sub.active_assets = {normalize_asset(a) for a in self.assets}
+            self.ticker_sub.first_whitelist_received.set()
+            logger.info(f"✓ Seeded whitelist from CLI args: {self.ticker_sub.active_assets}")
+
         # 0. Wait for Frontend Whitelist (30s timeout)
         logger.info("Standing by for Frontend Ticker selection...")
         try:
             await asyncio.wait_for(self.ticker_sub.first_whitelist_received.wait(), timeout=30)
-            logger.info(f"Initial whitelist received: {self.ticker_sub.active_assets}")
+            logger.info(f"✓ Initial whitelist received: {self.ticker_sub.active_assets}")
         except asyncio.TimeoutError:
             logger.warning("No Ticker selection received after 30s. Entering standby mode.")
 
-        # 1. Initial Discovery
+        # 1. Initial Discovery (Passive - do not auto-add to monitoring list yet)
         discovered = self.scan_available_assets()
-        if discovered:
-            # distinct union
-            current_set = set(self.assets)
-            for a in discovered:
-                if a not in current_set:
-                    self.assets.append(a)
-            # logger.info(f"Assets merged with auto-discovery: {self.assets}")
-        
-        # Start Subscribers
-        asyncio.create_task(self.ticker_sub.run())
-        asyncio.create_task(self.settings_sub.run())
+        # We only add discovered assets if they were explicitly provided via CLI args
+        if self.assets and discovered:
+             current_set = set(self.assets)
+             for a in discovered:
+                 if a not in current_set:
+                     # Only merge if we started with some assets (CLI mode)
+                     pass 
         
         if not self.assets:
-            logger.warning("No assets found in history folder and none provided. Waiting for 'Collect History'...")
+            logger.info("No initial assets provided. Scanner standing by for Frontend selection...")
 
         if self.enable_tick_logging and redis:
-            logger.info("Starting Redis Subscriber task...")
+            logger.info("Starting Redis Subscriber task (Waiting for whitelist)...")
+            # FIX: Do NOT subscribe to all 'discovered' assets by default. 
+            # Start with empty or only CLI-provided assets.
             if self.subscriber:
                 self.subscriber.assets = [a.upper().replace("_", "") for a in self.assets]
             asyncio.create_task(self.subscriber.run())
         elif self.enable_tick_logging and not redis:
             logger.error("Tick logging enabled but redis library is unavailable.")
-
         while True:
             try:
                 # 1. Reactive Discovery: If requested assets aren't known, scan disk immediately

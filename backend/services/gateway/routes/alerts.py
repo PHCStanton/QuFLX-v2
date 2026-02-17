@@ -178,6 +178,15 @@ async def start_alerts(
             _registry["log_path"] = str(log_path)
             _registry["log_file"] = log_f
             _registry["assets"] = assets
+            
+            # Publish whitelist to Redis for dispatcher (Fix #3)
+            if assets and request.app.state.redis:
+                try:
+                    import json
+                    await request.app.state.redis.publish('ticker:active', json.dumps(assets))
+                    logger.info(f"Published whitelist to Redis: {assets}")
+                except Exception as e:
+                    logger.warning(f"Failed to publish whitelist to Redis: {e}")
 
         return {"ok": True, "status": "started", "pid": proc.pid, "log_path": str(log_path)}
     except Exception as e:

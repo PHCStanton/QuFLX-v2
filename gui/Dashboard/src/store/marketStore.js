@@ -146,6 +146,12 @@ const createMarketSlice = (set, get) => ({
   selectedAsset: 'AUDNZDOTC',
   selectedAssetKey: normalizeAsset('AUDNZDOTC'),
   selectedAssetLoading: false,
+  publishMonitoringAssets: () => {
+    const { socket, monitoringAssetKeys } = get();
+    if (!socket || !socket.connected) return;
+    const normalized = uniq((monitoringAssetKeys || []).map((k) => normalizeAsset(k)).filter(Boolean));
+    socket.emit('update_active_ticker', normalized);
+  },
   addMonitoredAsset: (asset) => {
     const assetKey = normalizeAsset(asset);
     if (!assetKey) return;
@@ -154,6 +160,26 @@ const createMarketSlice = (set, get) => ({
     set({ monitoringAssetKeys: nextMonitoring });
     const required = get().computeRequiredAssetKeys(get().selectedAssetKey);
     get().applySubscriptions(required);
+    get().publishMonitoringAssets();
+  },
+  removeMonitoredAsset: (asset) => {
+    const assetKey = normalizeAsset(asset);
+    if (!assetKey) return;
+    const current = get().monitoringAssetKeys || [];
+    const nextMonitoring = current.filter((item) => item !== assetKey);
+    set({ monitoringAssetKeys: nextMonitoring });
+    const required = get().computeRequiredAssetKeys(get().selectedAssetKey);
+    get().applySubscriptions(required);
+    get().publishMonitoringAssets();
+  },
+  clearMonitoringAssets: (options = {}) => {
+    const selectedAssetKey = get().selectedAssetKey;
+    const preserveSelected = options && options.preserveSelected === true;
+    const nextMonitoring = preserveSelected && selectedAssetKey ? [selectedAssetKey] : [];
+    set({ monitoringAssetKeys: nextMonitoring });
+    const required = get().computeRequiredAssetKeys(get().selectedAssetKey);
+    get().applySubscriptions(required);
+    get().publishMonitoringAssets();
   },
   setSelectedAsset: async (asset) => {
     if (!asset) return;
@@ -572,18 +598,22 @@ const createMarketSlice = (set, get) => ({
     get().syncSubscriptions();
   },
   computeRequiredAssetKeys: (overrideSelectedAssetKey) => {
-    const { panelMode, payoutAssets, selectedAssetKey, tickerMaxAssets, monitoringAssetKeys } = get();
-    const nextAssetKey = overrideSelectedAssetKey ?? selectedAssetKey;
-
-    if (panelMode !== 'ticker') {
-      return uniq([nextAssetKey, ...(monitoringAssetKeys || [])]);
+    const { selectedAssetKey, monitoringAssetKeys } = get();
+    let nextAssetKey = selectedAssetKey;
+    if (overrideSelectedAssetKey) {
+      nextAssetKey = overrideSelectedAssetKey;
     }
-
-    const tickerKeys = (payoutAssets || [])
-      .slice(0, tickerMaxAssets)
-      .map((a) => normalizeAsset(a));
-
-    return uniq([...tickerKeys, nextAssetKey, ...(monitoringAssetKeys || [])]);
+    const required = [];
+    if (nextAssetKey) {
+      required.push(nextAssetKey);
+    }
+    const monitoring = Array.isArray(monitoringAssetKeys) ? monitoringAssetKeys : [];
+    monitoring.forEach((assetKey) => {
+      if (assetKey) {
+        required.push(assetKey);
+      }
+    });
+    return uniq(required.map((k) => normalizeAsset(k)).filter(Boolean));
   },
   applySubscriptions: (assetKeys) => {
     const { socket, subscribedAssetKeys } = get();
@@ -600,8 +630,6 @@ const createMarketSlice = (set, get) => ({
       socket.emit('subscribe_asset', assetKey);
       socket.emit('join_room', `market_data:${assetKey}`);
     });
-
-    socket.emit('update_active_ticker', normalized);
 
     set({ subscribedAssetKeys: normalized });
   },
@@ -883,6 +911,7 @@ const createConnectionSlice = (set, get) => ({
 
       const { selectedAsset } = get();
       get().syncSubscriptions();
+      get().publishMonitoringAssets(); // Sync dispatcher whitelist on connect
       if (selectedAsset) socket.emit('select_asset', selectedAsset);
     });
 
@@ -1018,7 +1047,8 @@ const useMarketStore = create(
       panelMode: state.panelMode,
       activeIndicators: state.activeIndicators,
       autoRunAlertMonitor: state.autoRunAlertMonitor,
-      enableTickLogging: state.enableTickLogging
+      enableTickLogging: state.enableTickLogging,
+      monitoringAssetKeys: state.monitoringAssetKeys
     })
   })((set, get) => ({
     ...createUiSlice(set),

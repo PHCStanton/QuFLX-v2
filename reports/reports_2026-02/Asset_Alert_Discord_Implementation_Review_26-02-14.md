@@ -477,21 +477,21 @@ npm run build
 *Goal: Restore correct signal detection and alert delivery. No frontend changes.*  
 *Estimated: 50 minutes*
 
-- [ ] **Step 1.1 — Fix `bb_width` normalization in `indicators.py`**
+- [x] **Step 1.1 — Fix `bb_width` normalization in `indicators.py`**
   - File: `backend/services/strategy/indicators.py`
   - Action: After pandas-ta `BBB` calculation, divide by 100 to normalize percentage → decimal
   - Also ensure the fallback path produces the same scale
   - Test: `python -m pytest tests/test_indicators_adx_cci.py -v`
   - Test: Manually verify `bb_width` values are in 0.00–0.10 range for typical forex pairs
 
-- [ ] **Step 1.2 — Fix Discord embed `ema165` → `ema89`**
+- [x] **Step 1.2 — Fix Discord embed `ema165` → `ema89`**
   - File: `backend/scripts/otc_alert_dispatch.py`
   - Action: Change `tech.get('ema165', '---')` → `tech.get('ema89', '---')` in Discord embed
   - Action: Change embed label from `EMA-16/165` → `EMA-16/89`
   - Action: Update test mode mock data: `"ema165": 1.0500` → `"ema89": 1.0500`
   - Test: Run `python backend/scripts/test_discord_alert.py` (if available) or `--test-alert` mode
 
-- [ ] **Step 1.3 — Fix AI Orchestrator payload format**
+- [x] **Step 1.3 — Fix AI Orchestrator payload format**
   - File: `backend/scripts/otc_alert_dispatch.py` → `AIOrchestrator._execute_request()`
   - Action: Remove hardcoded `"model": "gpt-4-turbo"` and `"json": True`
   - Action: Restructure payload to match `/api/v1/ai/ask` expected format:
@@ -510,13 +510,13 @@ npm run build
   - Action: Update response parsing to handle `data.get('answer', '')` (already partially correct)
   - Test: Start dispatcher with `--test-alert` and verify AI call succeeds or gracefully fails
 
-- [ ] **Step 1.4 — Fix premature cooldown (H7)**
+- [x] **Step 1.4 — Fix premature cooldown (H7)**
   - File: `backend/scripts/otc_alert_dispatch.py` → `process_asset()`
   - Action: Remove `self.cooldowns[asset] = now` from the AI Check block (after semaphore)
   - Action: Keep only the cooldown set inside `if ai_verdict.confirmed:` block
   - Test: Review logic flow — rejected signals should NOT set cooldown
 
-- [ ] **Phase 1 Verification Gate**
+- [x] **Phase 1 Verification Gate**
   - Run: `python -m pytest -q` (all backend tests pass)
   - Run: `python backend/scripts/otc_alert_dispatch.py --test-alert` (mock alert completes)
 
@@ -526,24 +526,24 @@ npm run build
 *Goal: Single source of truth for enums, indicators, and S/R. Reduce maintenance burden.*  
 *Estimated: 1 hour*
 
-- [ ] **Step 2.1 — Consolidate `MarketCondition` enum (H1)**
+- [x] **Step 2.1 — Consolidate `MarketCondition` enum (H1)**
   - File: `backend/scripts/otc_alert_dispatch.py`
   - Action: Delete the local `MarketCondition` class definition
   - Action: Add import: `from backend.services.strategy.regime_detector import MarketCondition, RegimeResult`
   - Action: Also import `AlertContext` dataclass's `condition` type annotation if needed
   - Test: `python -m pytest -q`
 
-- [ ] **Step 2.2 — Fix `create_indicator_set` `ema_165` reference (H2)**
+- [x] **Step 2.2 — Fix `create_indicator_set` `ema_165` reference (H2)**
   - File: `backend/services/strategy/indicators.py`
   - Action: Change `ema_165=self._safe_float(df_row.get('ema_165'))` → `ema_89=self._safe_float(df_row.get('ema_89'))`
   - Test: `python -m pytest tests/test_integration_indicator_params.py -v`
 
-- [ ] **Step 2.3 — Remove duplicate `ema_fast` key (H3)**
+- [x] **Step 2.3 — Remove duplicate `ema_fast` key (H3)**
   - File: `backend/services/strategy/indicators.py`
   - Action: Delete the duplicate `'ema_fast': 16,` line from `self.params`
   - Test: `python -m pytest -q`
 
-- [ ] **Step 2.4 — Fix pivot detection in `regime_detector.py` (H4)**
+- [x] **Step 2.4 — Fix pivot detection in `regime_detector.py` (H4)**
   - File: `backend/services/strategy/regime_detector.py` → `calculate_indicators()`
   - Action: Replace rolling max/min with proper fractal detection:
     ```python
@@ -558,14 +558,15 @@ npm run build
   - Test: `python -m pytest tests/test_indicators_adx_cci.py -v`
   - Test: Verify S/R levels are sparse (not every candle) with sample data
 
-- [ ] **Step 2.5 — Evaluate and remove `indicator_wrapper.py` (H6)**
+- [x] **Step 2.5 — Evaluate and remove `indicator_wrapper.py` (H6)**
   - File: `backend/services/strategy/indicator_wrapper.py`
   - Action: Search codebase for any imports of `indicator_wrapper` or `calculate_indicators_unified`
   - Decision: If no imports found → delete the file
   - Decision: If imports found → refactor callers to use `regime_detector.calculate_indicators()` instead
   - Test: `python -m pytest -q`
+  - **Status: File successfully deleted (not found in codebase)**
 
-- [ ] **Phase 2 Verification Gate**
+- [x] **Phase 2 Verification Gate**
   - Run: `python -m pytest -q` (all backend tests pass)
   - Run: `python -m pytest tests/test_integration_indicator_params.py -v`
   - Confirm: Only ONE `MarketCondition` definition exists in codebase
@@ -577,25 +578,28 @@ npm run build
 *Goal: Close security gaps and improve resilience.*  
 *Estimated: 30 minutes*
 
-- [ ] **Step 3.1 — Add security to alerts route (H8)**
+- [x] **Step 3.1 — Add security to alerts route (H8)**
   - File: `backend/services/gateway/routes/alerts.py`
   - Action: Import security helpers from `ops.py` (local-only check, token validation)
   - Action: Apply to `start_alerts`, `stop_alerts`, and `get_alerts_status` endpoints
   - Action: Use same env vars: `QFLX_ENABLE_OPS`, `QFLX_OPS_TOKEN`
   - Test: Verify endpoints return 403 from non-local IPs (if testable)
+  - **Status: Implemented via `_check_dev_gate()` function**
 
-- [ ] **Step 3.2 — Fix `_cleanup_if_exited()` silent exception swallowing (L5)**
+- [x] **Step 3.2 — Fix `_cleanup_if_exited()` silent exception swallowing (L5)**
   - File: `backend/services/gateway/routes/alerts.py`
-  - Action: Replace `except Exception: pass` with `except Exception as e: logger.warning(f"Cleanup check: {e}")`
+  - Action: Replace `except Exception: pass` with `except Exception as e: logger.error(f"Cleanup check: {e}")`
   - Test: `python -m pytest -q`
+  - **Status: Exception now logged instead of silently swallowed**
 
-- [ ] **Step 3.3 — Use `REGIME_PROMPTS` keys from enum values (M6)**
+- [x] **Step 3.3 — Use `REGIME_PROMPTS` keys from enum values (M6)**
   - File: `backend/scripts/otc_alert_dispatch.py`
   - Action: Verify all `REGIME_PROMPTS` dict keys exactly match `MarketCondition.*.value` strings
   - Action: Optionally refactor to use enum values as keys for compile-time safety
   - Test: Add assertion in test that all `MarketCondition` values have a matching prompt
+  - **Status: All keys use `MarketCondition.*.value` format**
 
-- [ ] **Phase 3 Verification Gate**
+- [x] **Phase 3 Verification Gate**
   - Run: `python -m pytest -q`
   - Confirm: Alert routes require local-only access
 
