@@ -130,7 +130,63 @@ const createTickerSlice = () => ({
   monitoringAssetKeys: [],
   quotesByAssetKey: {},
   baselineByAssetKey: {},
-  alertFeed: [] // [{ asset, regime, direction, expiry, price, confluence, ai_confirmed, ai_confidence, timestamp }]
+  alertFeed: [], // [{ asset, regime, direction, expiry, price, confluence, ai_confirmed, ai_confidence, timestamp }]
+  currentRegime: null,
+  lastTickTimestamp: null
+});
+
+const createStrategyLabSlice = (set, get) => ({
+  strategyLabFiles: [], // [{ file_id, filename, rows, date_range, regime, stats, entries }]
+  selectedStrategyFileId: null,
+  strategyLabData: {}, // { fileId: [candles] }
+
+  addStrategyLabFile: (file) => set(state => {
+    const exists = state.strategyLabFiles.some(f => f.file_id === file.file_id);
+    if (exists) return state;
+    return { strategyLabFiles: [...state.strategyLabFiles, file] };
+  }),
+
+  setSelectedStrategyFileId: async (fileId) => {
+    if (!fileId) {
+      set({ selectedStrategyFileId: null });
+      return;
+    }
+
+    set({ selectedStrategyFileId: fileId });
+
+    // Fetch data if not cached
+    if (!get().strategyLabData[fileId]) {
+      try {
+        const res = await fetch(`http://localhost:8000/api/v1/strategy/data/${fileId}`);
+        const data = await res.json();
+        if (data.ok) {
+          const normalizedCandles = (data.candles || []).map(c => {
+            const rawTs = c.timestamp || c.time;
+            const numeric = typeof rawTs === 'number' ? rawTs : Number(rawTs);
+            const time = numeric > 10000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+            return {
+              ...c,
+              time,
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close)
+            };
+          }).filter(c => !isNaN(c.time) && !isNaN(c.open))
+            .sort((a, b) => a.time - b.time);
+
+          set(state => ({
+            strategyLabData: {
+              ...state.strategyLabData,
+              [fileId]: normalizedCandles
+            }
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch lab data", err);
+      }
+    }
+  }
 });
 
 const createMarketSlice = (set, get) => ({
@@ -967,6 +1023,13 @@ const createConnectionSlice = (set, get) => ({
       });
     });
 
+    socket.on('regime_update', (data) => {
+      // data: { asset, regime, trend, strength, volatility, ... }
+      if (data && data.asset === get().selectedAsset) {
+         set({ currentRegime: data });
+      }
+    });
+
     socket.on('new_alert', (data) => {
       console.log('New In-App Alert:', data);
       set((state) => ({
@@ -1053,6 +1116,7 @@ const useMarketStore = create(
   })((set, get) => ({
     ...createUiSlice(set),
     ...createTickerSlice(),
+    ...createStrategyLabSlice(set, get),
     ...createMarketSlice(set, get),
     ...createConnectionSlice(set, get)
   }))

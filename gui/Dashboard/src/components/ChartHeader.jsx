@@ -4,6 +4,7 @@ import { X, Layers, Clock, FileText } from 'lucide-react';
 import ChartActions from './ChartActions';
 import NeoSyncButton from './NeoSyncButton';
 import syncClickSound from '../assets/Sounds/Click_TF_Sync_Button1.mp3';
+import useMarketStore from '../store/marketStore';
 
 const ChartHeader = ({
   selectedAsset,
@@ -26,6 +27,7 @@ const ChartHeader = ({
   isSyncingTimeframe,
   isTimeframeSyncLinked
 }) => {
+  const { strategyLabFiles, selectedStrategyFileId, setSelectedStrategyFileId } = useMarketStore();
   const [syncClicked, setSyncClicked] = useState(false);
 
   const handleSyncClick = async () => {
@@ -43,13 +45,21 @@ const ChartHeader = ({
     }
   };
 
+  const csvOptionsList = (strategyLabFiles || []).map(f => ({
+    value: f.file_id,
+    label: f.filename
+  }));
+
   return (
     <div className="p-1.5 border-b border-border-primary bg-card-bg/90 flex flex-wrap items-center gap-2 z-40 backdrop-blur-sm">
       <div className="flex items-center gap-2">
         <div className="w-36">
           <Combobox
             value={selectedAsset}
-            onChange={setSelectedAsset}
+            onChange={(val) => {
+              setSelectedStrategyFileId(null); // Clear CSV mode if asset changed
+              setSelectedAsset(val);
+            }}
             options={assetOptions}
           />
         </div>
@@ -75,13 +85,12 @@ const ChartHeader = ({
           </div>
         )}
 
-
-
-        <div className="w-32">
+        <div className="w-36">
           <Combobox
-            placeholder="CSV..."
-            options={csvOptions}
-            onChange={() => { }}
+            placeholder="CSV Mode..."
+            value={selectedStrategyFileId}
+            options={csvOptionsList}
+            onChange={setSelectedStrategyFileId}
             icon={FileText}
           />
         </div>

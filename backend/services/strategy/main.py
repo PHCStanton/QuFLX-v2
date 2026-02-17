@@ -13,6 +13,8 @@ from backend.infrastructure.redis_client import RedisSubscriber, RedisPublisher
 from backend.models.market_data import Candle
 from backend.models.events import Signal
 from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
+from backend.services.strategy.regime_detector import detect_regime, RegimeResult, MarketCondition
+from dataclasses import asdict
 
 # Configure logging
 logging.basicConfig(
@@ -99,8 +101,44 @@ class StrategyService:
         # With buffer_size=200, it's fast enough.
         df_with_indicators = self.pipeline.calculate_indicators(df)
         
-        # Evaluate Strategy
+        # Detect Market Regime
+        regime = detect_regime(df_with_indicators)
+        self._publish_regime(asset, regime)
+        
+        # Evaluate Strategy (Legacy RSI + New Regime)
         self.evaluate_strategy(asset, df_with_indicators)
+        
+        # If regime is tradeable, emit signal
+        if regime and regime.is_tradeable:
+            signal = Signal(
+                timestamp=datetime.now().timestamp(),
+                asset=asset,
+                action="BUY" if regime.direction == "CALL" else "SELL",
+                confidence=regime.confluence_score / 100.0,
+                strategy_id="regime_detector_v1",
+                metadata={
+                    "condition": regime.condition.value,
+                    "expiry": regime.suggested_expiry,
+                    "technicals": regime.technicals
+                }
+            )
+            logger.info(f"Regime Signal: {signal}")
+            self.redis_pub.publish("trading:signals", signal)
+
+    def _publish_regime(self, asset: str, regime: RegimeResult):
+        """Publish regime update"""
+        payload = {
+            "timestamp": datetime.now().timestamp(),
+            "asset": asset,
+            "condition": regime.condition.value if regime else "Neutral",
+            "confluence_score": regime.confluence_score if regime else 0,
+            "direction": regime.direction if regime else None,
+            "suggested_expiry": regime.suggested_expiry if regime else None,
+            "technicals": regime.technicals if regime else {},
+            "is_tradeable": regime.is_tradeable if regime else False
+        }
+        # Use a custom encoder or simple dict dumping since everything is standard types
+        self.redis_pub.publish("strategy:regime", payload)
 
     def evaluate_strategy(self, asset: str, df: pd.DataFrame):
         """Simple RSI Strategy"""

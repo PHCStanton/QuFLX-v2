@@ -17,6 +17,7 @@ import { saveChartScreenshot } from '../api/screenshotClient';
 import ScreenshotModal from './ScreenshotModal';
 import AskAiModal from './AskAiModal';
 import OscillatorPanel from './OscillatorPanel';
+import RegimePanel from './RegimePanel';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 import ErrorBoundary from './ErrorBoundary';
 import ChartTooltip from './ChartTooltip'; // Import Tooltip
@@ -48,11 +49,33 @@ const ChartWorkspace = () => {
     setLastAnnotatedScreenshotDataUrl,
     setCaptureChartImage,
     aiMessages, // Need to access AI Messages for markers
+    selectedStrategyFileId,
+    strategyLabFiles,
+    strategyLabData,
+    loadHistory,
   } = useMarketStore();
+
+  const csvMode = !!selectedStrategyFileId;
+  const labFile = useMemo(() =>
+    csvMode ? strategyLabFiles.find(f => f.file_id === selectedStrategyFileId) : null,
+    [csvMode, strategyLabFiles, selectedStrategyFileId]);
+
+  const effectiveHistoryCandles = useMemo(() => {
+    if (!csvMode || !selectedStrategyFileId || !strategyLabData[selectedStrategyFileId]) {
+      return historyCandles;
+    }
+    // We virtualize the history for the selected asset
+    return { [selectedAsset]: strategyLabData[selectedStrategyFileId] };
+  }, [csvMode, selectedStrategyFileId, strategyLabData, historyCandles, selectedAsset]);
+
+  const effectiveHistoryStatus = useMemo(() => {
+    if (!csvMode) return historyStatus;
+    return { [selectedAsset]: 'loaded' };
+  }, [csvMode, historyStatus, selectedAsset]);
 
   const health = useStreamHealth();
   const dataSourceMode = settings?.analysis?.dataSourceMode || 'history_and_streaming';
-  const enableStreaming = dataSourceMode !== 'history_only';
+  const effectiveEnableStreaming = csvMode ? false : (dataSourceMode !== 'history_only');
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
   const chartWrapperRef = useRef(null); // Ref for tooltip positioning bounds
@@ -79,7 +102,8 @@ const ChartWorkspace = () => {
     responseVerbosity: 'concise',
     uiMode: 'modal',
     marketData,
-    historyCandles,
+    historyCandles: effectiveHistoryCandles,
+    historyStatus: effectiveHistoryStatus,
     selectedAssetKey,
     indicatorSeries,
     activeIndicators,
@@ -95,6 +119,20 @@ const ChartWorkspace = () => {
     setCaptureChartImage(captureCompositeChart);
     return () => setCaptureChartImage(null);
   }, [setCaptureChartImage, captureCompositeChart]);
+
+  // Initial History Load Fix
+  useEffect(() => {
+    if (!selectedAsset || !selectedTimeframe) return;
+    if (csvMode) return; // Don't load history in CSV mode
+
+    const status = historyStatus[selectedAsset];
+    // Only load if we haven't loaded/attempted yet
+    if (!status) {
+      loadHistory(selectedAsset).catch((err) => {
+        console.error('Initial history load failed:', err);
+      });
+    }
+  }, [selectedAsset, selectedTimeframe, csvMode, historyStatus, loadHistory]);
 
   const [volumeSeries, setVolumeSeries] = useState(null);
 
@@ -182,6 +220,17 @@ const ChartWorkspace = () => {
               pushVal(`EMA ${fast}`, 'ema_21', '#3b82f6');
               pushVal(`EMA ${med}`, 'ema_50', '#ffffff');
               pushVal(`EMA ${slow}`, 'ema_100', '#ef4444');
+            } else if (type === 'macd_histogram') {
+              pushVal('MACD', 'macd', '#3b82f6');
+              pushVal('Signal', 'macd_signal', '#ef4444');
+              pushVal('Hist', 'macd_histogram', '#ffffff');
+            } else if (type === 'adx') {
+              pushVal('ADX', 'adx', '#ffffff');
+              pushVal('+DI', 'plus_di', '#22c55e');
+              pushVal('-DI', 'minus_di', '#ef4444');
+            } else if (type === 'stoch') {
+              pushVal('%K', 'stoch_k', '#3b82f6');
+              pushVal('%D', 'stoch_d', '#ef4444');
             } else if (type === 'supertrend') {
               // Supertrend logic often involves direction, but value is usually sufficient
               pushVal('SuperTrend', 'supertrend', baseColor);
@@ -253,7 +302,8 @@ const ChartWorkspace = () => {
     activeIndicators,
     selectedAsset,
     selectedTimeframe,
-    onError: setError
+    onError: setError,
+    labEntries: labFile?.entries || []
   });
 
   useChartPriceLines({
@@ -268,12 +318,12 @@ const ChartWorkspace = () => {
     selectedTimeframe,
     candleSeries,
     volumeSeries, // Pass Volume Series
-    historyCandles,
-    historyStatus,
+    historyCandles: effectiveHistoryCandles,
+    historyStatus: effectiveHistoryStatus,
     selectedAsset,
     onError: setError,
     onNewCandle,
-    enableStreaming
+    enableStreaming: effectiveEnableStreaming
   });
 
   const handleIndicatorClick = useCallback((indicator) => {
@@ -392,6 +442,7 @@ const ChartWorkspace = () => {
           className="flex-1 relative w-full min-h-0 flex flex-col"
         >
           <ChartWorkspaceOverlays health={health} isLoading={isLoading} selectedAsset={selectedAsset} />
+          <RegimePanel />
 
           <div
             className="flex-1 min-h-[220px] relative cursor-crosshair"

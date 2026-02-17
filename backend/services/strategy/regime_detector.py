@@ -70,9 +70,12 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # Import unified pipeline
     from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
     
-    # Initialize and run pipeline
-    pipeline = TechnicalIndicatorsPipeline()
-    result_df = pipeline.calculate_indicators(df)
+    # Initialize and run pipeline ONLY if core indicators are missing
+    if 'adx' not in df.columns or 'ema_16' not in df.columns:
+        pipeline = TechnicalIndicatorsPipeline()
+        result_df = pipeline.calculate_indicators(df)
+    else:
+        result_df = df.copy()
     
     # Map Pipeline B column names to regime detector's expected names
     # Pipeline B uses underscored names (ema_16), regime detector uses non-underscored (ema16)
@@ -152,9 +155,10 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
         logger.debug(f"Not enough candles for regime detection ({len(df)})")
         return None
     
-    # Calculate indicators if not already present
-    if 'adx' not in df.columns:
-        df = calculate_indicators(df)
+    # Calculate indicators / map columns / add body analysis
+    # ALWAYS call this to ensure mapping and body analysis happens, 
+    # even if pipeline ran externally.
+    df = calculate_indicators(df)
     
     current = df.iloc[-1]
     prev = df.iloc[-2]
@@ -198,6 +202,35 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
     confluence_score = 0
     direction = None  # "CALL" or "PUT"
     suggested_expiry = "1m"  # Default
+
+    # NEW: Volatility Monitoring (Prevent losses in quiet/choppy markets)
+    MIN_ATR_PERCENT = 0.002  # 0.2% of price minimum
+    MIN_BB_WIDTH = 0.01      # 1% minimum Bollinger Band width
+    
+    atr_percent = atr_val / close if close > 0 else 0
+    
+    # 0. LOW VOLATILITY PROTECTION (Block signal if market is too quiet)
+    if atr_percent < MIN_ATR_PERCENT:
+        msg = f"Signal Blocked: Market too quiet. ATR={atr_percent:.4f}% (need >{MIN_ATR_PERCENT*100}%)"
+        logger.info(msg)
+        return RegimeResult(
+            condition=MarketCondition.NEUTRAL,
+            confluence_score=0,
+            direction=None,
+            suggested_expiry="1m",
+            technicals={"atr_percent": atr_percent, "bb_width": current['bb_wband'], "adx": adx_val, "warning": "low_volatility", "message": msg}
+        )
+
+    if current['bb_wband'] < MIN_BB_WIDTH and adx_val < 25:
+        msg = f"Signal Blocked: Tight range + weak trend. BB={current['bb_wband']:.4f}, ADX={adx_val:.1f}"
+        logger.info(msg)
+        return RegimeResult(
+            condition=MarketCondition.NEUTRAL,
+            confluence_score=0,
+            direction=None,
+            suggested_expiry="1m",
+            technicals={"atr_percent": atr_percent, "bb_width": current['bb_wband'], "adx": adx_val, "warning": "tight_range", "message": msg}
+        )
     
     # 1. STRONG MOMENTUM TRENDING (R4 + R5: Weighted Scoring + Directional Confirmation)
     if adx_val > 30:
@@ -278,6 +311,18 @@ def detect_regime(df: pd.DataFrame) -> Optional[RegimeResult]:
 
     # 3. RANGING / SIDEWAYS
     if condition == MarketCondition.NEUTRAL and adx_val < 20:
+        # NEW: Require minimum body size (avoid chop/indecision)
+        recent_body_ratio = df['body_ratio'].tail(10).mean()
+        if recent_body_ratio < 0.4:
+            msg = f"Signal Blocked: Chop detected. Avg body ratio {recent_body_ratio:.2f} (need >0.4)"
+            logger.info(msg)
+            return RegimeResult(
+                condition=MarketCondition.NEUTRAL,
+                confluence_score=0,
+                direction=None,
+                suggested_expiry="1m",
+                technicals={"body_ratio": recent_body_ratio, "adx": adx_val, "warning": "choppy", "message": msg}
+            )
         # Overbought (Sell)
         if close >= current['bb_high'] * 0.998:
             score = 0

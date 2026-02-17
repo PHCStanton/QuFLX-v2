@@ -19,12 +19,30 @@ const useChartMarkers = ({
     activeIndicators,
     selectedAsset,
     selectedTimeframe,
-    onError
+    onError,
+    labEntries = null
 }) => {
     useEffect(() => {
         if (!mainChart || !candleSeries) return;
 
         const markers = [];
+
+        // 0. Strategy Lab Entries (Priority)
+        if (Array.isArray(labEntries)) {
+            labEntries.forEach(entry => {
+                const time = normalizeTime(entry.timestamp);
+                if (!time) return;
+                const isBuy = entry.direction === 'CALL' || entry.direction === 'BUY';
+                markers.push({
+                    time,
+                    position: isBuy ? 'belowBar' : 'aboveBar',
+                    color: isBuy ? '#22c55e' : '#ef4444',
+                    shape: isBuy ? 'arrowUp' : 'arrowDown',
+                    text: entry.result ? (entry.result === 'WIN' ? 'WIN' : 'LOSS') : 'ENTRY',
+                    size: 2
+                });
+            });
+        }
 
         // 1. AI Message Markers
         // Assuming aiMessages has { content, ts, role: 'assistant' }
@@ -135,7 +153,7 @@ const useChartMarkers = ({
             console.error(`Marker Error: ${err.message}`);
         }
 
-    }, [mainChart, candleSeries, aiMessages, indicatorSeries, activeIndicators, selectedAsset, selectedTimeframe, onError]);
+    }, [mainChart, candleSeries, aiMessages, indicatorSeries, activeIndicators, selectedAsset, selectedTimeframe, onError, labEntries]);
 };
 
 export default useChartMarkers;

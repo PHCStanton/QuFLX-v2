@@ -7,7 +7,7 @@ modes  @.agents
 
 RULES:
 Adhere to The 
-CORE_PRINCIPLES.md
+@CORE_PRINCIPLES.md
 ensure that the project's codebase stays solid, 
 robust, functional, optimized, simplified and bug free. Use any other coding principles that 
 you can obtain from your logic or knowledge base that could add/improve to the quality and 
@@ -25,8 +25,7 @@ personas for optimal Task outputs and excellent robust project results. Invoke s
 modes  #.agents
 
 RULES:
-Adhere to The 
-CORE_PRINCIPLES.md
+Adhere to The #CORE_PRINCIPLES.md
 ensure that the project's codebase stays solid, 
 robust, functional, optimized, simplified and bug free. Use any other coding principles that 
 you can obtain from your logic or knowledge base that could add/improve to the quality and 

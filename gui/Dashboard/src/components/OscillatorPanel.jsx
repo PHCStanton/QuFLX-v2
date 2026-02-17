@@ -89,16 +89,24 @@ const OscillatorPanel = ({
           {oscillatorIndicators.map((ind) => {
             const data = seriesForKey && seriesForKey[ind.key] ? seriesForKey[ind.key] : [];
 
-            const type = ind.key === 'macd_histogram' || ind.value === 'MACD' ? 'histogram' : 'line';
+            // Determine type based on indicator value/key
+            let type = 'line';
+            if (ind.key === 'macd_histogram' || ind.value === 'macd_histogram') type = 'macd';
+            else if (ind.value === 'stoch') type = 'stoch';
+            else if (ind.value === 'adx') type = 'adx';
+            else if (ind.value === 'williams_r') type = 'line'; // Standard line
+            else if (ind.value === 'roc') type = 'line'; // Standard line
 
             return (
               <div key={ind.id} className="h-48 bg-gray-900/60 border border-gray-800 rounded relative">
                 <ErrorBoundary>
                   <OscillatorChart
                     mainChart={mainChart}
-                    data={data}
+                    data={data} // Primary data (fallback)
+                    allSeries={seriesForKey} // Access to all series
+                    indicator={ind} // Full indicator config
                     type={type}
-                    title={ind.name}
+                    title={ind.name || ind.label}
                     params={ind.params}
                     indicatorValue={ind.value}
                     onError={onError}

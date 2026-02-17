@@ -128,7 +128,7 @@ class IndicatorCalculator:
 
             # Standard indicators from the pipeline
             indicator_names = [
-                'sma_20', 'ema_16', 'ema_165', 'wma_20',
+                'sma_20', 'ema_16', 'wma_20',
                 'rsi_14', 'rsi_21', 'stoch_k', 'stoch_d', 'williams_r', 'roc_10',
                 'macd', 'macd_signal', 'macd_histogram',
                 'bb_upper', 'bb_middle', 'bb_lower', 'bb_width', 'bb_percent',

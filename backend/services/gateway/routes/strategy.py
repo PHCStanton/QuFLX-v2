@@ -156,6 +156,36 @@ async def analyze_regime(file_id: str = Body(..., embed=True), asset: str = Body
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
+@router.get("/data/{file_id}")
+async def get_strategy_data(file_id: str):
+    """
+    Get full OHLC data for a strategy lab file.
+    """
+    try:
+        if file_id not in _uploaded_files:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        file_path = _uploaded_files[file_id]
+        df = pd.read_csv(file_path)
+        
+        # Ensure timestamp is formatted for JS Date
+        if 'timestamp' in df.columns:
+            # If it's a number, it might be unix ms
+            pass 
+            
+        candles = df.to_dict('records')
+        
+        return {
+            "ok": True,
+            "file_id": file_id,
+            "candles": candles,
+            "count": len(candles)
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch strategy data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/entries")
 async def identify_entries(
     file_id: str = Body(..., embed=True),
@@ -245,6 +275,8 @@ async def identify_entries(
             "entries": entries_dict,
             "stats": {
                 "total_signals": stats.total_signals,
+                "win_rate": stats.win_rate,
+                "profit_loss": stats.profit_factor,
                 "avg_confidence": stats.avg_confidence,
                 "regime_distribution": stats.regime_distribution
             }
@@ -256,6 +288,65 @@ async def identify_entries(
         logger.error(f"Entry identification failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Entry identification failed: {str(e)}")
 
+
+import json
+import aiohttp
+from backend.scripts.otc_alert_dispatch import AIOrchestrator, AlertContext
+
+@router.post("/ai-analyze")
+async def ai_analyze_strategy(
+    file_id: str = Body(..., embed=True),
+    regime_name: str = Body(..., embed=True),
+    stats: Dict[str, Any] = Body(..., embed=True)
+):
+    """
+    Provide AI analysis of the backtest results.
+    """
+    try:
+        # Construct summary for AI
+        summary = f"""
+        Analyze these Strategy Lab backtest results for an OTC Binary Options strategy.
+        Regime: {regime_name}
+        Total Signals: {stats.get('total_signals')}
+        Win Rate: {stats.get('win_rate', 0)*100:.1f}%
+        Net P&L (Stakes): {stats.get('profit_loss', 0):.2f}
+        Avg Confidence: {stats.get('avg_confidence', 0):.2f}
+        
+        Provide a brief (2-3 sentence) assessment of the quality and risk level.
+        Return JSON ONLY:
+        {{
+            "risk_level": "Low/Medium/High",
+            "assessment": "string",
+            "recommendation": "string"
+        }}
+        """
+        
+        # We reuse the AIOrchestrator or directly call the AI endpoint
+        # For simplicity and consistency with existing AI logic:
+        ai_endpoint = os.getenv("QFLX_AI_ENDPOINT")
+        if not ai_endpoint:
+             return {"ok": False, "message": "AI service not configured"}
+
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "model": "gpt-4o", # Or user preference
+                "messages": [{"role": "user", "content": summary}],
+                "response_format": {"type": "json_object"}
+            }
+            async with session.post(ai_endpoint, json=payload, headers={"Authorization": f"Bearer {os.getenv('QFLX_API_KEY')}"}) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    ai_content = data['choices'][0]['message']['content']
+                    return {
+                        "ok": True,
+                        "analysis": json.loads(ai_content)
+                    }
+                else:
+                    return {"ok": False, "message": f"AI API Error: {resp.status}"}
+
+    except Exception as e:
+        logger.error(f"AI Strategy Analysis failed: {e}")
+        return {"ok": False, "message": str(e)}
 
 @router.get("/regimes")
 async def get_regimes():

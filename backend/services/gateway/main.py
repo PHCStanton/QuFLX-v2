@@ -265,9 +265,9 @@ app.include_router(strategy.router, prefix="/api/v1/strategy", tags=["Strategy L
 async def redis_listener():
     """Listen to Redis channels and broadcast to Socket.IO"""
     pubsub = redis_client.pubsub()
-    await pubsub.subscribe("market_data", "trading:signals", "system_status", "alerts:dispatched", "scan:heartbeat")
+    await pubsub.subscribe("market_data", "trading:signals", "system_status", "alerts:dispatched", "scan:heartbeat", "strategy:regime")
     
-    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status, alerts:dispatched, scan:heartbeat")
+    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status, alerts:dispatched, scan:heartbeat, strategy:regime")
     
     async for message in pubsub.listen():
         if message['type'] == 'message':
@@ -289,6 +289,10 @@ async def redis_listener():
                         
                 elif channel == "trading:signals":
                     await sio.emit('trading_signal', parsed_data)
+
+                elif channel == "strategy:regime":
+                    # Broadcast regime updates to all clients
+                    await sio.emit('regime_update', parsed_data)
 
                 elif channel == "alerts:dispatched":
                     await sio.emit('new_alert', parsed_data)

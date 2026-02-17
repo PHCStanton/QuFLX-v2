@@ -1,7 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { createChart } from 'lightweight-charts';
 import { CollapsibleCard } from './Card';
-import { Upload, FileText, TrendingUp, AlertCircle, Loader } from 'lucide-react';
+import { Upload, FileText, TrendingUp, AlertCircle, Loader, Brain, Shield, ExternalLink } from 'lucide-react';
 import { getApiBaseUrl } from '../api/apiBase';
+import useMarketStore from '../store/marketStore';
 
 const StrategyLabPanel = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -11,7 +13,11 @@ const StrategyLabPanel = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { addStrategyLabFile, setSelectedStrategyFileId, setSelectedAsset } = useMarketStore();
   const [dragActive, setDragActive] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const chartContainerRef = useRef(null);
+  const chartRef = useRef(null);
   const fileInputRef = useRef(null);
 
   // Handle drag events
@@ -22,6 +28,66 @@ const StrategyLabPanel = () => {
       setDragActive(true);
     } else if (e.type === "dragleave") {
       setDragActive(false);
+    }
+  }, []);
+
+  const aiAnalyze = useCallback(async (fid, strategyStats, regimeName) => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/ai-analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_id: fid,
+          regime_name: regimeName,
+          stats: strategyStats
+        }),
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setAiAnalysis(data.analysis);
+        // Add full file info to store for global access
+        addStrategyLabFile({
+          file_id: fid,
+          filename: uploadedFile?.name || fid,
+          regime: regimeName,
+          stats: strategyStats,
+          analysis: data.analysis
+        });
+      }
+    } catch (err) {
+      console.error('AI Analysis failed:', err);
+    }
+  }, [addStrategyLabFile, uploadedFile]);
+
+  const fetchFullData = useCallback(async (fid) => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/data/${fid}`);
+      const data = await response.json();
+      if (data.ok && chartRef.current) {
+        const series = chartRef.current.candlestickSeries;
+        if (series) {
+          const formatted = data.candles.map(c => {
+            const rawTs = c.timestamp || c.time;
+            // Robust normalization
+            const numeric = typeof rawTs === 'number' ? rawTs : Number(rawTs);
+            const time = numeric > 10000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+
+            return {
+              time,
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close)
+            };
+          }).filter(c => !isNaN(c.time) && !isNaN(c.open))
+            .sort((a, b) => a.time - b.time);
+
+          series.setData(formatted);
+          chartRef.current.timeScale().fitContent();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch full data:', err);
     }
   }, []);
 
@@ -44,12 +110,20 @@ const StrategyLabPanel = () => {
 
       setEntries(data.entries || []);
       setStats(data.stats);
+
+      // Fetch full candle data for chart
+      await fetchFullData(fid || fileId);
+
+      // Trigger AI Analysis
+      if (data.stats && data.regime) {
+        await aiAnalyze(fid || fileId, data.stats, data.regime);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [fileId]);
+  }, [fileId, aiAnalyze, fetchFullData]);
 
   const analyzeRegime = useCallback(async (fid) => {
     setLoading(true);
@@ -165,11 +239,52 @@ const StrategyLabPanel = () => {
     setRegime(null);
     setEntries([]);
     setStats(null);
+    setAiAnalysis(null);
     setError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+    }
   };
+
+  // Chart Implementation
+  useEffect(() => {
+    if (!chartContainerRef.current || !uploadedFile || entries.length === 0) return;
+
+    if (!chartRef.current) {
+      const chart = createChart(chartContainerRef.current, {
+        layout: { background: { color: 'transparent' }, textColor: '#94a3b8' },
+        grid: { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
+        width: chartContainerRef.current.clientWidth,
+        height: 300,
+        timeScale: { timeVisible: true, secondsVisible: false },
+      });
+
+      const candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#10b981', downColor: '#ef4444', borderVisible: false,
+        wickUpColor: '#10b981', wickDownColor: '#ef4444'
+      });
+
+      // Mapping entries to markers
+      const markers = entries.map(entry => ({
+        time: Math.floor(new Date(entry.timestamp).getTime() / 1000),
+        position: entry.direction === 'CALL' ? 'belowBar' : 'aboveBar',
+        color: entry.direction === 'CALL' ? '#10b981' : '#ef4444',
+        shape: entry.direction === 'CALL' ? 'arrowUp' : 'arrowDown',
+        text: entry.direction,
+      }));
+
+      candlestickSeries.setMarkers(markers);
+      chartRef.current = chart;
+      chartRef.current.candlestickSeries = candlestickSeries;
+
+      // Fetch data now if not already loaded
+      fetchFullData(fileId);
+    }
+  }, [uploadedFile, entries, fileId, fetchFullData]);
 
   return (
     <div className="col-span-3 flex flex-col gap-3 h-full min-h-0">
@@ -282,19 +397,90 @@ const StrategyLabPanel = () => {
                 </div>
               }
               headerRight={
-                <span className={`px-2 py-1 text-xs rounded-full ${regime.is_tradeable
-                  ? 'bg-green-500/10 text-green-400'
-                  : 'bg-gray-500/10 text-gray-400'
-                  }`}>
-                  {regime.is_tradeable ? 'Tradeable' : 'Neutral'}
-                </span>
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => {
+                      // Extract asset from filename or data if possible
+                      // For now, use the file_id prefix or just Promote
+                      const assetMatch = uploadedFile?.name?.match(/^([A-Z0-9]+)_/);
+                      if (assetMatch) {
+                        setSelectedAsset(assetMatch[1]);
+                      }
+                      setSelectedStrategyFileId(fileId);
+                    }}
+                    className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold bg-accent-primary text-black rounded hover:opacity-90 transition-all uppercase tracking-tight"
+                    title="Show on Main Chart"
+                  >
+                    <ExternalLink size={10} />
+                    Promote
+                  </button>
+                  <span className={`px-2 py-1 text-xs rounded-full ${regime.is_tradeable
+                    ? 'bg-green-500/10 text-green-400'
+                    : 'bg-gray-500/10 text-gray-400'
+                    }`}>
+                    {regime.is_tradeable ? 'Tradeable' : 'Neutral'}
+                  </span>
+                </div>
               }
             >
-              <p className="text-sm text-text-primary font-medium mb-1">{regime.regime}</p>
-              <div className="flex items-center gap-4 text-xs text-text-secondary">
-                <span>Direction: <span className="text-text-primary">{regime.direction || 'N/A'}</span></span>
-                <span>Confidence: <span className="text-text-primary">{regime.confluence_score || 0}%</span></span>
-                <span>Expiry: <span className="text-text-primary">{regime.suggested_expiry || 'N/A'}</span></span>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="p-3 bg-card-bg rounded-lg border border-border-primary">
+                  <p className="text-xs text-text-secondary mb-1">Detected Regime</p>
+                  <p className="text-sm font-semibold text-accent-primary">{regime.regime}</p>
+                </div>
+                {stats && (
+                  <>
+                    <div className="p-3 bg-card-bg rounded-lg border border-border-primary">
+                      <p className="text-xs text-text-secondary mb-1">Win Rate</p>
+                      <p className={`text-sm font-semibold ${stats.win_rate >= 0.6 ? 'text-green-400' : 'text-yellow-400'}`}>
+                        {Math.round(stats.win_rate * 100)}%
+                      </p>
+                    </div>
+                    <div className="p-3 bg-card-bg rounded-lg border border-border-primary">
+                      <p className="text-xs text-text-secondary mb-1">Net P&L (Stakes)</p>
+                      <p className={`text-sm font-semibold ${stats.profit_loss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {stats.profit_loss > 0 ? '+' : ''}{stats.profit_loss.toFixed(2)}
+                      </p>
+                    </div>
+                  </>
+                )}
+                <div className="p-3 bg-card-bg rounded-lg border border-border-primary">
+                  <p className="text-xs text-text-secondary mb-1">Data Range</p>
+                  <p className="text-[10px] font-medium text-text-primary truncate">
+                    {uploadedFile.dateRange?.start} - {uploadedFile.dateRange?.end}
+                  </p>
+                </div>
+              </div>
+
+              {/* AI Analysis Card */}
+              {aiAnalysis && (
+                <div className="mb-4 p-4 bg-accent-primary/5 border border-accent-primary/20 rounded-xl text-left">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Brain className="w-4 h-4 text-accent-primary" />
+                    <h4 className="text-sm font-semibold text-text-primary">AI Strategy Insights</h4>
+                    <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold uppercase ${aiAnalysis.risk_level === 'Low' ? 'bg-green-500/20 text-green-400' :
+                      aiAnalysis.risk_level === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>
+                      Risk: {aiAnalysis.risk_level}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-secondary leading-relaxed mb-2">
+                    {aiAnalysis.assessment}
+                  </p>
+                  <div className="flex items-start gap-2 text-[10px] font-medium text-accent-primary bg-accent-primary/10 p-2 rounded">
+                    <Shield className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>Recommendation: {aiAnalysis.recommendation}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Chart Container */}
+              <div className="mb-2 bg-black/20 rounded-xl border border-border-primary overflow-hidden">
+                <div className="p-2 border-b border-border-primary bg-card-bg/50 flex justify-between items-center">
+                  <span className="text-[10px] font-medium text-text-secondary uppercase">Strategy Visualization</span>
+                </div>
+                <div ref={chartContainerRef} className="w-full" />
               </div>
             </CollapsibleCard>
           )}

@@ -10,7 +10,23 @@ import csv
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
+from enum import Enum
+
+# --- Data Structures ---
+
+class AlertType(Enum):
+    TRADE_SIGNAL = "trade_signal"
+    MARKET_WARNING = "market_warning"
+    INFO = "info"
+
+@dataclass
+class MarketWarning:
+    asset: str
+    warning_type: str  # "low_volatility", "choppy", "conflicting_signals"
+    message: str
+    technicals: Dict[str, Any]
+    severity: str  # "low", "medium", "high"
 
 # Third-party imports
 try:
@@ -141,7 +157,8 @@ class MarketScanner:
                 "confluence_score": regime_result.confluence_score,
                 "direction": regime_result.direction,
                 "suggested_expiry": regime_result.suggested_expiry,
-                "technicals": regime_result.technicals
+                "technicals": regime_result.technicals,
+                "is_tradeable": regime_result.is_tradeable
             }
             
             # Cache and return
@@ -469,6 +486,47 @@ class DiscordDispatcher:
                     return False
         except Exception as e:
             logger.error(f"❌ Discord dispatch exception for {context.asset}: {e}")
+            return False
+
+    async def send_market_warning(self, warning: MarketWarning) -> bool:
+        """Sends a market warning to Discord."""
+        if not self.webhook_url:
+            return False
+
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+
+        color = 0xffa500  # Orange for warnings
+        
+        embed = {
+            "title": f"⚠️ {warning.asset} Market Warning",
+            "description": warning.message,
+            "color": color,
+            "fields": [
+                {"name": "Warning Type", "value": warning.warning_type.replace('_', ' ').title(), "inline": True},
+                {"name": "Severity", "value": warning.severity.upper(), "inline": True},
+                {"name": "Recommendation", "value": "Wait for better conditions", "inline": False},
+                {"name": "📊 Technicals", "value": f"ADX: {warning.technicals.get('adx', '---')} | BB Width: {warning.technicals.get('bb_width', '---')}", "inline": False}
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "footer": {"text": "QuFLX OTC Alert Dispatcher | Volatility Guard"}
+        }
+
+        payload = {
+            "username": "QuFLX Market Guard",
+            "embeds": [embed]
+        }
+
+        try:
+            async with self._session.post(self.webhook_url, json=payload) as resp:
+                if resp.status in [200, 204]:
+                    logger.info(f"⚠️ Market warning delivered for {warning.asset}")
+                    return True
+                else:
+                    logger.error(f"❌ Warning delivery failed for {warning.asset} (HTTP {resp.status})")
+                    return False
+        except Exception as e:
+            logger.error(f"❌ Warning dispatch exception for {warning.asset}: {e}")
             return False
 
     async def close(self):
@@ -966,21 +1024,31 @@ class OTCDispatcher:
              }
         else:
             result = self.scanner.analyze(data_points, asset=asset, candle_count=self.candle_count)
-            if not result:
-                return
-
         # Prepare Context
         ctx = AlertContext(
             asset=asset,
             condition=result['condition'],
-            price=result['technicals']['price'],
+            price=result['technicals'].get('price', 0),
             time=datetime.now().isoformat(),
             technicals=result['technicals'],
             payout=92, # Default OTC payout
             direction=result.get('direction'),
             suggested_expiry=result.get('suggested_expiry', '1m')
         )
-        
+
+        # NEW: Market Warning Dispatch (Handle Neutral but informative results)
+        if not result.get('is_tradeable'):
+            if 'warning' in result['technicals']:
+                warning = MarketWarning(
+                    asset=asset,
+                    warning_type=result['technicals']['warning'],
+                    message=result['technicals'].get('message', 'Market condition warning'),
+                    technicals=result['technicals'],
+                    severity="high" if result['technicals']['warning'] in ["low_volatility", "tight_range"] else "medium"
+                )
+                await self.discord.send_market_warning(warning)
+            return
+
         logger.info(f"Condition Met: {asset} -> {ctx.condition.value} ({ctx.direction} {ctx.suggested_expiry})")
         
         # 1. Individual Cooldown
@@ -1026,10 +1094,16 @@ class OTCDispatcher:
         # AI Check
         try:
             if self.enable_ai_confirm and not self.test_mode:
+                # NEW: Higher confidence for ranging trades (R9)
+                active_min_confidence = self.min_ai_confidence
+                if ctx.condition in [MarketCondition.RANGING_OVERBOUGHT, MarketCondition.RANGING_OVERSOLD]:
+                    active_min_confidence = 0.85 
+                    logger.info(f"Ranging Market Detected: Raising AI confidence threshold to {active_min_confidence}")
+
                 ai_verdict = await self.ai.verify_setup(ctx)
                 # Filter by Confidence
-                if ai_verdict.confidence < self.min_ai_confidence:
-                    logger.info(f"AI low confidence for {asset} ({ai_verdict.confidence:.2f} < {self.min_ai_confidence}). Skipping.")
+                if ai_verdict.confidence < active_min_confidence:
+                    logger.info(f"AI low confidence for {asset} ({ai_verdict.confidence:.2f} < {active_min_confidence}). Skipping.")
                     return
             else:
                 ai_verdict = AIAnalysisResult(True, "AI Confirmation Disabled (Force Pass)", 1.0)

@@ -167,6 +167,20 @@ const useTickAggregation = ({
     marketData, selectedAssetKey, selectedTimeframe, candleSeries, volumeSeries, enableStreaming, onNewCandle, onError
   ]);
 
+  // Safety timeout to prevent infinite loading state
+  useEffect(() => {
+    let timeoutId;
+    if (isLoading) {
+      timeoutId = setTimeout(() => {
+        if (isLoading) {
+          console.warn('History load timeout - forcing isLoading(false)');
+          setIsLoading(false);
+        }
+      }, 10000);
+    }
+    return () => clearTimeout(timeoutId);
+  }, [isLoading]);
+
   return { isLoading, setIsLoading, currentCandleRef };
 };
 

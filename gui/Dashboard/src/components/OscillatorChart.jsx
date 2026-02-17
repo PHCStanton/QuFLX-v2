@@ -4,6 +4,8 @@ import { createChart, LineSeries, HistogramSeries, LineStyle } from 'lightweight
 const OscillatorChart = ({
   mainChart,
   data,
+  allSeries,
+  indicator,
   type,
   title,
   params,
@@ -12,9 +14,8 @@ const OscillatorChart = ({
 }) => {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
-  const seriesRef = useRef(null);
+  const seriesMapRef = useRef({}); // Store multiple series by key
   const syncSubscriptionRef = useRef(null);
-  const crosshairSubscriptionRef = useRef(null);
   const priceLinesRef = useRef([]);
   const dataRef = useRef([]);
   const isDisposedRef = useRef(false);
@@ -41,18 +42,63 @@ const OscillatorChart = ({
       height: containerRef.current.clientHeight
     });
 
-    let series;
+    const seriesMap = {};
     const isRSI = indicatorValue === 'rsi' || (title && title.toLowerCase().includes('rsi'));
     const isCCI = indicatorValue === 'cci' || (title && title.toLowerCase().includes('cci'));
     const isATR = indicatorValue === 'atr' || (title && title.toLowerCase().includes('atr'));
+    const isStoch = indicatorValue === 'stoch';
+    const isWilliams = indicatorValue === 'williams_r';
+    const isROC = indicatorValue === 'roc';
 
-    if (type === 'histogram') {
-      series = chart.addSeries(HistogramSeries, {
-        color: '#22c55e'
+    // Helper to add series
+    const addLine = (key, color, lineWidth = 1.5, lineStyle = LineStyle.Solid) => {
+      const s = chart.addSeries(LineSeries, {
+        color,
+        lineWidth,
+        lineStyle,
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01,
+        },
       });
+      seriesMap[key] = s;
+      return s;
+    };
+
+    const addHist = (key, color) => {
+      const s = chart.addSeries(HistogramSeries, {
+        color,
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01,
+        },
+      });
+      seriesMap[key] = s;
+      return s;
+    };
+
+    // --- Series Setup ---
+    if (type === 'macd') {
+      // MACD: Histogram, MACD Line, Signal Line
+      addHist('hist', '#60a5fa'); // Light Blue Histogram
+      addLine('macd', '#3b82f6', 2); // Blue MACD
+      addLine('signal', '#ef4444', 2); // Red Signal
+    } else if (type === 'stoch') {
+      // Stochastic: %K, %D
+      addLine('k', '#3b82f6', 2); // Blue %K
+      addLine('d', '#ef4444', 2, LineStyle.Dashed); // Red %D
+    } else if (type === 'adx') {
+      // ADX: ADX, +DI, -DI
+      addLine('adx', '#ffffff', 2); // White ADX
+      addLine('plus', '#22c55e', 1); // Green +DI
+      addLine('minus', '#ef4444', 1); // Red -DI
     } else {
-      series = chart.addSeries(LineSeries, {
-        color: isATR ? '#38bdf8' : isCCI ? '#facc15' : '#22c55e',
+      // Default Single Line (RSI, CCI, ATR, Williams, ROC, etc.)
+      const color = isATR ? '#38bdf8' : isCCI ? '#facc15' : isWilliams ? '#a855f7' : '#22c55e';
+      const s = chart.addSeries(LineSeries, {
+        color,
         lineWidth: 1.5,
         ...(isATR
           ? {
@@ -64,37 +110,55 @@ const OscillatorChart = ({
             }
           : {}),
       });
+      seriesMap['default'] = s;
     }
 
-    // Add Levels
+    // --- Levels Setup ---
+    // Apply levels to the primary series (first one added usually defines scale)
+    const primarySeries = Object.values(seriesMap)[0];
     const levels = [];
-    if (params && params.overbought !== undefined) {
-      const obLine = series.createPriceLine({
-        price: params.overbought,
-        color: isRSI ? '#ef4444' : '#facc15', // Red for RSI, Yellow for CCI/Others
-        lineWidth: 1,
-        lineStyle: isRSI ? LineStyle.Dotted : LineStyle.Solid,
-        axisLabelVisible: true,
-        title: isRSI ? 'OB' : 'Level',
-      });
-      levels.push(obLine);
-    }
-    if (params && params.oversold !== undefined) {
-      const osLine = series.createPriceLine({
-        price: params.oversold,
-        color: isRSI ? '#3b82f6' : '#facc15', // Blue for RSI, Yellow for CCI/Others
-        lineWidth: 1,
-        lineStyle: isRSI ? LineStyle.Dotted : LineStyle.Solid,
-        axisLabelVisible: true,
-        title: isRSI ? 'OS' : 'Level',
-      });
-      levels.push(osLine);
+
+    if (primarySeries) {
+      if (params && params.overbought !== undefined) {
+        const obLine = primarySeries.createPriceLine({
+          price: params.overbought,
+          color: isRSI ? '#ef4444' : '#facc15', 
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: isRSI ? 'OB' : 'Level',
+        });
+        levels.push(obLine);
+      }
+      if (params && params.oversold !== undefined) {
+        const osLine = primarySeries.createPriceLine({
+          price: params.oversold,
+          color: isRSI ? '#3b82f6' : '#facc15',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: isRSI ? 'OS' : 'Level',
+        });
+        levels.push(osLine);
+      }
+      // Zero line for MACD, ROC, CCI if needed
+      if (type === 'macd' || isCCI || isROC) {
+        const zeroLine = primarySeries.createPriceLine({
+          price: 0,
+          color: '#4b5563',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: false,
+        });
+        levels.push(zeroLine);
+      }
     }
     priceLinesRef.current = levels;
 
     chartRef.current = chart;
-    seriesRef.current = series;
+    seriesMapRef.current = seriesMap;
 
+    // --- Resize Observer ---
     const resizeObserver = new ResizeObserver((entries) => {
       if (isDisposedRef.current || !chartRef.current) return;
       if (entries.length === 0 || !entries[0].contentRect) return;
@@ -104,10 +168,7 @@ const OscillatorChart = ({
       } catch (err) {
         if (!isDisposedRef.current) {
           console.error('Oscillator resize failed', err);
-          if (onError) {
-            const msg = err instanceof Error ? err.message : String(err);
-            onError(`Oscillator resize failed: ${msg}`);
-          }
+          if (onError) onError(`Oscillator resize failed: ${String(err)}`);
         }
       }
     });
@@ -125,13 +186,67 @@ const OscillatorChart = ({
         }
       }
       chartRef.current = null;
-      seriesRef.current = null;
+      seriesMapRef.current = {};
       syncSubscriptionRef.current = null;
-      crosshairSubscriptionRef.current = null;
       priceLinesRef.current = [];
     };
   }, [type, params, indicatorValue, title, onError]);
 
+  // --- Data Updates ---
+  useEffect(() => {
+    if (!chartRef.current || !seriesMapRef.current) return;
+    const seriesMap = seriesMapRef.current;
+
+    try {
+      if (type === 'macd') {
+        if (allSeries) {
+            // Check for both possible key patterns
+            const histData = allSeries['macd_histogram'] || [];
+            const macdData = allSeries['macd'] || [];
+            const signalData = allSeries['macd_signal'] || [];
+            
+            if (seriesMap['hist']) seriesMap['hist'].setData(histData);
+            if (seriesMap['macd']) seriesMap['macd'].setData(macdData);
+            if (seriesMap['signal']) seriesMap['signal'].setData(signalData);
+            
+            // For syncing, use macd data as reference
+            dataRef.current = macdData; 
+        }
+      } else if (type === 'stoch') {
+        if (allSeries) {
+            const kData = allSeries['stoch_k'] || [];
+            const dData = allSeries['stoch_d'] || [];
+            
+            if (seriesMap['k']) seriesMap['k'].setData(kData);
+            if (seriesMap['d']) seriesMap['d'].setData(dData);
+            
+            dataRef.current = kData;
+        }
+      } else if (type === 'adx') {
+        if (allSeries) {
+            const adxData = allSeries['adx'] || [];
+            const plusData = allSeries['plus_di'] || [];
+            const minusData = allSeries['minus_di'] || [];
+            
+            if (seriesMap['adx']) seriesMap['adx'].setData(adxData);
+            if (seriesMap['plus']) seriesMap['plus'].setData(plusData);
+            if (seriesMap['minus']) seriesMap['minus'].setData(minusData);
+            
+            dataRef.current = adxData;
+        }
+      } else {
+        // Default Single Series
+        if (seriesMap['default'] && Array.isArray(data)) {
+            seriesMap['default'].setData(data);
+            dataRef.current = data;
+        }
+      }
+    } catch (err) {
+        console.error('Error updating oscillator data', err);
+    }
+  }, [data, allSeries, type]);
+
+  // --- Sync Logic ---
   useEffect(() => {
     if (!mainChart || !chartRef.current || !mainChart.timeScale) {
       return;
@@ -139,20 +254,13 @@ const OscillatorChart = ({
 
     const mainTimeScale = mainChart.timeScale();
     const sync = (range) => {
-      if (isDisposedRef.current || !chartRef.current) {
-        return;
-      }
-      if (!range || typeof range.from !== 'number' || typeof range.to !== 'number') {
-        return;
-      }
-      if (!Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from >= range.to) {
-        return;
-      }
+      if (isDisposedRef.current || !chartRef.current) return;
+      if (!range || typeof range.from !== 'number' || typeof range.to !== 'number') return;
+      if (!Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from >= range.to) return;
 
+      // Use dataRef to check bounds
       const points = dataRef.current;
-      if (!Array.isArray(points) || points.length < 2) {
-        return;
-      }
+      if (!Array.isArray(points) || points.length < 2) return;
 
       const toNumericTime = (time) => {
         if (typeof time === 'number') return time;
@@ -165,200 +273,38 @@ const OscillatorChart = ({
 
       const firstTime = toNumericTime(points[0]?.time);
       const lastTime = toNumericTime(points[points.length - 1]?.time);
-      if (firstTime == null || lastTime == null) {
-        return;
-      }
+      if (firstTime == null || lastTime == null) return;
 
-      if (range.to < firstTime || range.from > lastTime) {
-        return;
-      }
+      // Simple overlap check
+      if (range.to < firstTime || range.from > lastTime) return;
 
       try {
         const oscTimeScale = chartRef.current.timeScale();
         oscTimeScale.setVisibleRange(range);
       } catch (err) {
-        console.error('Failed to sync oscillator time scale', err);
-        if (onError) {
-          const msg = err instanceof Error ? err.message : String(err);
-          onError(`Oscillator chart sync failed: ${msg}`);
-        }
+        // Silent catch for sync errors (common during init)
       }
     };
 
     mainTimeScale.subscribeVisibleTimeRangeChange(sync);
     
-    // Trigger initial sync after a short delay to ensure both charts are ready
     const timeoutId = setTimeout(() => {
       if (isDisposedRef.current) return;
       const range = mainTimeScale.getVisibleRange();
-      if (range) {
-        sync(range);
-      }
+      if (range) sync(range);
     }, 100);
 
     syncSubscriptionRef.current = { mainTimeScale, sync };
-
+    
     return () => {
-      clearTimeout(timeoutId);
-      if (syncSubscriptionRef.current) {
-        const { mainTimeScale, sync } = syncSubscriptionRef.current;
-        if (mainTimeScale && sync) {
-          mainTimeScale.unsubscribeVisibleTimeRangeChange(sync);
+        if (syncSubscriptionRef.current) {
+            mainTimeScale.unsubscribeVisibleTimeRangeChange(syncSubscriptionRef.current.sync);
         }
-      }
-      syncSubscriptionRef.current = null;
+        clearTimeout(timeoutId);
     };
-  }, [mainChart, type, params, indicatorValue, title, onError]);
+  }, [mainChart]); // Re-run if mainChart changes
 
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    if (!Array.isArray(data) || data.length === 0) {
-      seriesRef.current.setData([]);
-      dataRef.current = [];
-      return;
-    }
-    const cleaned = data.filter((point) => point && point.time != null && point.value != null);
-
-    if (cleaned.length === 0) {
-      seriesRef.current.setData([]);
-      dataRef.current = [];
-      return;
-    }
-
-    const sorted = [...cleaned].sort((a, b) => {
-      const ta = typeof a.time === 'string' ? Number(a.time) : a.time;
-      const tb = typeof b.time === 'string' ? Number(b.time) : b.time;
-      if (ta == null || tb == null) return 0;
-      return ta - tb;
-    });
-
-    seriesRef.current.setData(sorted);
-    dataRef.current = sorted;
-
-    if (syncSubscriptionRef.current) {
-      const { mainTimeScale, sync } = syncSubscriptionRef.current;
-      const range = mainTimeScale?.getVisibleRange ? mainTimeScale.getVisibleRange() : null;
-      if (range) {
-        sync(range);
-      }
-    }
-  }, [data]);
-
-  useEffect(() => {
-    if (!mainChart || !chartRef.current || !seriesRef.current) {
-      return;
-    }
-    if (!mainChart.subscribeCrosshairMove || !mainChart.unsubscribeCrosshairMove) {
-      return;
-    }
-
-    const handleCrosshairMove = (param) => {
-      if (isDisposedRef.current || !chartRef.current || !seriesRef.current) {
-        return;
-      }
-
-      if (!param || !param.time) {
-        try {
-          chartRef.current.clearCrosshairPosition();
-        } catch (err) {
-          if (!isDisposedRef.current) {
-            console.error('Failed to clear oscillator crosshair', err);
-          }
-        }
-        return;
-      }
-
-      const toNumericTime = (time) => {
-        if (typeof time === 'number') return time;
-        if (typeof time === 'string') {
-          const n = Number(time);
-          return Number.isFinite(n) ? n : null;
-        }
-        return null;
-      };
-
-      const points = dataRef.current;
-      if (!Array.isArray(points) || points.length < 2) {
-        return;
-      }
-
-      const firstTime = toNumericTime(points[0]?.time);
-      const lastTime = toNumericTime(points[points.length - 1]?.time);
-      const currentTime = toNumericTime(param.time);
-      if (firstTime == null || lastTime == null || currentTime == null) {
-        return;
-      }
-
-      if (currentTime < firstTime || currentTime > lastTime) {
-        return;
-      }
-
-      let value = 0;
-
-      if (points.length > 0) {
-        const time = param.time;
-        const match = points.find((point) => {
-          if (!point || point.time == null) {
-            return false;
-          }
-          if (point.time === time) {
-            return true;
-          }
-          const pt = Number(point.time);
-          const tt = Number(time);
-          if (Number.isNaN(pt) || Number.isNaN(tt)) {
-            return false;
-          }
-          return pt === tt;
-        });
-
-        if (match && match.value != null) {
-          value = match.value;
-        } else {
-          const last = points[points.length - 1];
-          if (last && last.value != null) {
-            value = last.value;
-          }
-        }
-      }
-
-      try {
-        chartRef.current.setCrosshairPosition(value, param.time, seriesRef.current);
-      } catch (err) {
-        if (!isDisposedRef.current) {
-          console.error('Failed to set oscillator crosshair from main chart', err);
-          if (onError) {
-            const msg = err instanceof Error ? err.message : String(err);
-            onError(`Oscillator crosshair sync failed: ${msg}`);
-          }
-        }
-      }
-    };
-
-    mainChart.subscribeCrosshairMove(handleCrosshairMove);
-    crosshairSubscriptionRef.current = { mainChart, handleCrosshairMove };
-
-    return () => {
-      if (crosshairSubscriptionRef.current) {
-        const { mainChart: chart, handleCrosshairMove: handler } = crosshairSubscriptionRef.current;
-        if (chart && handler && chart.unsubscribeCrosshairMove) {
-          chart.unsubscribeCrosshairMove(handler);
-        }
-      }
-      crosshairSubscriptionRef.current = null;
-    };
-  }, [mainChart, type, params, indicatorValue, title, onError]);
-
-  return (
-    <div className="w-full h-full flex flex-col">
-      {title && (
-        <div className="text-[10px] text-gray-400 px-2 py-0.5 uppercase tracking-wide">
-          {title}
-        </div>
-      )}
-      <div className="flex-1" ref={containerRef} />
-    </div>
-  );
+  return <div ref={containerRef} className="w-full h-full" />;
 };
 
 export default OscillatorChart;

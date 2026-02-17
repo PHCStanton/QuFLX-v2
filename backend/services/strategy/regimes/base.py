@@ -89,19 +89,56 @@ class BaseStrategy(ABC):
         """
         Calculate performance statistics for a set of entry signals.
         
-        This is a default implementation. Strategies can override for custom metrics.
-        
-        Args:
-            entries: List of entry signals
-            df: DataFrame with market data (for backtesting)
-            
-        Returns:
-            StrategyStats object with performance metrics
+        Performs a simulation of each trade assuming 1m expiry.
         """
-        if not entries:
+        if not entries or df.empty:
             return StrategyStats(total_signals=0)
         
         total = len(entries)
+        wins = 0
+        losses = 0
+        total_pnl = 0.0
+        payout = 0.92  # 92% OTC payout
+        
+        # Ensure 'timestamp' or 'time' is index for fast lookup
+        if 'timestamp' in df.columns:
+            df_lookup = df.set_index('timestamp')
+        elif 'time' in df.columns:
+            df_lookup = df.set_index('time')
+        else:
+            df_lookup = df
+
+        for entry in entries:
+            try:
+                # Find entry row
+                # In historical CSVs, timestamp might be string or float
+                ts = entry.timestamp
+                
+                # Try to find current row index
+                if ts in df_lookup.index:
+                    current_idx = df_lookup.index.get_loc(ts)
+                    # Check 1 minute (1 row) ahead for result
+                    if current_idx + 1 < len(df_lookup):
+                        exit_price = df_lookup.iloc[current_idx + 1]['close']
+                        
+                        if entry.direction == "CALL":
+                            win = exit_price > entry.entry_price
+                        else:
+                            win = exit_price < entry.entry_price
+                            
+                        if win:
+                            wins += 1
+                            total_pnl += payout
+                        else:
+                            losses += 1
+                            total_pnl -= 1.0  # Lose full stake
+                    else:
+                        # Trade not completed in data
+                        pass
+            except Exception as e:
+                continue
+
+        win_rate = wins / (wins + losses) if (wins + losses) > 0 else 0.0
         avg_conf = sum(e.confidence for e in entries) / total if total > 0 else 0.0
         
         # Regime distribution
@@ -111,8 +148,10 @@ class BaseStrategy(ABC):
         
         return StrategyStats(
             total_signals=total,
+            win_rate=win_rate,
             avg_confidence=avg_conf,
-            regime_distribution=regime_dist
+            regime_distribution=regime_dist,
+            profit_factor=total_pnl # Repurposing profit_factor for Net P&L in StrategyStats
         )
     
     def __repr__(self):

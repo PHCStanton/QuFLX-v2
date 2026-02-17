@@ -15,6 +15,48 @@ export const csvOptions = [
 
 export const indicatorOptions = [
   {
+    label: 'Stochastic Oscillator',
+    value: 'stoch',
+    key: 'stoch_k',
+    kind: 'oscillator',
+    displayValue: '14,3,3',
+    source: 'backend',
+    params: { k: 14, d: 3, slowing: 3, overbought: 80, oversold: 20 },
+    paramConfig: [
+      { name: 'k', label: '%K Period', type: 'number', min: 2, max: 50, default: 14 },
+      { name: 'd', label: '%D Period', type: 'number', min: 1, max: 50, default: 3 },
+      { name: 'slowing', label: 'Slowing', type: 'number', min: 1, max: 50, default: 3 },
+      { name: 'overbought', label: 'Overbought', type: 'number', min: 50, max: 100, default: 80 },
+      { name: 'oversold', label: 'Oversold', type: 'number', min: 0, max: 50, default: 20 },
+    ],
+  },
+  {
+    label: 'Williams %R',
+    value: 'williams_r',
+    key: 'williams_r',
+    kind: 'oscillator',
+    displayValue: '14',
+    source: 'backend',
+    params: { period: 14, overbought: -20, oversold: -80 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
+      { name: 'overbought', label: 'Overbought', type: 'number', min: -50, max: 0, default: -20 },
+      { name: 'oversold', label: 'Oversold', type: 'number', min: -100, max: -50, default: -80 },
+    ],
+  },
+  {
+    label: 'Rate of Change (ROC)',
+    value: 'roc',
+    key: 'roc_10',
+    kind: 'oscillator',
+    displayValue: '10',
+    source: 'backend',
+    params: { period: 10, zeroLine: 0 },
+    paramConfig: [
+      { name: 'period', label: 'Period', type: 'number', min: 1, max: 100, default: 10 },
+    ],
+  },
+  {
     label: 'RSI',
     value: 'rsi',
     key: 'rsi_14',
