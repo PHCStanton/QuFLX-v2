@@ -51,6 +51,7 @@ const useOverlayIndicators = ({
   indicatorSeries,
   selectedAsset,
   selectedTimeframe,
+  seriesKey: seriesKeyProp,
   onError
 }) => {
   const overlayIndicators = useMemo(
@@ -80,8 +81,10 @@ const useOverlayIndicators = ({
     });
 
     overlayIndicators.forEach((ind) => {
-      const key = `${selectedAsset}|${selectedTimeframe}`;
-      const seriesForKey = indicatorSeries && indicatorSeries[key];
+      // Use explicit seriesKey if provided (e.g., for Strategy Lab: "lab|{fileId}")
+      // Otherwise construct from asset + timeframe (live chart pattern)
+      const key = seriesKeyProp || (selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null);
+      const seriesForKey = key && indicatorSeries ? indicatorSeries[key] : null;
       if (!seriesForKey) return;
 
       if (!overlaySeriesRef.current[ind.id]) {
@@ -342,6 +345,7 @@ const useOverlayIndicators = ({
     indicatorSeries,
     selectedAsset,
     selectedTimeframe,
+    seriesKeyProp,
     onError
   ]);
 

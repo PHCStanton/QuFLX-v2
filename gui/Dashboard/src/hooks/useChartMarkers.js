@@ -1,15 +1,5 @@
 import { useEffect } from 'react';
-
-const normalizeTime = (time) => {
-    if (typeof time === 'number') return time;
-    if (typeof time === 'string') {
-        // Simple heuristic for ISO strings or timestamps
-        const n = Number(time);
-        if (Number.isFinite(n)) return n;
-        return Math.floor(new Date(time).getTime() / 1000);
-    }
-    return null;
-};
+import { normalizeTimestamp } from '../utils/time';
 
 const useChartMarkers = ({
     mainChart,
@@ -19,30 +9,12 @@ const useChartMarkers = ({
     activeIndicators,
     selectedAsset,
     selectedTimeframe,
-    onError,
-    labEntries = null
+    onError
 }) => {
     useEffect(() => {
         if (!mainChart || !candleSeries) return;
 
         const markers = [];
-
-        // 0. Strategy Lab Entries (Priority)
-        if (Array.isArray(labEntries)) {
-            labEntries.forEach(entry => {
-                const time = normalizeTime(entry.timestamp);
-                if (!time) return;
-                const isBuy = entry.direction === 'CALL' || entry.direction === 'BUY';
-                markers.push({
-                    time,
-                    position: isBuy ? 'belowBar' : 'aboveBar',
-                    color: isBuy ? '#22c55e' : '#ef4444',
-                    shape: isBuy ? 'arrowUp' : 'arrowDown',
-                    text: entry.result ? (entry.result === 'WIN' ? 'WIN' : 'LOSS') : 'ENTRY',
-                    size: 2
-                });
-            });
-        }
 
         // 1. AI Message Markers
         // Assuming aiMessages has { content, ts, role: 'assistant' }
@@ -55,15 +27,11 @@ const useChartMarkers = ({
                     const isSell = content.includes('SELL') || content.includes('SHORT');
 
                     if ((isBuy || isSell) && msg.ts) {
-                        // Convert msg.ts (ms) to seconds for LWC if needed
-                        let time = msg.ts;
-                        if (time > 1000000000000) time = Math.floor(time / 1000); // Convert ms to s
-
-                        // Limit constraint: markers must correspond to bar times usually?
-                        // Lightweight charts markers attach to time.
+                        const time = normalizeTimestamp(msg.ts);
+                        if (!time) return;
 
                         markers.push({
-                            time: time,
+                            time,
                             position: isBuy ? 'belowBar' : 'aboveBar',
                             color: isBuy ? '#22c55e' : '#ef4444',
                             shape: isBuy ? 'arrowUp' : 'arrowDown',
@@ -93,12 +61,12 @@ const useChartMarkers = ({
 
                 if (Array.isArray(directionData)) {
                     // Sort by time just in case
-                    const sortedDir = [...directionData].sort((a, b) => normalizeTime(a.time) - normalizeTime(b.time));
+                    const sortedDir = [...directionData].sort((a, b) => normalizeTimestamp(a.time) - normalizeTimestamp(b.time));
 
                     let lastDir = null;
 
                     sortedDir.forEach(pt => {
-                        const time = normalizeTime(pt.time);
+                        const time = normalizeTimestamp(pt.time);
                         // Value: 1 (Up/Buy), -1 (Down/Sell) OR 'up'/'down'
                         let dir = pt.value;
                         if (typeof dir === 'string') dir = dir.toLowerCase();
@@ -141,7 +109,7 @@ const useChartMarkers = ({
 
         // Deduplicate markers: LWC crashes if multiple markers at same time? 
         // LWC supports multiple markers, but logic might need sorting.
-        markers.sort((a, b) => normalizeTime(a.time) - normalizeTime(b.time));
+        markers.sort((a, b) => normalizeTimestamp(a.time) - normalizeTimestamp(b.time));
 
         try {
             if (candleSeries && typeof candleSeries.setMarkers === 'function') {
@@ -153,7 +121,7 @@ const useChartMarkers = ({
             console.error(`Marker Error: ${err.message}`);
         }
 
-    }, [mainChart, candleSeries, aiMessages, indicatorSeries, activeIndicators, selectedAsset, selectedTimeframe, onError, labEntries]);
+    }, [mainChart, candleSeries, aiMessages, indicatorSeries, activeIndicators, selectedAsset, selectedTimeframe, onError]);
 };
 
 export default useChartMarkers;

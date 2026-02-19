@@ -13,7 +13,7 @@ const StrategyLabPanel = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const { addStrategyLabFile, setSelectedStrategyFileId, setSelectedAsset } = useMarketStore();
+  const { addStrategyLabFile, setSelectedStrategyFileId } = useMarketStore();
   const [dragActive, setDragActive] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const chartContainerRef = useRef(null);
@@ -31,7 +31,7 @@ const StrategyLabPanel = () => {
     }
   }, []);
 
-  const aiAnalyze = useCallback(async (fid, strategyStats, regimeName) => {
+  const aiAnalyze = useCallback(async (fid, strategyStats, regimeName, entriesData) => {
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/v1/strategy/ai-analyze`, {
         method: 'POST',
@@ -45,13 +45,14 @@ const StrategyLabPanel = () => {
       const data = await response.json();
       if (data.ok) {
         setAiAnalysis(data.analysis);
-        // Add full file info to store for global access
+        // Add full file info to store for global access (includes entries for chart)
         addStrategyLabFile({
           file_id: fid,
           filename: uploadedFile?.name || fid,
           regime: regimeName,
           stats: strategyStats,
-          analysis: data.analysis
+          analysis: data.analysis,
+          entries: entriesData || []
         });
       }
     } catch (err) {
@@ -114,9 +115,9 @@ const StrategyLabPanel = () => {
       // Fetch full candle data for chart
       await fetchFullData(fid || fileId);
 
-      // Trigger AI Analysis
+      // Trigger AI Analysis (pass entries for chart markers)
       if (data.stats && data.regime) {
-        await aiAnalyze(fid || fileId, data.stats, data.regime);
+        await aiAnalyze(fid || fileId, data.stats, data.regime, data.entries || []);
       }
     } catch (err) {
       setError(err.message);
@@ -400,12 +401,9 @@ const StrategyLabPanel = () => {
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => {
-                      // Extract asset from filename or data if possible
-                      // For now, use the file_id prefix or just Promote
-                      const assetMatch = uploadedFile?.name?.match(/^([A-Z0-9]+)_/);
-                      if (assetMatch) {
-                        setSelectedAsset(assetMatch[1]);
-                      }
+                      // Promote to main chart view - only set the file ID
+                      // Do NOT call setSelectedAsset as it triggers live history loading
+                      // The Strategy Lab chart uses its own data from strategyLabData
                       setSelectedStrategyFileId(fileId);
                     }}
                     className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold bg-accent-primary text-black rounded hover:opacity-90 transition-all uppercase tracking-tight"
@@ -432,14 +430,14 @@ const StrategyLabPanel = () => {
                   <>
                     <div className="p-3 bg-card-bg rounded-lg border border-border-primary">
                       <p className="text-xs text-text-secondary mb-1">Win Rate</p>
-                      <p className={`text-sm font-semibold ${stats.win_rate >= 0.6 ? 'text-green-400' : 'text-yellow-400'}`}>
-                        {Math.round(stats.win_rate * 100)}%
+                      <p className={`text-sm font-semibold ${(stats.win_rate ?? 0) >= 0.6 ? 'text-green-400' : 'text-yellow-400'}`}>
+                        {Math.round((stats.win_rate ?? 0) * 100)}%
                       </p>
                     </div>
                     <div className="p-3 bg-card-bg rounded-lg border border-border-primary">
                       <p className="text-xs text-text-secondary mb-1">Net P&L (Stakes)</p>
                       <p className={`text-sm font-semibold ${stats.profit_loss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {stats.profit_loss > 0 ? '+' : ''}{stats.profit_loss.toFixed(2)}
+                        {(stats.profit_loss ?? 0) > 0 ? '+' : ''}{(stats.profit_loss ?? 0).toFixed(2)}
                       </p>
                     </div>
                   </>
@@ -519,16 +517,16 @@ const StrategyLabPanel = () => {
                             {entry.direction}
                           </span>
                         </td>
-                        <td className="py-2 text-text-primary">{entry.entry_price.toFixed(5)}</td>
+                        <td className="py-2 text-text-primary">{(entry.entry_price ?? 0).toFixed(5)}</td>
                         <td className="py-2">
                           <div className="flex items-center gap-2">
                             <div className="w-16 h-1.5 bg-border-primary rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-accent-primary"
-                                style={{ width: `${entry.confidence * 100}%` }}
+                                style={{ width: `${(entry.confidence ?? 0) * 100}%` }}
                               />
                             </div>
-                            <span className="text-text-primary">{Math.round(entry.confidence * 100)}%</span>
+                            <span className="text-text-primary">{Math.round((entry.confidence ?? 0) * 100)}%</span>
                           </div>
                         </td>
                         <td className="py-2 text-text-primary">{entry.suggested_expiry}</td>

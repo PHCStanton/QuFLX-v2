@@ -49,33 +49,12 @@ const ChartWorkspace = () => {
     setLastAnnotatedScreenshotDataUrl,
     setCaptureChartImage,
     aiMessages, // Need to access AI Messages for markers
-    selectedStrategyFileId,
-    strategyLabFiles,
-    strategyLabData,
     loadHistory,
   } = useMarketStore();
 
-  const csvMode = !!selectedStrategyFileId;
-  const labFile = useMemo(() =>
-    csvMode ? strategyLabFiles.find(f => f.file_id === selectedStrategyFileId) : null,
-    [csvMode, strategyLabFiles, selectedStrategyFileId]);
-
-  const effectiveHistoryCandles = useMemo(() => {
-    if (!csvMode || !selectedStrategyFileId || !strategyLabData[selectedStrategyFileId]) {
-      return historyCandles;
-    }
-    // We virtualize the history for the selected asset
-    return { [selectedAsset]: strategyLabData[selectedStrategyFileId] };
-  }, [csvMode, selectedStrategyFileId, strategyLabData, historyCandles, selectedAsset]);
-
-  const effectiveHistoryStatus = useMemo(() => {
-    if (!csvMode) return historyStatus;
-    return { [selectedAsset]: 'loaded' };
-  }, [csvMode, historyStatus, selectedAsset]);
-
   const health = useStreamHealth();
   const dataSourceMode = settings?.analysis?.dataSourceMode || 'history_and_streaming';
-  const effectiveEnableStreaming = csvMode ? false : (dataSourceMode !== 'history_only');
+  const enableStreaming = dataSourceMode !== 'history_only';
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
   const chartWrapperRef = useRef(null); // Ref for tooltip positioning bounds
@@ -102,8 +81,8 @@ const ChartWorkspace = () => {
     responseVerbosity: 'concise',
     uiMode: 'modal',
     marketData,
-    historyCandles: effectiveHistoryCandles,
-    historyStatus: effectiveHistoryStatus,
+    historyCandles,
+    historyStatus,
     selectedAssetKey,
     indicatorSeries,
     activeIndicators,
@@ -123,7 +102,6 @@ const ChartWorkspace = () => {
   // Initial History Load Fix
   useEffect(() => {
     if (!selectedAsset || !selectedTimeframe) return;
-    if (csvMode) return; // Don't load history in CSV mode
 
     const status = historyStatus[selectedAsset];
     // Only load if we haven't loaded/attempted yet
@@ -132,7 +110,7 @@ const ChartWorkspace = () => {
         console.error('Initial history load failed:', err);
       });
     }
-  }, [selectedAsset, selectedTimeframe, csvMode, historyStatus, loadHistory]);
+  }, [selectedAsset, selectedTimeframe, historyStatus, loadHistory]);
 
   const [volumeSeries, setVolumeSeries] = useState(null);
 
@@ -303,7 +281,6 @@ const ChartWorkspace = () => {
     selectedAsset,
     selectedTimeframe,
     onError: setError,
-    labEntries: labFile?.entries || []
   });
 
   useChartPriceLines({
@@ -318,12 +295,12 @@ const ChartWorkspace = () => {
     selectedTimeframe,
     candleSeries,
     volumeSeries, // Pass Volume Series
-    historyCandles: effectiveHistoryCandles,
-    historyStatus: effectiveHistoryStatus,
+    historyCandles,
+    historyStatus,
     selectedAsset,
     onError: setError,
     onNewCandle,
-    enableStreaming: effectiveEnableStreaming
+    enableStreaming
   });
 
   const handleIndicatorClick = useCallback((indicator) => {

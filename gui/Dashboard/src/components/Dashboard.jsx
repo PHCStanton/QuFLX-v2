@@ -7,9 +7,10 @@ import SettingsPanel from './SettingsPanel';
 import ErrorBoundary from './ErrorBoundary';
 import ContextPanelRouter from './ContextPanelRouter';
 import ErrorToast from './ErrorToast';
+import StrategyLabChartWorkspace from './StrategyLab/StrategyLabChartWorkspace';
 
 const Dashboard = () => {
-  const { connectSocket, disconnectSocket, activeTab } = useMarketStore();
+  const { connectSocket, disconnectSocket, activeTab, selectedStrategyFileId } = useMarketStore();
 
   const containerRef = useRef(null);
   const isDraggingRef = useRef(false);
@@ -116,7 +117,11 @@ const Dashboard = () => {
             <div ref={containerRef} className="flex-1 grid min-h-0" style={{ gridTemplateColumns: `minmax(0, 1fr) ${resizeHandleWidthPx}px ${clampRightPanelWidthPx(rightPanelWidthPx)}px` }}>
               <div className="flex flex-col h-full min-h-0 pr-2">
                 <ErrorBoundary>
-                  <ChartWorkspace />
+                  {selectedStrategyFileId ? (
+                    <StrategyLabChartWorkspace />
+                  ) : (
+                    <ChartWorkspace />
+                  )}
                 </ErrorBoundary>
               </div>
               <div

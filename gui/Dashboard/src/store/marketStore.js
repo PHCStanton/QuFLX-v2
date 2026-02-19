@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { validateMarketData } from '../utils/validators';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
+import { getApiBaseUrl } from '../api/apiBase';
+import { normalizeTimestamp } from '../utils/time';
 import alertSignalSound from '../assets/Sounds/TopGun_Clip_Music_Voice.mp3';
 
 const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
@@ -123,7 +125,7 @@ const createUiSlice = (set) => ({
     })),
 });
 
-const createTickerSlice = () => ({
+const createTickerSlice = (set) => ({
   marketData: {},
   tickerMaxAssets: 15,
   subscribedAssetKeys: [],
@@ -157,13 +159,11 @@ const createStrategyLabSlice = (set, get) => ({
     // Fetch data if not cached
     if (!get().strategyLabData[fileId]) {
       try {
-        const res = await fetch(`http://localhost:8000/api/v1/strategy/data/${fileId}`);
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/strategy/data/${fileId}`);
         const data = await res.json();
         if (data.ok) {
           const normalizedCandles = (data.candles || []).map(c => {
-            const rawTs = c.timestamp || c.time;
-            const numeric = typeof rawTs === 'number' ? rawTs : Number(rawTs);
-            const time = numeric > 10000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+            const time = normalizeTimestamp(c.timestamp || c.time);
             return {
               ...c,
               time,
@@ -172,7 +172,7 @@ const createStrategyLabSlice = (set, get) => ({
               low: Number(c.low),
               close: Number(c.close)
             };
-          }).filter(c => !isNaN(c.time) && !isNaN(c.open))
+          }).filter(c => c.time !== null && !isNaN(c.open))
             .sort((a, b) => a.time - b.time);
 
           set(state => ({
@@ -316,7 +316,7 @@ const createMarketSlice = (set, get) => ({
     set({ selectedTimeframe: timeframe, marketData: {}, lastError: null });
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/timeframe/select-timeframe', {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/timeframe/select-timeframe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeframe })
@@ -350,7 +350,7 @@ const createMarketSlice = (set, get) => ({
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/timeframe/sync-timeframe-ui', {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/timeframe/sync-timeframe-ui`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeframe })
@@ -403,6 +403,11 @@ const createMarketSlice = (set, get) => ({
   },
   indicatorSeries: {},
   indicatorStatus: {},
+  setIndicatorSeries: (updater) => set((state) => ({
+    indicatorSeries: typeof updater === 'function'
+      ? updater(state.indicatorSeries)
+      : updater
+  })),
   loadIndicators: async ({ asset, timeframe, indicators, params, currentCandle }) => {
     if (!asset || !timeframe || !Array.isArray(indicators) || indicators.length === 0) {
       return;
@@ -1115,7 +1120,7 @@ const useMarketStore = create(
     })
   })((set, get) => ({
     ...createUiSlice(set),
-    ...createTickerSlice(),
+    ...createTickerSlice(set),
     ...createStrategyLabSlice(set, get),
     ...createMarketSlice(set, get),
     ...createConnectionSlice(set, get)

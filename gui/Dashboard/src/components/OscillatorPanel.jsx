@@ -6,6 +6,7 @@ const OscillatorPanel = ({
   mainChart,
   selectedAsset,
   selectedTimeframe,
+  seriesKey: seriesKeyProp,
   oscillatorIndicators,
   indicatorSeries,
   indicatorStatus,
@@ -66,7 +67,9 @@ const OscillatorPanel = ({
     return null;
   }
 
-  const key = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
+  // Use explicit seriesKey if provided (e.g., for Strategy Lab: "lab|{fileId}")
+  // Otherwise construct from asset + timeframe (live chart pattern)
+  const key = seriesKeyProp || (selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null);
   const seriesForKey = key && indicatorSeries ? indicatorSeries[key] : null;
   const statusKey = key && indicatorStatus ? indicatorStatus[key] : null;
 
