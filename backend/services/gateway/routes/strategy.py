@@ -25,7 +25,7 @@ project_root = Path(__file__).resolve().parents[4]
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
-from backend.services.strategy.regime_detector import detect_regime, calculate_indicators, MarketCondition
+from backend.services.strategy.regime_detector import detect_regime, detect_regime_series, calculate_indicators, MarketCondition
 from backend.services.strategy.regimes import get_strategy_for_regime, list_available_regimes
 
 router = APIRouter()
@@ -126,27 +126,51 @@ async def analyze_regime(file_id: str = Body(..., embed=True), asset: str = Body
         
         # Load data
         df = pd.read_csv(file_path)
-        
-        # Calculate indicators and detect regime
-        df = calculate_indicators(df)
-        regime_result = detect_regime(df)
-        
-        if regime_result is None:
+        df = df.sort_values('timestamp').reset_index(drop=True)
+
+        # Use series-based detection for Lab context:
+        # Scans the entire dataset for tradeable regimes (not just the last candle)
+        series_result = detect_regime_series(df)
+
+        if not series_result.get("is_tradeable"):
+            # Fallback: try single-candle detection on the full dataset
+            df_ind = calculate_indicators(df)
+            regime_result = detect_regime(df_ind)
+            if regime_result is None:
+                return {
+                    "ok": True,
+                    "regime": "Neutral",
+                    "regime_name": "Neutral",
+                    "message": "No tradeable regime detected in this dataset",
+                    "is_tradeable": False,
+                    "technicals": {},
+                    "regime_distribution": {},
+                    "regime_timeline": [],
+                }
             return {
                 "ok": True,
-                "regime": "Neutral",
-                "message": "No tradeable regime detected",
-                "technicals": {}
+                "regime": regime_result.condition.value,
+                "regime_name": regime_result.condition.value,
+                "confluence_score": regime_result.confluence_score,
+                "direction": regime_result.direction,
+                "suggested_expiry": regime_result.suggested_expiry,
+                "technicals": regime_result.technicals,
+                "is_tradeable": regime_result.is_tradeable,
+                "regime_distribution": {},
+                "regime_timeline": [],
             }
-        
+
         return {
             "ok": True,
-            "regime": regime_result.condition.value,
-            "confluence_score": regime_result.confluence_score,
-            "direction": regime_result.direction,
-            "suggested_expiry": regime_result.suggested_expiry,
-            "technicals": regime_result.technicals,
-            "is_tradeable": regime_result.is_tradeable
+            "regime": series_result["dominant_regime"],
+            "regime_name": series_result["dominant_regime"],
+            "confluence_score": series_result["dominant_score"],
+            "direction": series_result["dominant_direction"],
+            "suggested_expiry": "1m",
+            "technicals": series_result["technicals"],
+            "is_tradeable": True,
+            "regime_distribution": series_result["regime_distribution"],
+            "regime_timeline": series_result["regime_timeline"],
         }
         
     except HTTPException:
@@ -213,29 +237,45 @@ async def identify_entries(
         
         # Load data
         df = pd.read_csv(file_path)
-        
+        df = df.sort_values('timestamp').reset_index(drop=True)
+
         # Calculate indicators
         df = calculate_indicators(df)
-        
-        # Detect regime if not provided
+
+        # Use series-based detection for Lab context (scans full dataset)
         if regime_name is None:
-            regime_result = detect_regime(df)
-            if regime_result is None:
+            series_result = detect_regime_series(df)
+            if not series_result.get("is_tradeable"):
+                return {
+                    "ok": True,
+                    "entries": [],
+                    "message": "No tradeable regime detected in this dataset"
+                }
+            regime_name = series_result["dominant_regime"]
+
+        # Get single-candle result for strategy entry logic (needs RegimeResult object)
+        regime_result = detect_regime(df)
+        if regime_result is None:
+            # Create a minimal RegimeResult from series data for entry identification
+            from backend.services.strategy.regime_detector import RegimeResult, MarketCondition
+            # Find the matching condition
+            matching_condition = next(
+                (c for c in MarketCondition if c.value == regime_name),
+                MarketCondition.NEUTRAL
+            )
+            if matching_condition == MarketCondition.NEUTRAL:
                 return {
                     "ok": True,
                     "entries": [],
                     "message": "No tradeable regime detected"
                 }
-            regime_name = regime_result.condition.value
-        else:
-            # Re-detect to get full regime result
-            regime_result = detect_regime(df)
-            if regime_result is None:
-                return {
-                    "ok": True,
-                    "entries": [],
-                    "message": "No tradeable regime detected"
-                }
+            regime_result = RegimeResult(
+                condition=matching_condition,
+                confluence_score=70,
+                direction="CALL" if "Bullish" in regime_name or "Buy" in regime_name else "PUT",
+                suggested_expiry="1m",
+                technicals={}
+            )
         
         # Get strategy for regime
         strategy = get_strategy_for_regime(regime_name)
@@ -303,14 +343,20 @@ async def ai_analyze_strategy(
     Provide AI analysis of the backtest results.
     """
     try:
+        # Safely coerce stats values — None causes TypeError with arithmetic operators
+        win_rate = float(stats.get('win_rate') or 0)
+        profit_loss = float(stats.get('profit_loss') or 0)
+        avg_confidence = float(stats.get('avg_confidence') or 0)
+        total_signals = stats.get('total_signals') or 0
+
         # Construct summary for AI
         summary = f"""
         Analyze these Strategy Lab backtest results for an OTC Binary Options strategy.
         Regime: {regime_name}
-        Total Signals: {stats.get('total_signals')}
-        Win Rate: {stats.get('win_rate', 0)*100:.1f}%
-        Net P&L (Stakes): {stats.get('profit_loss', 0):.2f}
-        Avg Confidence: {stats.get('avg_confidence', 0):.2f}
+        Total Signals: {total_signals}
+        Win Rate: {win_rate * 100:.1f}%
+        Net P&L (Stakes): {profit_loss:.2f}
+        Avg Confidence: {avg_confidence:.2f}
         
         Provide a brief (2-3 sentence) assessment of the quality and risk level.
         Return JSON ONLY:
@@ -347,6 +393,121 @@ async def ai_analyze_strategy(
     except Exception as e:
         logger.error(f"AI Strategy Analysis failed: {e}")
         return {"ok": False, "message": str(e)}
+
+@router.post("/indicators")
+async def calculate_lab_indicators(
+    file_id: str = Body(..., embed=True),
+    indicators: List[str] = Body(default=[], embed=True),
+    params: Dict[str, Any] = Body(default={}, embed=True),
+    timeframe: str = Body(default="1m", embed=True)
+):
+    """
+    Calculate technical indicators for a Strategy Lab uploaded CSV file.
+    Uses the uploaded file directly instead of the live history store.
+    
+    Args:
+        file_id: ID from /upload endpoint
+        indicators: List of indicator keys to calculate
+        params: Optional params per indicator key
+        timeframe: Timeframe string (for display/context only)
+    """
+    import asyncio
+    import json
+    import subprocess
+    from .common import parse_script_json
+
+    try:
+        if file_id not in _uploaded_files:
+            raise HTTPException(status_code=404, detail="File not found. Please upload first.")
+
+        file_path = _uploaded_files[file_id]
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Uploaded file no longer exists on disk.")
+
+        runner_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py")
+        )
+
+        if not os.path.exists(runner_path):
+            raise HTTPException(status_code=500, detail=f"Runner script not found at: {runner_path}")
+
+        # Parse timeframe to minutes
+        timeframe_min = 1
+        tf = str(timeframe).strip().lower()
+        if tf.endswith("m"):
+            try:
+                timeframe_min = max(1, int(tf[:-1]))
+            except Exception:
+                timeframe_min = 1
+        elif tf.endswith("h"):
+            try:
+                timeframe_min = max(1, int(tf[:-1]) * 60)
+            except Exception:
+                timeframe_min = 1
+        elif tf.isdigit():
+            timeframe_min = max(1, int(tf))
+
+        inputs = {
+            "csv_path": str(file_path),
+            "asset": file_id,
+            "timeframe": timeframe_min,
+            "indicators": indicators,
+            "params": params,
+            "current_candle": None
+        }
+
+        args = [
+            sys.executable,
+            runner_path,
+            "indicator_calculator",
+            "--inputs",
+            json.dumps(inputs),
+        ]
+
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            stdout, stderr = await process.communicate()
+            return_code = process.returncode
+        except NotImplementedError:
+            def run_sync():
+                p = subprocess.run(args, capture_output=True, env=env, text=False)
+                return p.stdout, p.stderr, p.returncode
+            stdout, stderr, return_code = await asyncio.to_thread(run_sync)
+
+        if return_code != 0:
+            err_msg = stderr.decode().strip()
+            logger.error(f"Lab indicator calculation failed: {err_msg}")
+            raise HTTPException(status_code=500, detail=f"Script execution failed: {err_msg}")
+
+        output_str = stdout.decode().strip()
+        try:
+            out = parse_script_json(output_str)
+        except Exception as e:
+            logger.error(f"Invalid lab indicator output: {e} | raw={output_str}")
+            raise HTTPException(status_code=502, detail="Invalid script output")
+
+        if not out.get("ok"):
+            raise HTTPException(status_code=500, detail=str(out.get("error")))
+
+        data = out.get("data", {})
+        return {"ok": True, **data}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lab indicators failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/regimes")
 async def get_regimes():

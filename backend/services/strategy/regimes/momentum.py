@@ -51,7 +51,7 @@ class MomentumStrategy(BaseStrategy):
         # Extract values
         close = current['close']
         ema16 = current['ema16']
-        ema165 = current['ema165']
+        ema89 = current['ema89']   # EMA-89 is the macro trend filter (ema165 was a typo)
         st_val = current['supertrend']
         adx_val = current.get('adx', 0)
         macd_hist = current['macd_hist']
@@ -64,7 +64,7 @@ class MomentumStrategy(BaseStrategy):
             return entries
         
         # Bullish Momentum Entry
-        if close > ema165 and close > st_val:
+        if close > ema89 and close > st_val:
             # Check for pullback to EMA16
             dist_to_ema16 = abs(close - ema16) / ema16
             
@@ -105,7 +105,7 @@ class MomentumStrategy(BaseStrategy):
                     ))
         
         # Bearish Momentum Entry
-        elif close < ema165 and close < st_val:
+        elif close < ema89 and close < st_val:
             dist_to_ema16 = abs(close - ema16) / ema16
             
             if dist_to_ema16 < self.config['pullback_tolerance']:
@@ -152,7 +152,7 @@ class MomentumStrategy(BaseStrategy):
         
         Checks:
         - ADX still above threshold
-        - Trend alignment (EMA16 vs EMA165)
+        - Trend alignment (EMA16 vs EMA89)
         - Supertrend confirmation
         """
         if len(df) < 2:
@@ -162,7 +162,7 @@ class MomentumStrategy(BaseStrategy):
         close = current['close']
         adx_val = current.get('adx', 0)
         ema16 = current['ema16']
-        ema165 = current['ema165']
+        ema89 = current['ema89']   # EMA-89 macro trend filter (ema165 was a typo)
         st_val = current['supertrend']
         
         # ADX must still show trend strength
@@ -171,10 +171,10 @@ class MomentumStrategy(BaseStrategy):
         
         # Validate trend alignment
         if signal.direction == "CALL":
-            if not (close > ema165 and close > st_val):
+            if not (close > ema89 and close > st_val):
                 return False
         elif signal.direction == "PUT":
-            if not (close < ema165 and close < st_val):
+            if not (close < ema89 and close < st_val):
                 return False
         
         return True

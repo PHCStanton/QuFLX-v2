@@ -29,95 +29,14 @@ These were already fixed by the coding agent on 2026-02-17:
 
 ### 1. Remove `csvMode` Logic from ChartWorkspace.jsx
 **File:** `gui/Dashboard/src/components/ChartWorkspace.jsx`  
-**Effort:** 30 minutes  
-**Risk if Skipped:** Dead code paths, developer confusion, potential bugs
-
-**Lines to Remove:**
-```jsx
-// DELETE THESE (~30 lines total):
-const csvMode = !!selectedStrategyFileId;
-
-const labFile = useMemo(() =>
-  csvMode ? strategyLabFiles.find(f => f.file_id === selectedStrategyFileId) : null,
-  [csvMode, strategyLabFiles, selectedStrategyFileId]);
-
-const effectiveHistoryCandles = useMemo(() => {
-  if (!csvMode || !selectedStrategyFileId || !strategyLabData[selectedStrategyFileId]) {
-    return historyCandles;
-  }
-  return { [selectedAsset]: strategyLabData[selectedStrategyFileId] };
-}, [csvMode, selectedStrategyFileId, strategyLabData, historyCandles, selectedAsset]);
-
-const effectiveHistoryStatus = useMemo(() => {
-  if (!csvMode) return historyStatus;
-  return { [selectedAsset]: 'loaded' };
-}, [csvMode, historyStatus, selectedAsset]);
-
-const effectiveEnableStreaming = csvMode ? false : (dataSourceMode !== 'history_only');
-```
-
-**Also Remove from Destructuring:**
-```jsx
-// Remove these from useMarketStore destructuring:
-selectedStrategyFileId,
-strategyLabFiles,
-strategyLabData,
-```
-
-**Replace With:**
-```jsx
-const enableStreaming = dataSourceMode !== 'history_only';
-
-// Use historyCandles and historyStatus directly (no effective* wrappers)
-const { isLoading } = useTickAggregation({
-  historyCandles,      // Direct
-  historyStatus,       // Direct
-  enableStreaming,     // Direct
-  ...
-});
-```
-
-**Verification:**
-- [ ] Live chart loads history correctly
-- [ ] Streaming updates work
-- [ ] No console errors
-- [ ] No references to `csvMode` remain in file
-
----
+**Status:** ✅ **COMPLETED** (Already done as part of Strategy Lab Chart Separation)
 
 ### 2. Remove Lab-Related Props from useChartMarkers
 **File:** `gui/Dashboard/src/hooks/useChartMarkers.js`  
-**Effort:** 15 minutes
-
-**Current:**
-```jsx
-useChartMarkers({
-  mainChart,
-  candleSeries,
-  aiMessages,
-  indicatorSeries,
-  activeIndicators,
-  selectedAsset,
-  selectedTimeframe,
-  onError,
-  labEntries: labFile?.entries || []  // ← REMOVE THIS
-});
-```
-
-**After:**
-```jsx
-useChartMarkers({
-  mainChart,
-  candleSeries,
-  aiMessages,
-  indicatorSeries,
-  activeIndicators,
-  selectedAsset,
-  selectedTimeframe,
-  onError
-  // labEntries removed — Lab chart has its own marker hook
-});
-```
+**Status:** ✅ **COMPLETED** (2026-02-17)
+- Removed `labEntries` parameter from function signature
+- Removed `labEntries` from dependency array
+- Removed Strategy Lab marker logic (now handled by `useLabMarkers.js`)
 
 ---
 
@@ -358,16 +277,17 @@ useEffect(() => {
 
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
-| 1 | Remove `csvMode` logic from ChartWorkspace | 🔴 High | 30 min | ⏳ Pending |
-| 2 | Remove `labEntries` from useChartMarkers | 🔴 High | 15 min | ⏳ Pending |
-| 3 | Consolidate timestamp normalization | 🟡 Medium | 1 hr | ⏳ Pending |
-| 4 | Replace hardcoded URLs | 🟡 Medium | 30 min | ⏳ Pending |
-| 5 | Fix createTickerSlice signature | 🟡 Medium | 5 min | ⏳ Pending |
+| 1 | Remove `csvMode` logic from ChartWorkspace | 🔴 High | 30 min | ✅ Done |
+| 2 | Remove `labEntries` from useChartMarkers | 🔴 High | 15 min | ✅ Done |
+| 3 | Consolidate timestamp normalization | 🟡 Medium | 1 hr | ✅ Done |
+| 4 | Replace hardcoded URLs | 🟡 Medium | 30 min | ✅ Partial |
+| 5 | Fix createTickerSlice signature | 🟡 Medium | 5 min | ✅ Done |
 | 6 | Add retry to loadHistory | 🟢 Low | 30 min | ⏳ Pending |
 | 7 | Add asset validation on startup | 🟢 Low | 15 min | ⏳ Pending |
 | 8 | Add request cancellation | 🟢 Low | 45 min | ⏳ Pending |
 
-**Total Estimated Effort:** ~3.5 hours
+**Completed Effort:** ~2 hours  
+**Remaining Effort:** ~1.5 hours (optional enhancements)
 
 ---
 
