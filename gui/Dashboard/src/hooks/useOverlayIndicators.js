@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { LineSeries, LineStyle } from 'lightweight-charts';
+import { prepareChartData } from '../utils/chartData';
 
 const getErrorMessage = (err) => {
   if (err instanceof Error) return err.message;
@@ -34,15 +35,7 @@ const normalizeDirection = (value) => {
 };
 
 const sortByTimeAsc = (data) => {
-  if (!Array.isArray(data) || data.length === 0) return data;
-  return [...data].sort((a, b) => {
-    const ta = normalizeTime(a?.time);
-    const tb = normalizeTime(b?.time);
-    if (ta == null && tb == null) return 0;
-    if (ta == null) return 1;
-    if (tb == null) return -1;
-    return ta - tb;
-  });
+  return prepareChartData(data);
 };
 
 const useOverlayIndicators = ({

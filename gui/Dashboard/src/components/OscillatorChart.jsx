@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createChart, LineSeries, HistogramSeries, LineStyle } from 'lightweight-charts';
+import { prepareChartData } from '../utils/chartData';
 
 const OscillatorChart = ({
   mainChart,
@@ -102,12 +103,12 @@ const OscillatorChart = ({
         lineWidth: 1.5,
         ...(isATR
           ? {
-              priceFormat: {
-                type: 'custom',
-                minMove: 0.00001,
-                formatter: (price) => (Number.isFinite(price) ? price.toFixed(5) : ''),
-              },
-            }
+            priceFormat: {
+              type: 'custom',
+              minMove: 0.00001,
+              formatter: (price) => (Number.isFinite(price) ? price.toFixed(5) : ''),
+            },
+          }
           : {}),
       });
       seriesMap['default'] = s;
@@ -122,7 +123,7 @@ const OscillatorChart = ({
       if (params && params.overbought !== undefined) {
         const obLine = primarySeries.createPriceLine({
           price: params.overbought,
-          color: isRSI ? '#ef4444' : '#facc15', 
+          color: isRSI ? '#ef4444' : '#facc15',
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
@@ -200,49 +201,49 @@ const OscillatorChart = ({
     try {
       if (type === 'macd') {
         if (allSeries) {
-            // Check for both possible key patterns
-            const histData = allSeries['macd_histogram'] || [];
-            const macdData = allSeries['macd'] || [];
-            const signalData = allSeries['macd_signal'] || [];
-            
-            if (seriesMap['hist']) seriesMap['hist'].setData(histData);
-            if (seriesMap['macd']) seriesMap['macd'].setData(macdData);
-            if (seriesMap['signal']) seriesMap['signal'].setData(signalData);
-            
-            // For syncing, use macd data as reference
-            dataRef.current = macdData; 
+          // Check for both possible key patterns
+          const histData = allSeries['macd_histogram'] || [];
+          const macdData = allSeries['macd'] || [];
+          const signalData = allSeries['macd_signal'] || [];
+
+          if (seriesMap['hist']) seriesMap['hist'].setData(prepareChartData(histData));
+          if (seriesMap['macd']) seriesMap['macd'].setData(prepareChartData(macdData));
+          if (seriesMap['signal']) seriesMap['signal'].setData(prepareChartData(signalData));
+
+          // For syncing, use macd data as reference
+          dataRef.current = macdData;
         }
       } else if (type === 'stoch') {
         if (allSeries) {
-            const kData = allSeries['stoch_k'] || [];
-            const dData = allSeries['stoch_d'] || [];
-            
-            if (seriesMap['k']) seriesMap['k'].setData(kData);
-            if (seriesMap['d']) seriesMap['d'].setData(dData);
-            
-            dataRef.current = kData;
+          const kData = allSeries['stoch_k'] || [];
+          const dData = allSeries['stoch_d'] || [];
+
+          if (seriesMap['k']) seriesMap['k'].setData(prepareChartData(kData));
+          if (seriesMap['d']) seriesMap['d'].setData(prepareChartData(dData));
+
+          dataRef.current = kData;
         }
       } else if (type === 'adx') {
         if (allSeries) {
-            const adxData = allSeries['adx'] || [];
-            const plusData = allSeries['plus_di'] || [];
-            const minusData = allSeries['minus_di'] || [];
-            
-            if (seriesMap['adx']) seriesMap['adx'].setData(adxData);
-            if (seriesMap['plus']) seriesMap['plus'].setData(plusData);
-            if (seriesMap['minus']) seriesMap['minus'].setData(minusData);
-            
-            dataRef.current = adxData;
+          const adxData = allSeries['adx'] || [];
+          const plusData = allSeries['plus_di'] || [];
+          const minusData = allSeries['minus_di'] || [];
+
+          if (seriesMap['adx']) seriesMap['adx'].setData(prepareChartData(adxData));
+          if (seriesMap['plus']) seriesMap['plus'].setData(prepareChartData(plusData));
+          if (seriesMap['minus']) seriesMap['minus'].setData(prepareChartData(minusData));
+
+          dataRef.current = adxData;
         }
       } else {
         // Default Single Series
         if (seriesMap['default'] && Array.isArray(data)) {
-            seriesMap['default'].setData(data);
-            dataRef.current = data;
+          seriesMap['default'].setData(prepareChartData(data));
+          dataRef.current = data;
         }
       }
     } catch (err) {
-        console.error('Error updating oscillator data', err);
+      console.error('Error updating oscillator data', err);
     }
   }, [data, allSeries, type]);
 
@@ -287,7 +288,7 @@ const OscillatorChart = ({
     };
 
     mainTimeScale.subscribeVisibleTimeRangeChange(sync);
-    
+
     const timeoutId = setTimeout(() => {
       if (isDisposedRef.current) return;
       const range = mainTimeScale.getVisibleRange();
@@ -295,12 +296,12 @@ const OscillatorChart = ({
     }, 100);
 
     syncSubscriptionRef.current = { mainTimeScale, sync };
-    
+
     return () => {
-        if (syncSubscriptionRef.current) {
-            mainTimeScale.unsubscribeVisibleTimeRangeChange(syncSubscriptionRef.current.sync);
-        }
-        clearTimeout(timeoutId);
+      if (syncSubscriptionRef.current) {
+        mainTimeScale.unsubscribeVisibleTimeRangeChange(syncSubscriptionRef.current.sync);
+      }
+      clearTimeout(timeoutId);
     };
   }, [mainChart]); // Re-run if mainChart changes
 

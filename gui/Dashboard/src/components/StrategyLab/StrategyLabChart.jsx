@@ -5,6 +5,7 @@
  */
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { HistogramSeries } from 'lightweight-charts';
+import { prepareChartData } from '../../utils/chartData';
 import ChartContainer from '../ChartContainer';
 import ChartTooltip from '../ChartTooltip';
 import OscillatorPanel from '../OscillatorPanel';
@@ -117,16 +118,13 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
     if (!candleSeries || !Array.isArray(chartData) || chartData.length === 0) return;
 
     // Map chartData to lightweight-charts format
-    const mapped = chartData
-      .map((c) => ({
-        time: c.time || normalizeEpochSeconds(c.timestamp),
-        open: Number(c.open),
-        high: Number(c.high),
-        low: Number(c.low),
-        close: Number(c.close),
-      }))
-      .filter((c) => c.time && Number.isFinite(c.open))
-      .sort((a, b) => a.time - b.time);
+    const mapped = prepareChartData(chartData.map((c) => ({
+      ...c,
+      open: Number(c.open),
+      high: Number(c.high),
+      low: Number(c.low),
+      close: Number(c.close),
+    })));
 
     // Check if still mounted and series not disposed
     if (!isMountedRef.current) return;
@@ -148,18 +146,15 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
 
     // Set volume data - only if still mounted
     if (!isMountedRef.current) return;
-    
+
     if (volumeSeries) {
-      const volData = chartData
-        .map((c) => ({
-          time: c.time || normalizeEpochSeconds(c.timestamp),
-          value: Number(c.volume || 0),
-          color: Number(c.close) >= Number(c.open)
-            ? 'rgba(38, 166, 153, 0.5)'
-            : 'rgba(239, 83, 80, 0.5)',
-        }))
-        .filter((v) => v.time)
-        .sort((a, b) => a.time - b.time);
+      const volData = prepareChartData(chartData.map((c) => {
+        const open = Number(c.open);
+        const close = Number(c.close);
+        const vol = Number(c.volume || 0);
+        const color = close >= open ? 'rgba(38, 166, 153, 0.5)' : 'rgba(239, 83, 80, 0.5)';
+        return { time: c.time || c.timestamp, value: vol, color };
+      }));
 
       try {
         if (volumeSeries && typeof volumeSeries.setData === 'function') {
@@ -175,7 +170,7 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
 
     // Fit content after data load - only if still mounted
     if (!isMountedRef.current) return;
-    
+
     if (mainChart) {
       try {
         if (mainChart.timeScale && typeof mainChart.timeScale === 'function') {
@@ -362,11 +357,10 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
             {regime.regime || regime.regime_name || 'Unknown'}
           </span>
           {regime.is_tradeable !== undefined && (
-            <span className={`px-2 py-0.5 text-xs rounded-full ${
-              regime.is_tradeable
+            <span className={`px-2 py-0.5 text-xs rounded-full ${regime.is_tradeable
                 ? 'bg-green-500/20 text-green-400'
                 : 'bg-gray-500/20 text-gray-400'
-            }`}>
+              }`}>
               {regime.is_tradeable ? 'Tradeable' : 'Neutral'}
             </span>
           )}

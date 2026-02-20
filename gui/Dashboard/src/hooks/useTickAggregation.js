@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { prepareChartData } from '../utils/chartData';
 
 const normalizeEpochSeconds = (value) => {
   const numeric = typeof value === 'number' ? value : Number(value);
@@ -52,33 +53,14 @@ const useTickAggregation = ({
       return;
     }
 
-    const mappedCandles = [];
-    const mappedVolume = [];
-
-    candles.forEach((c) => {
-      if (!c) return;
-      const ts = c.time !== undefined ? c.time : c.timestamp;
-      const time = normalizeEpochSeconds(ts);
-      if (time == null || time <= 0) return;
-
+    const mappedCandles = prepareChartData(candles);
+    const mappedVolume = prepareChartData(candles.map(c => {
       const open = Number(c.open);
-      const high = Number(c.high);
-      const low = Number(c.low);
       const close = Number(c.close);
-
-      if (!Number.isFinite(open)) return;
-
-      mappedCandles.push({ time, open, high, low, close });
-
-      if (volumeSeries) {
-        const vol = Number(c.volume || c.tick_volume || 0); // Handle historical volume if present
-        const color = close >= open ? 'rgba(38, 166, 153, 0.5)' : 'rgba(239, 83, 80, 0.5)';
-        mappedVolume.push({ time, value: vol, color });
-      }
-    });
-
-    mappedCandles.sort((a, b) => a.time - b.time);
-    mappedVolume.sort((a, b) => a.time - b.time);
+      const vol = Number(c.volume || c.tick_volume || 0);
+      const color = close >= open ? 'rgba(38, 166, 153, 0.5)' : 'rgba(239, 83, 80, 0.5)';
+      return { time: c.time || c.timestamp, value: vol, color };
+    }));
 
     if (mappedCandles.length === 0) {
       setIsLoading(false);

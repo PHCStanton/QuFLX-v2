@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { createChart } from 'lightweight-charts';
+import { prepareChartData } from '../utils/chartData';
 import { CollapsibleCard } from './Card';
 import { Upload, FileText, TrendingUp, AlertCircle, Loader, Brain, Shield, ExternalLink } from 'lucide-react';
 import { getApiBaseUrl } from '../api/apiBase';
@@ -67,21 +68,13 @@ const StrategyLabPanel = () => {
       if (data.ok && chartRef.current) {
         const series = chartRef.current.candlestickSeries;
         if (series) {
-          const formatted = data.candles.map(c => {
-            const rawTs = c.timestamp || c.time;
-            // Robust normalization
-            const numeric = typeof rawTs === 'number' ? rawTs : Number(rawTs);
-            const time = numeric > 10000000000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
-
-            return {
-              time,
-              open: Number(c.open),
-              high: Number(c.high),
-              low: Number(c.low),
-              close: Number(c.close)
-            };
-          }).filter(c => !isNaN(c.time) && !isNaN(c.open))
-            .sort((a, b) => a.time - b.time);
+          const formatted = prepareChartData(data.candles.map(c => ({
+            ...c,
+            open: Number(c.open),
+            high: Number(c.high),
+            low: Number(c.low),
+            close: Number(c.close)
+          })));
 
           series.setData(formatted);
           chartRef.current.timeScale().fitContent();

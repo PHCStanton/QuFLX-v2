@@ -175,10 +175,20 @@ const createStrategyLabSlice = (set, get) => ({
           }).filter(c => c.time !== null && !isNaN(c.open))
             .sort((a, b) => a.time - b.time);
 
+          // Deduplicate timestamps
+          const uniqueCandles = [];
+          const seenTimes = new Set();
+          for (const c of normalizedCandles) {
+            if (!seenTimes.has(c.time)) {
+              seenTimes.add(c.time);
+              uniqueCandles.push(c);
+            }
+          }
+
           set(state => ({
             strategyLabData: {
               ...state.strategyLabData,
-              [fileId]: normalizedCandles
+              [fileId]: uniqueCandles
             }
           }));
         }
@@ -1031,7 +1041,7 @@ const createConnectionSlice = (set, get) => ({
     socket.on('regime_update', (data) => {
       // data: { asset, regime, trend, strength, volatility, ... }
       if (data && data.asset === get().selectedAsset) {
-         set({ currentRegime: data });
+        set({ currentRegime: data });
       }
     });
 
