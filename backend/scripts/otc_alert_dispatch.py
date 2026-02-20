@@ -158,7 +158,8 @@ class MarketScanner:
                 "direction": regime_result.direction,
                 "suggested_expiry": regime_result.suggested_expiry,
                 "technicals": regime_result.technicals,
-                "is_tradeable": regime_result.is_tradeable
+                "is_tradeable": regime_result.is_tradeable,
+                "status": regime_result.status  # "CONFIRMED" or "DEVELOPING"
             }
             
             # Cache and return
@@ -527,6 +528,61 @@ class DiscordDispatcher:
                     return False
         except Exception as e:
             logger.error(f"❌ Warning dispatch exception for {warning.asset}: {e}")
+            return False
+
+    async def send_developing_alert(self, context: AlertContext) -> bool:
+        """Sends an early-warning 'Developing' signal to Discord.
+        
+        Uses amber (0xF59E0B) — distinct from Market Warning orange (0xffa500).
+        No AI step, lower conviction, heads-up only.
+        """
+        if not self.webhook_url:
+            return False
+
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+
+        direction_emoji = "📈" if context.direction == "CALL" else "📉"
+        tech = context.technicals
+        regime_label = context.condition.value
+
+        indicator_text = (
+            f"**ADX:** {tech.get('adx', '---')} (rising) | **RSI:** {tech.get('rsi', '---')}\n"
+            f"**BB Width:** {tech.get('bb_width', '---')} (squeeze) | **EMA-89:** {tech.get('ema89', '---')}"
+        )
+
+        embed = {
+            "title": f"⏳ {direction_emoji} {context.asset} — Developing Setup",
+            "description": (
+                f"**Regime:** {regime_label}\n"
+                f"**Direction:** **{context.direction}**\n"
+                f"**Expiry:** {context.suggested_expiry}\n\n"
+                f"*Confluences are building but not fully confirmed. Watch for follow-through.*"
+            ),
+            "color": 0x3B82F6,  # Blue — developing/early warning, distinct from confirmed signals
+            "fields": [
+                {"name": "🎯 Entry Context", "value": f"**Price:** {context.price}\n**Payout:** {context.payout}%", "inline": True},
+                {"name": "📊 Technicals", "value": indicator_text, "inline": False},
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "footer": {"text": f"QuFLX OTC Alert Dispatcher | Developing ⬝ Score: {tech.get('confluence_score', '---')}"}
+        }
+
+        payload = {
+            "username": "QuFLX OTC Sniper",
+            "embeds": [embed]
+        }
+
+        try:
+            async with self._session.post(self.webhook_url, json=payload) as resp:
+                if resp.status in [200, 204]:
+                    logger.info(f"⏳ Developing alert delivered: {context.asset}")
+                    return True
+                else:
+                    logger.error(f"❌ Developing alert delivery failed: {context.asset} (HTTP {resp.status})")
+                    return False
+        except Exception as e:
+            logger.error(f"❌ Developing alert dispatch exception for {context.asset}: {e}")
             return False
 
     async def close(self):
@@ -1047,6 +1103,23 @@ class OTCDispatcher:
                     severity="high" if result['technicals']['warning'] in ["low_volatility", "tight_range"] else "medium"
                 )
                 await self.discord.send_market_warning(warning)
+            return
+
+        # DEVELOPING SIGNAL: Early warning — confluences building but not fully confirmed.
+        # Fire an amber Discord alert, apply a shorter cooldown, then return.
+        # No AI confirmation step for developing signals (saves quota, intentional design).
+        if result.get('status') == 'DEVELOPING':
+            logger.info(f"Developing Setup: {asset} -> {ctx.condition.value} ({ctx.direction} {ctx.suggested_expiry}) Score:{result.get('confluence_score')}")
+            now = datetime.now().timestamp()
+            # Use a shorter cooldown for developing alerts (half the normal cooldown)
+            developing_cooldown = self.COOLDOWN_SECONDS / 2
+            last_dev_key = f"{asset}:developing"
+            last_dev = self.cooldowns.get(last_dev_key, 0)
+            if now - last_dev < developing_cooldown:
+                logger.info(f"Skipping Developing (Cooldown): {asset} (Wait {int(developing_cooldown - (now - last_dev))}s)")
+                return
+            self.cooldowns[last_dev_key] = now
+            await self.discord.send_developing_alert(ctx)
             return
 
         logger.info(f"Condition Met: {asset} -> {ctx.condition.value} ({ctx.direction} {ctx.suggested_expiry})")

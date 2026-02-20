@@ -133,6 +133,57 @@ class TechnicalIndicatorsPipeline:
         if 'indicator_params' in self.config:
             self.params.update(self.config['indicator_params'])
     
+    def resample_to_grid(self, df: pd.DataFrame, timeframe: str = '1T') -> pd.DataFrame:
+        """
+        Ensures the DataFrame has a continuous time index at the specified interval.
+        Missing candles are forward-filled (pausing indicators).
+        """
+        if df.empty:
+            return df
+            
+        try:
+            # Use 'time' or 'timestamp' as index
+            time_col = 'time' if 'time' in df.columns else 'timestamp' if 'timestamp' in df.columns else None
+            
+            if not time_col:
+                return df
+                
+            # Convert to datetime index
+            df_resampled = df.copy()
+            df_resampled[time_col] = pd.to_datetime(df_resampled[time_col], unit='s')
+            df_resampled = df_resampled.set_index(time_col)
+            
+            # Resample to 1 minute grid (1T)
+            # Use 'min' as 1T is deprecated in some versions or just for clarity
+            df_resampled = df_resampled.resample(timeframe).asfreq()
+            
+            # Count gaps before filling for logging
+            gaps = df_resampled['close'].isna().sum()
+            if gaps > 0:
+                self.logger.info(f"Time-Series Alignment: Found {gaps} missing candles. Forward-filling...")
+            
+            # Forward fill the 'close' price and other columns
+            # 'open', 'high', 'low' should also be filled with 'close' of previous candle 
+            # to simulate a flat price action during 'dead space'
+            df_resampled['close'] = df_resampled['close'].ffill()
+            df_resampled['open'] = df_resampled['open'].fillna(df_resampled['close'])
+            df_resampled['high'] = df_resampled['high'].fillna(df_resampled['close'])
+            df_resampled['low'] = df_resampled['low'].fillna(df_resampled['close'])
+            
+            # Volume 0 for missing candles
+            if 'volume' in df_resampled.columns:
+                df_resampled['volume'] = df_resampled['volume'].fillna(0)
+            
+            # Reset index and convert back to unix timestamps
+            df_final = df_resampled.reset_index()
+            df_final[time_col] = df_final[time_col].view('int64') // 10**9
+            
+            return df_final
+            
+        except Exception as e:
+            self.logger.error(f"Resampling failed: {e}")
+            return df
+    
     def calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Calculate all technical indicators for the given DataFrame.
@@ -148,6 +199,10 @@ class TechnicalIndicatorsPipeline:
             
             # 0. Defensive: Handle infinity/NaN in input data
             df = df.replace([np.inf, -np.inf], np.nan)
+            
+            # 0.1 Time-Series Alignment: Fill gaps to prevent indicator distortion
+            # Default to 1m grid for OTC Sniper
+            df = self.resample_to_grid(df, timeframe='1T')
             
             result_df = df.copy()
             

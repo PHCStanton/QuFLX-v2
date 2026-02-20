@@ -286,6 +286,8 @@ async def redis_listener():
                         system_state["last_tick_ts"] = parsed_data.get('timestamp', 0)
                         system_state["last_tick_asset"] = asset
                         await sio.emit('market_data', parsed_data, room=f'market_data:{asset}')
+                        # Also broadcast to monitor room for the Collector page
+                        await sio.emit('market_data', parsed_data, room='monitor')
                         
                 elif channel == "trading:signals":
                     await sio.emit('trading_signal', parsed_data)

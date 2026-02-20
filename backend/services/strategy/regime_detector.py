@@ -48,10 +48,11 @@ class RegimeResult:
     direction: Optional[str]  # "CALL" or "PUT"
     suggested_expiry: str
     technicals: Dict[str, Any]
+    status: str = "CONFIRMED" # "CONFIRMED" or "DEVELOPING"
     
     @property
     def is_tradeable(self) -> bool:
-        """Returns True if this regime has a tradeable signal"""
+        """Returns True if this regime has a tradeable signal (Confirmed or Developing)"""
         return self.condition != MarketCondition.NEUTRAL
 
 
@@ -328,6 +329,7 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
     confluence_score = 0
     direction = None  # "CALL" or "PUT"
     suggested_expiry = "1m"  # Default
+    status = "CONFIRMED"
 
     # NEW: Volatility Monitoring (Prevent losses in quiet/choppy markets)
     bb_width = float(current.get('bb_wband', 0))
@@ -379,12 +381,17 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
             
             weighted_score = calculate_weighted_score(signals, WEIGHTS)
             
-            # R4: Raised threshold from 60-65 → 70
             if weighted_score >= 70:
                 condition = MarketCondition.STRONG_MOMENTUM_UP
                 confluence_score = int(weighted_score)
                 direction = "CALL"
                 suggested_expiry = "3m"
+            elif weighted_score >= 50 and adx_val > prev['adx']:
+                condition = MarketCondition.STRONG_MOMENTUM_UP
+                confluence_score = int(weighted_score)
+                direction = "CALL"
+                suggested_expiry = "3m"
+                status = "DEVELOPING"
             else:
                 logger.debug(f"Momentum UP ignored (Weighted Score {weighted_score:.1f}/100, need ≥70)")
         # Bearish
@@ -400,12 +407,17 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
             
             weighted_score = calculate_weighted_score(signals, WEIGHTS)
             
-            # R4: Raised threshold from 60-65 → 70
             if weighted_score >= 70:
                 condition = MarketCondition.STRONG_MOMENTUM_DOWN
                 confluence_score = int(weighted_score)
                 direction = "PUT"
                 suggested_expiry = "3m"
+            elif weighted_score >= 50 and adx_val > prev['adx']:
+                condition = MarketCondition.STRONG_MOMENTUM_DOWN
+                confluence_score = int(weighted_score)
+                direction = "PUT"
+                suggested_expiry = "3m"
+                status = "DEVELOPING"
             else:
                 logger.debug(f"Momentum DOWN ignored (Weighted Score {weighted_score:.1f}/100, need ≥70)")
 
@@ -506,6 +518,20 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
                 confluence_score = 65 + (score * 5)
                 direction = "PUT"
                 suggested_expiry = "1m"
+        # DEVELOPING SQUEEZE (R6 Lead Time)
+        elif adx_val > 20 and adx_val > prev['adx']:
+            # Near upper band -> Developing Bullish
+            if abs(close - current['bb_high']) / close < 0.002:
+                condition = MarketCondition.BREAKOUT_UP
+                confluence_score = 50
+                direction = "CALL"
+                status = "DEVELOPING"
+            # Near lower band -> Developing Bearish
+            elif abs(close - current['bb_low']) / close < 0.002:
+                condition = MarketCondition.BREAKOUT_DOWN
+                confluence_score = 50
+                direction = "PUT"
+                status = "DEVELOPING"
 
     # 5. TREND REVERSAL (Lowest priority/highest risk)
     if condition == MarketCondition.NEUTRAL:
@@ -555,7 +581,8 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
         confluence_score=confluence_score,
         direction=direction,
         suggested_expiry=suggested_expiry,
-        technicals=technicals
+        technicals=technicals,
+        status=status
     )
 
 

@@ -75,6 +75,255 @@ Only enter when **all 7** are green.
 | **Ranging / Sideways**        | Bollinger Bands, RSI 14, CCI / Stochastic            | Price at BB upper/lower + RSI >70/<30 + CCI extreme + small bodies     | Trend indicators (ADX <20, avoid EMA crossovers)    |
 | **Breakout Conditions**       | Bollinger Bands squeeze → expansion, ADX >25 rising, ATR spike | BB squeeze → big candle close outside band + ADX rising + ATR expansion | Fakeouts (no follow-through candle)                 |
 | **Trend Reversal**            | MACD/RSI divergence, CCI extreme, large reversal candle | Divergence on MACD/RSI + rejection at major level + big reversal candle | Low-probability – require 4+ confluences             |
+
+---
+
+## Discord Alert System
+
+QuFLX sends four distinct Discord signal types, each with a different embed color so you can instantly identify them at a glance.
+
+### Signal Types & Embed Colors
+
+| Signal Type | Color | Hex | Description |
+|-------------|-------|-----|-------------|
+| ✅ **CALL Signal** | 🟢 Green | \`0x22c55e\` | Confirmed bullish entry — all confluences met, AI approved |
+| ✅ **PUT Signal** | 🔴 Red | \`0xef4444\` | Confirmed bearish entry — all confluences met, AI approved |
+| ⏳ **Developing Setup** | 🔵 Blue | \`0x3B82F6\` | Confluences building but not yet fully confirmed — early heads-up |
+| ⚠️ **Market Warning** | 🟡 Orange | \`0xffa500\` | Signal blocked — low volatility, dead market, or choppy conditions |
+
+### CONFIRMED vs DEVELOPING
+
+| Aspect | CONFIRMED | DEVELOPING |
+|--------|-----------|------------|
+| **Weighted score** | ≥ 70/100 | 50–69/100 |
+| **ADX** | > 30, strong | > 30, **rising** |
+| **AI verification** | ✅ Required | ❌ Skipped (saves quota) |
+| **Cooldown** | Full (\`COOLDOWN_SECONDS\`) | Half cooldown |
+| **Action** | Enter trade | Watch and prepare |
+
+### When a Developing Setup Fires
+
+**Strong Momentum (DEVELOPING):** ADX > 30, price above EMA-16 and Supertrend, weighted confluence score 50–69 with ADX still rising. The trend is forming but lacks the full body confirmation or oscillator alignment needed for a full signal.
+
+**Breakout Squeeze (DEVELOPING):** Bollinger Band width < 0.04 (squeeze), ADX > 20 and rising, price within **0.2%** of the upper or lower band — before the actual candle break. This gives you setup time ahead of the confirmed breakout.
+
+### How Confluence Scoring Works (Weighted Model)
+
+| Signal Component | Weight |
+|-----------------|--------|
+| ADX strength | 25% |
+| MACD histogram | 20% |
+| Body/Volume proxy | 20% |
+| Supertrend direction | 15% |
+| Oscillator (+DI/-DI) | 10% |
+| ATR expansion | 10% |
+
+Score ≥ 70 = **CONFIRMED** | Score 50–69 + rising ADX = **DEVELOPING**
+
+### Breakout Confirmatory Candle Logic
+
+Breakout signals require **two consecutive scans** to fire as CONFIRMED:
+
+1. **First scan** — Breakout condition detected → stored as "Pending", no alert sent yet
+2. **Second scan** — If same direction + price followed through → **CONFIRMED** alert fires
+3. If direction changed or price reversed → flagged as **Fakeout**, no alert
+
+### Cooldown System
+
+- Each asset has its own cooldown timer (\`COOLDOWN_SECONDS\`)
+- DEVELOPING alerts use a **separate key** \`{asset}:developing\` (half cooldown) so they never block a subsequent CONFIRMED alert
+- Correlation groups prevent simultaneous alerts on correlated assets (e.g., EURUSD + GBPUSD in the same group)
+
+### Volatility Guard
+
+Before any signal is dispatched, the **Volatility Guard** checks:
+
+| Condition | ATR % (relative) | ADX | Outcome |
+|-----------|------------------|-----|---------|
+| Dead | < 0.02% | any | ⚠️ Market Warning |
+| Low | 0.02–0.05% | < 20 | ⚠️ Market Warning |
+| Normal | 0.05–0.20% | any | ✅ Proceed |
+| High | 0.20–0.40% | any | ✅ Proceed |
+| Extreme | > 0.40% | any | ✅ Proceed (caution) |
+
+Choppy markets are also blocked if the average candle **body ratio < 0.4** over the last 10 candles.
+
+---
+
+## Regime Detection Details
+
+All regimes are evaluated in priority order. Once a regime is matched, lower-priority checks are skipped.
+
+### Priority Order
+
+1. Strong Momentum (ADX > 30)
+2. Trending Pullback (ADX > 20, not already matched)
+3. Ranging / Sideways (ADX < 20, not already matched)
+4. Breakout (BB squeeze, not already matched)
+5. Trend Reversal (lowest priority, only when nothing else matched)
+
+---
+
+### 1. Trending Pullback — BUY / SELL
+
+**When it fires:** ADX > 20 (trending but not strong), price within an ATR-normalized distance of EMA-16, and in the right macro bias.
+
+#### Detection Conditions
+
+| Check | Bullish Pullback (BUY) | Bearish Pullback (SELL) |
+|-------|------------------------|-------------------------|
+| **Macro trend** | close > EMA-89 | close < EMA-89 |
+| **Proximity to EMA-16** | \`distance < ATR × 2.0 / price\` | same |
+| **RSI range** | 40–55 (+1 point) | 45–60 (+1 point) |
+| **BB level** | close ≤ BB_lower × 1.001 (+1 point) | close ≥ BB_upper × 0.999 (+1 point) |
+| **ATR direction** | ATR ≥ prev ATR (+1 point) | same |
+| **Minimum score** | ≥ 2 of the 3 above | same |
+
+> **ATR-Normalized Threshold:** The proximity check uses a dynamic threshold — \`ATR × 2.0 / close\` — so it adjusts to each asset's natural volatility, not a fixed pip distance.
+
+**Discord dispatch:** CONFIRMED only. 🟢 Green (CALL) or 🔴 Red (PUT). AI check required if enabled.  
+**Suggested expiry:** 5 minutes  
+**Confluence score:** 65 + (score × 5) → range 70–80
+
+---
+
+### 2. Ranging / Sideways — Overbought SELL / Oversold BUY
+
+**When it fires:** ADX < 20 (market not trending), average candle body ratio ≥ 0.4 over last 10 candles (not choppy), and price at a BB extreme.
+
+#### Detection Conditions
+
+| Check | Overbought (SELL) | Oversold (BUY) |
+|-------|-------------------|----------------|
+| **Price level** | close ≥ BB_upper × 0.998 | close ≤ BB_lower × 1.005 |
+| **RSI extreme** | RSI > 75 (+1 point) | RSI < 35 (+1 point) |
+| **Stochastic** | Stoch K > 80 **and** K < D (crossing down) (+1) | Stoch K < 20 **and** K > D (crossing up) (+1) |
+| **Candle size** | No large body (+1 — indecision candle) | No large body (+1) |
+| **Minimum score** | ≥ 2 of the 3 above | same |
+
+> **OTC-tuned thresholds:** RSI levels are 35/75 (not the standard 30/70) because OTC binary option markets tend to push further into extremes before reversing.
+
+> **Chop guard** applied first: if avg body_ratio < 0.4 over last 10 candles → ⚠️ Market Warning sent instead, signal blocked.
+
+**Discord dispatch:** CONFIRMED only. 🟢 Green (CALL) or 🔴 Red (PUT). AI raises confidence threshold to **85%** for these (vs. default) due to higher false-signal risk.  
+**Suggested expiry:** 3 minutes  
+**Confluence score:** 60 + (score × 5) → range 65–75
+
+---
+
+### 3. Breakout — Bullish / Bearish
+
+**When it fires:** BB width < 0.04 (squeeze condition) and price breaks outside the band.
+
+#### Detection Conditions
+
+| Check | Bullish Breakout | Bearish Breakout |
+|-------|-----------------|-----------------|
+| **BB width** | < 0.04 (squeeze) | < 0.04 (squeeze) |
+| **Price** | close > BB_upper | close < BB_lower |
+| **ADX** | ADX > 25 | ADX > 25 |
+| **ATR spike** | ATR > prev ATR × 1.2 (+1) | same |
+| **Large candle** | body_ratio > 0.7 + ATR expansion (+1) | same |
+| **ADX rising** | ADX > prev ADX (+1) | same |
+| **Minimum score** | ≥ 2 of the 3 above | same |
+
+> **Confirmatory candle rule:** Breakout signals are held for one scan cycle. Only on the **second consecutive scan** (with price follow-through) does the CONFIRMED alert fire. If direction flips or price reverses → Fakeout, no alert.
+
+**Discord dispatch:** CONFIRMED only (after 2-scan confirmation). 🟢 Green (CALL) or 🔴 Red (PUT).  
+**Suggested expiry:** 1 minute  
+**Confluence score:** 65 + (score × 5) → range 70–80
+
+---
+
+### 4. Trend Reversal — Bullish / Bearish
+
+**When it fires:** Only when no other regime matched. Requires RSI at extreme and MACD turning, **plus** price at a confirmed Support or Resistance level.
+
+#### Detection Conditions
+
+| Check | Bullish Reversal | Bearish Reversal |
+|-------|-----------------|-----------------|
+| **RSI** | RSI < 30 (extreme oversold) | RSI > 70 (extreme overbought) |
+| **MACD histogram** | MACD_hist > prev MACD_hist (turning up) | MACD_hist < prev MACD_hist (turning down) |
+| **S/R proximity** | Price within 0.1% of confirmed support level | Price within 0.1% of confirmed resistance level |
+
+> **S/R detection:** Support/Resistance levels are calculated using fractal pivots (5-bar swing highs/lows), confirmed only after n+5 bars to prevent repainting. The most recent confirmed pivot is projected forward.
+
+> Confluence score is fixed at **55** — intentionally lower than other regimes to reflect the inherent risk. Requires all 3 conditions to be met simultaneously.
+
+**Discord dispatch:** CONFIRMED only. 🟢 Green (CALL) or 🔴 Red (PUT). AI check strongly recommended.  
+**Suggested expiry:** 5 minutes  
+**Confluence score:** 55 (fixed)
+
+---
+
+## Per-Asset ATR Calculation
+
+The system never uses a global fixed ATR threshold. Every asset's volatility is assessed relative to **its own historical baseline**, making the signal system asset-agnostic.
+
+### Step 1 — ATR-14 (True Range)
+
+For each candle, ATR-14 is calculated:
+
+\`\`\`
+True Range = max(High - Low, |High - prev_Close|, |Low - prev_Close|)
+ATR-14     = 14-period Exponential Moving Average of True Range
+\`\`\`
+
+### Step 2 — Relative ATR % (Cross-Asset Normalization)
+
+To compare volatility across assets with different price scales (e.g., EURUSD at 1.08 vs. USDJPY at 150):
+
+\`\`\`
+Relative ATR % = (ATR-14 / current_Close) × 100
+\`\`\`
+
+This expresses volatility as a **percentage of price**, making it directly comparable across all assets.
+
+### Step 3 — Rolling ATR Baseline (Asset-Specific History)
+
+\`\`\`
+ATR Baseline = 20-period rolling MEDIAN of ATR-14
+\`\`\`
+
+A **median** (not mean) is used to make the baseline resistant to spike distortion. The current ATR is then compared to this baseline:
+
+\`\`\`
+ATR Ratio = ATR-14 (current) / ATR Baseline
+\`\`\`
+
+### Step 4 — Volatility Zone Decision
+
+| Relative ATR % | Zone | Tradeable |
+|----------------|------|-----------|
+| < 0.02% | Dead | ❌ Market Warning |
+| 0.02–0.05% + ADX < 25 | Low | ❌ Market Warning |
+| any + ATR Ratio < 0.5 + ADX < 25 | Compressed | ❌ Market Warning |
+| any + BB Width Ratio < 0.5 + ADX < 25 | Tight Range | ❌ Market Warning |
+| 0.05–0.20% | Normal | ✅ Trade |
+| 0.20–0.40% | High | ✅ Trade |
+| > 0.40% | Extreme | ✅ Trade (with caution) |
+
+### BB Width Baseline (Parallel Check)
+
+A second baseline is maintained for Bollinger Band width:
+
+\`\`\`
+BB Width Baseline = 20-period rolling MEDIAN of BB Width (bb_wband)
+BB Width Ratio    = current BB Width / BB Width Baseline
+\`\`\`
+
+If BB Width Ratio < 0.5 **and** ADX < 25 → the market is in an unusually tight range → ⚠️ Market Warning sent.
+
+### ATR-Normalized Pullback Threshold
+
+For Pullback regimes, the proximity check to EMA-16 also uses ATR:
+
+\`\`\`
+Threshold = (ATR × 2.0) / close
+\`\`\`
+
+This means on a high-volatility asset, the pullback can be deeper (in absolute terms) before the regime fires, keeping the signal semantically consistent across assets.
 `;
 
 const KnowledgeBase = () => {
@@ -82,7 +331,7 @@ const KnowledgeBase = () => {
     <div className="min-h-screen bg-dashboard-bg text-text-primary p-8 overflow-auto">
       <div className="max-w-5xl mx-auto bg-card-bg border border-border-primary rounded-lg p-8 shadow-xl">
         <div className="prose prose-invert max-w-none">
-          <ReactMarkdown 
+          <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
               h1: (props) => <h1 className="text-3xl font-bold text-accent-blue mb-6 border-b border-border-primary pb-2" {...props} />,

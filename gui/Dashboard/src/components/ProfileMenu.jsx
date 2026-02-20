@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, BarChart2, Bell, Activity, Terminal } from 'lucide-react';
 import avatarPlaceholder from '../assets/profile_pic_new.png';
 import useMarketStore from '../store/marketStore';
 import useUserStore from '../store/userStore';
@@ -8,6 +10,7 @@ import ProfilePicEditorModal from './ProfilePicEditorModal';
 const ProfileMenu = () => {
   const [open, setOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const navigate = useNavigate();
   const { setActiveTab } = useMarketStore();
   const { user } = useUserStore();
   const {
@@ -60,6 +63,11 @@ const ProfileMenu = () => {
     const ok = window.confirm(`Delete profile "${label}"?`);
     if (!ok) return;
     await deleteProfile(activeProfileId);
+  };
+
+  const handleNavClick = (path) => {
+    navigate(path);
+    setOpen(false);
   };
 
   const handleSignOut = () => {
@@ -161,6 +169,52 @@ const ProfileMenu = () => {
                 Delete Active
               </button>
             </div>
+          </div>
+          {/* Statements & Logs */}
+          <div className="px-3 py-2 border-t border-border-primary">
+            <div className="font-semibold text-text-secondary uppercase tracking-wider text-[10px]">Statements &amp; Logs</div>
+          </div>
+          <div className="pb-1">
+            <button
+              type="button"
+              onClick={() => handleNavClick('/statement-analysis')}
+              className="w-full text-left px-3 py-2 hover:bg-section-bg flex items-center gap-2"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+              Statement Analysis
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('/kb')}
+              className="w-full text-left px-3 py-2 hover:bg-section-bg flex items-center gap-2"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+              Knowledge Base
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('/alert-dispatch-logs')}
+              className="w-full text-left px-3 py-2 hover:bg-section-bg flex items-center gap-2"
+            >
+              <Bell className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+              Alert Dispatch Logs
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('/collector')}
+              className="w-full text-left px-3 py-2 hover:bg-section-bg flex items-center gap-2"
+            >
+              <Activity className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+              Collector
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('/dev-logs')}
+              className="w-full text-left px-3 py-2 hover:bg-section-bg flex items-center gap-2"
+            >
+              <Terminal className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+              Dev Logs
+            </button>
           </div>
           <div className="px-3 py-2 border-t border-border-primary">
             <button

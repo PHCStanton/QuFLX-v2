@@ -31,6 +31,18 @@ def register_socket_events(sio, redis_client, system_state):
         await sio.leave_room(sid, f"market_data:{asset}")
 
     @sio.event
+    async def subscribe_monitor(sid):
+        """Join the global monitor room to receive ALL market_data events."""
+        logger.info(f"Client {sid} joined monitor room")
+        await sio.enter_room(sid, "monitor")
+
+    @sio.event
+    async def unsubscribe_monitor(sid):
+        """Leave the global monitor room."""
+        logger.info(f"Client {sid} left monitor room")
+        await sio.leave_room(sid, "monitor")
+
+    @sio.event
     async def update_active_ticker(sid, assets):
         """Phase 3: Update global active ticker list in Redis for Dispatcher Sync"""
         if not redis_client:

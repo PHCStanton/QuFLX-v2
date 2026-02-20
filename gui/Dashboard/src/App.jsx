@@ -4,6 +4,9 @@ import Dashboard from './components/Dashboard';
 import KnowledgeBase from './components/KnowledgeBase';
 import DevLogsPage from './components/DevLogsPage';
 import VoiceParticlePage from './components/VoiceParticlePage';
+import CollectorPage from './components/CollectorPage';
+import AlertDispatchPage from './components/AlertDispatchPage';
+import StatementAnalysisPage from './components/StatementAnalysisPage';
 import useSettingsStore from './store/settingsStore';
 
 function App() {
@@ -43,27 +46,10 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/kb" element={<KnowledgeBase />} />
           <Route path="/dev-logs" element={<DevLogsPage />} />
-          <Route
-            path="/alert-dispatch-logs"
-            element={(
-              <DevLogsPage
-                title="Alert Dispatch Logs"
-                description="Monitor scanner heartbeat, staleness, and AI dispatch activity."
-                defaultService="alert_dispatch"
-                defaultFile=""
-                initialFilter=""
-                quickFilters={[
-                  { label: 'Scanner Pulse', value: 'Scanner Pulse' },
-                  { label: 'Heartbeat', value: 'Heartbeat' },
-                  { label: 'AI', value: 'AI' },
-                  { label: 'Alert dispatched', value: 'Alert dispatched' },
-                  { label: 'Error', value: 'error' }
-                ]}
-                showHeartbeatPanel={true}
-              />
-            )}
-          />
+          <Route path="/alert-dispatch-logs" element={<AlertDispatchPage />} />
           <Route path="/voice-particle" element={<VoiceParticlePage />} />
+          <Route path="/collector" element={<CollectorPage />} />
+          <Route path="/statement-analysis" element={<StatementAnalysisPage />} />
         </Routes>
       </div>
     </Router>
