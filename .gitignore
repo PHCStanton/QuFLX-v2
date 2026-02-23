@@ -10,6 +10,7 @@ Redis_Streaming_Integration_Package/
 
 # ssid
 ssid/
+ssid_integration_package/
 
 # gui/Alert-Dispatch
 gui/Alert-Dispatch/
