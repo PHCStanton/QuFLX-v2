@@ -11,6 +11,7 @@ const AssetPayoutPanel = ({
     initialTopHeight = 220,
     defaultIsTopCollapsed = false,
     defaultIsBottomCollapsed = false,
+    onUseForTrade = null, // Integration prop
     className = ""
 }) => {
     const {
@@ -321,6 +322,7 @@ const AssetPayoutPanel = ({
                 tickerAssets={tickerAssets}
                 assetSearchQuery={assetSearchQuery}
                 onSearchQueryChange={setAssetSearchQuery}
+                onUseForTrade={onUseForTrade}
             />
         </div>
     );

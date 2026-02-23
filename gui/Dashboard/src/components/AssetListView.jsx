@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import Card from './Card';
 import TickerTape from './TickerTape';
 import NeomorphicSwitch from './NeomorphicSwitch';
-import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check } from 'lucide-react';
+import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap } from 'lucide-react';
 
 const AssetListView = ({
   isCollapsed,
@@ -24,7 +24,8 @@ const AssetListView = ({
   quotesByAssetKey,
   tickerAssets,
   assetSearchQuery,
-  onSearchQueryChange
+  onSearchQueryChange,
+  onUseForTrade
 }) => {
   const filteredPayoutAssets = useMemo(() => {
     const source = Array.isArray(payoutAssets) ? payoutAssets : [];
@@ -44,9 +45,8 @@ const AssetListView = ({
 
   return (
     <Card
-      className={`p-3 rounded-lg flex flex-col min-h-0 quflx-section-light transition-all duration-300 ease-in-out ${
-        isCollapsed ? 'h-10 flex-none overflow-hidden' : 'flex-1'
-      }`}
+      className={`p-3 rounded-lg flex flex-col min-h-0 quflx-section-light transition-all duration-300 ease-in-out ${isCollapsed ? 'h-10 flex-none overflow-hidden' : 'flex-1'
+        }`}
     >
       <div
         className="flex justify-between items-center mb-2 shrink-0 cursor-pointer"
@@ -130,11 +130,10 @@ const AssetListView = ({
                     <div
                       key={asset}
                       onClick={() => !selectedAssetLoading && onSelectAsset(asset)}
-                      className={`p-1.5 rounded flex justify-between items-center transition-colors ${
-                        selectedAsset === asset
-                          ? 'bg-accent-green/20 text-accent-green border border-accent-green/50'
-                          : 'hover:bg-section-bg/50 text-text-secondary'
-                      } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
+                      className={`p-1.5 rounded flex justify-between items-center transition-colors ${selectedAsset === asset
+                        ? 'bg-accent-green/20 text-accent-green border border-accent-green/50'
+                        : 'hover:bg-section-bg/50 text-text-secondary'
+                        } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2">
                         <button
@@ -149,6 +148,19 @@ const AssetListView = ({
                           <X size={10} />
                         </button>
                         <span className="font-medium text-sm">{asset}</span>
+                        {onUseForTrade && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUseForTrade(asset);
+                            }}
+                            className="p-1 rounded bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/30 transition-all ml-1"
+                            title="Use for Live Trade"
+                          >
+                            <Zap size={10} />
+                          </button>
+                        )}
                         {selectedAsset === asset && selectedAssetLoading && (
                           <RefreshCw size={12} className="animate-spin text-accent-green ml-1" />
                         )}

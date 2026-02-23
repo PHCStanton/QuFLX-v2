@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 
-const SETTINGS_VERSION = 4;
+const SETTINGS_VERSION = 5;
 
 const normalizeTheme = (value) => {
   if (value === 'black-white') return 'black-white';
@@ -155,7 +155,15 @@ const defaultSettings = {
     tickLoggingDir: 'data/ticks',
   },
   calendarJournal: {},
-  strategyLab: {}
+  strategyLab: {},
+  liveTrading: {
+    defaultAmount: 10,
+    defaultExpiration: 300,
+    minAmount: 1,
+    maxAmount: 1000,
+    confirmRealTrades: true,
+    tradeCooldownSeconds: 3,
+  },
 };
 
 const clampNumber = (value, { min, max, fallback }) => {
@@ -220,6 +228,10 @@ const normalizeSettings = (settings) => {
     strategyLab: {
       ...(defaultSettings.strategyLab || {}),
       ...(s.strategyLab || {}),
+    },
+    liveTrading: {
+      ...(defaultSettings.liveTrading || {}),
+      ...(s.liveTrading || {}),
     },
   };
 
@@ -308,6 +320,10 @@ const mergeSettings = (current, incoming) => {
     strategyLab: {
       ...(current.strategyLab || {}),
       ...(incoming?.strategyLab || {}),
+    },
+    liveTrading: {
+      ...(current.liveTrading || {}),
+      ...(incoming?.liveTrading || {}),
     },
   };
 

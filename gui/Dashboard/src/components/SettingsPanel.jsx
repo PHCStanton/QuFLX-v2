@@ -579,8 +579,8 @@ const SettingsPanel = () => {
                     key={val}
                     onClick={() => updateSection('alerts', { candleCount: val })}
                     className={`px-3 py-1 rounded text-[10px] font-bold transition-all border ${(settings.alerts?.candleCount ?? 100) === val
-                        ? "bg-accent-blue text-white border-accent-blue shadow-glow-blue"
-                        : "bg-card-bg text-text-secondary border-border-primary hover:border-accent-blue/50"
+                      ? "bg-accent-blue text-white border-accent-blue shadow-glow-blue"
+                      : "bg-card-bg text-text-secondary border-border-primary hover:border-accent-blue/50"
                       }`}
                   >
                     {val}
@@ -739,7 +739,83 @@ const SettingsPanel = () => {
           </SettingRow>
         </SettingsSection>
 
+        {/* Live Trading */}
+        <SettingsSection title="Live Trading" defaultOpen={false}>
+          <SettingRow label="Default Trade Amount" description="Amount pre-filled in the trade form (USD)">
+            <SliderInput
+              value={settings.liveTrading?.defaultAmount ?? 10}
+              min={1}
+              max={1000}
+              step={1}
+              unit="$"
+              onChange={(val) => updateSection('liveTrading', { defaultAmount: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Min Trade Amount" description="Lowest allowed trade size (USD)">
+            <SliderInput
+              value={settings.liveTrading?.minAmount ?? 1}
+              min={1}
+              max={settings.liveTrading?.maxAmount ?? 1000}
+              step={1}
+              unit="$"
+              onChange={(val) => updateSection('liveTrading', { minAmount: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Max Trade Amount" description="Highest allowed trade size (USD)">
+            <SliderInput
+              value={settings.liveTrading?.maxAmount ?? 1000}
+              min={settings.liveTrading?.minAmount ?? 1}
+              max={1000}
+              step={10}
+              unit="$"
+              onChange={(val) => updateSection('liveTrading', { maxAmount: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Default Expiry" description="Trade duration pre-selected in the trade form">
+            <DropdownInput
+              value={settings.liveTrading?.defaultExpiration ?? 300}
+              options={[
+                { label: '5 seconds', value: 5 },
+                { label: '15 seconds', value: 15 },
+                { label: '30 seconds', value: 30 },
+                { label: '1 minute', value: 60 },
+                { label: '3 minutes', value: 180 },
+                { label: '5 minutes (default)', value: 300 },
+                { label: '30 minutes', value: 1800 },
+                { label: '1 hour', value: 3600 },
+              ]}
+              onChange={(val) => updateSection('liveTrading', { defaultExpiration: Number(val) })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Trade Cooldown" description="Minimum seconds between consecutive trades">
+            <SliderInput
+              value={settings.liveTrading?.tradeCooldownSeconds ?? 3}
+              min={1}
+              max={30}
+              step={1}
+              unit="s"
+              onChange={(val) => updateSection('liveTrading', { tradeCooldownSeconds: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Confirm Real-Money Trades" description="Show confirmation dialog before executing trades in Real mode">
+            <NeomorphicSwitch
+              checked={settings.liveTrading?.confirmRealTrades !== false}
+              onChange={() =>
+                updateSection('liveTrading', {
+                  confirmRealTrades: !settings.liveTrading?.confirmRealTrades,
+                })
+              }
+            />
+          </SettingRow>
+        </SettingsSection>
+
         <SettingsSection title="Risk Manager" defaultOpen={false}>
+
           <SettingRow label="Daily Max Trades" description="Maximum trades per day">
             <SliderInput
               value={settings.riskManager.dailyMaxTrades}
