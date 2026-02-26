@@ -1,0 +1,215 @@
+Task
+
+1. Current Work: The task is to compile a detailed development plan document (`ssid_gateway_proxy_topbar_dev_plan.md`) and save it to `v2_Dev_Docs/Live_Trading_ssid/`. This document covers a full architectural redesign of the SSID/Live Trading integration for QuFLX v2, including:
+
+   - A new standalone `backend/services/ssid_service/` FastAPI microservice (port 8001)
+   - A TopBar SSID badge/button (following the existing WS/Chrome/Stream badge pattern)
+   - A Gateway proxy layer (`trading_proxy.py`) that forwards `/api/v1/trading/*` to the ssid_service
+   - Complete deprecation and removal of all previous SSID implementation residue (no leftovers in codebase)
+   - SSIDs moved to `.env` (not JSON config files)
+
+   The user explicitly said: "Ok, Compile the Dev Plan as specified and put extra emphasis on the previous implementations deprecation. There must be no residue in the codebase."
+
+   The write_to_file attempt failed due to context window being too full (84%). A new task is needed to write the document with a fresh context window.
+
+2. Key Technical Concepts:
+
+   - __QuFLX v2__: Event-Driven Modular Monolith — FastAPI Gateway (port 8000), React Dashboard (Vite), Redis, Selenium
+   - __SSID__: PocketOption authentication token in format `42["auth",{"session":"...","isDemo":1,"uid":...}]`
+   - __Instance-based API__: The new approach uses `PocketOptionInstance` (no global state) vs the old `global_value.py` approach
+   - __Gateway Proxy (Option A)__: Dashboard → Gateway :8000/api/v1/trading/* → proxy → ssid_service :8001/api/*
+   - __Ops Pattern__: Chrome/Stream are already managed as independent subprocesses via `ops.py` — SSID service follows the same pattern
+   - __Core Principles__: `.agents/CORE_PRINCIPLES.md` — especially Principle #6 (Separation of Concerns), #7 (Stop Patching, Start Rewriting), #8 (Zero Silent Failures)
+   - __Zero Residue__: User explicitly requires complete removal of all old SSID code — no legacy imports, no dead files
+
+3. Relevant Files and Code:
+
+   - __`v2_Dev_Docs/Live_Trading_ssid/ssid_gateway_proxy_topbar_dev_plan.md`__ — TARGET FILE TO CREATE (does not exist yet)
+
+   - __`v2_Dev_Docs/Live_Trading_ssid/Live_Trading_ssid_Implementation_Plan.md`__ — Existing plan (old approach, to be superseded)
+
+   - __`ssid_integration/INTEGRATIONS_GUIDE_26-02-25.md`__ — Architecture reference for the new ssid_service design. Key concepts:
+
+     - Dual account isolation (demo + real instances simultaneously)
+     - `PocketOptionInstance` class (no global state)
+     - `AsyncPocketOptionWrapper` with background thread event loop
+     - Region rotation (api-eu.po.market, api-fi.po.market, api-en.po.market)
+     - SSID persistence to `.env` via `EnvManager.update_key()`
+     - Port 8001 for the trading service
+
+   - __`ssid_integration/connector.py`__ — Current SSIDConnector (to be moved/adapted into ssid_service):
+
+     - `SSIDConnector.__init__(ssid, demo, timeout)`
+     - `connect()` → returns `(bool, str)`
+     - `check_connection()` → returns WS state only (NOT gated on balance — critical fix)
+     - `_fetch_balance()` with 5s timeout
+     - `_parse_demo_from_ssid()` — parses isDemo from SSID string
+
+   - __`ssid_integration/executor.py`__ — Current OTCExecutor (to be moved/adapted):
+
+     - Hardcoded `OTC_ASSETS` list (31 assets)
+     - `execute_trade(asset, direction, amount, expiration)` → `{success, order_id, ...}`
+     - `check_trade_result(order_id)` → `{success, win, profit, message}`
+
+   - __`backend/services/gateway/trading_service.py`__ — DEPRECATED (to be deleted):
+
+     - Has 6 known bugs (threading.Lock + await deadlock, wrong response shapes, missing update_config, etc.)
+     - Will be replaced by `trading_proxy.py` (thin proxy) + ssid_service
+
+   - __`backend/services/gateway/routes/trading.py`__ — KEPT but modified:
+
+     - Endpoint structure preserved (same URLs, same Pydantic models)
+     - Becomes the proxy layer calling ssid_service :8001
+
+   - __`backend/services/gateway/routes/ops.py`__ — MODIFIED to add SSID service start/stop:
+
+     - Existing pattern: `_registry` dict, `_spawn_*` functions, `asyncio.Lock`
+     - New entries: `_registry["ssid_service"]`, `_spawn_ssid_service()`, `/ssid/start`, `/ssid/stop`, `/ssid/status`
+
+   - __`gui/Dashboard/src/components/TopBar.jsx`__ — MODIFIED to add SSID badge:
+
+     ```jsx
+     // Current pattern (to replicate for SSID):
+     <StatusBadge
+       label="Stream"
+       status={health}
+       onClick={health === 'streaming' ? pauseStream : startStream}
+       disabled={opsStreamBusy}
+       busyLabel={health === 'streaming' ? 'Pausing...' : 'Starting...'}
+     />
+     // New SSID badge:
+     <StatusBadge
+       label="SSID"
+       status={ssidStatus}
+       onClick={ssidStatus === 'connected' ? stopSsid : startSsid}
+       disabled={opsSsidBusy}
+       busyLabel="Connecting..."
+     />
+     ```
+
+   - __`gui/Dashboard/src/store/marketStore.js`__ — MODIFIED to add SSID ops state:
+
+     - Add: `ssidStatus`, `opsSsidBusy`, `startSsid()`, `stopSsid()`
+
+   - __`gui/Dashboard/src/store/tradingStore.js`__ — NO CHANGES (still hits localhost:8000)
+
+   - __`gui/Dashboard/src/components/LiveTradingPanel.jsx`__ — NO CHANGES
+
+   - __`.env`__ — MODIFIED to add:
+
+     ```env
+     QFLX_SSID_DEMO=
+     QFLX_SSID_REAL=
+     QFLX_SSID_SERVICE_PORT=8001
+     ```
+
+   - __`.gitignore`__ — MODIFIED to ensure SSIDs never committed
+
+4. Problem Solving:
+
+   __Previous SSID Implementation Issues (6 bugs in trading_service.py):__
+
+   - BUG #1: `_connect_sync` missing `balance` and `demo` keys in response
+   - BUG #2: `threading.Lock` + `await` deadlock in `execute_trade()`
+   - BUG #3: `get_assets()` returns `{symbol}` but frontend expects `{id}`
+   - BUG #4: `update_config()` method doesn't exist → 500 on PUT /config
+   - BUG #5: Demo/Real mode switch broken (PocketOption ignores `demo` param)
+   - BUG #6: `get_status()` returns stale/null balance
+
+   __Decision__: Full rewrite as independent service (not patching) — approved by user.
+
+   __Architecture Decision__: Gateway Proxy (Option A) chosen — single origin for frontend, no CORS issues, tradingStore.js unchanged.
+
+   __Deprecation Requirement__: User explicitly requires "no residue in the codebase" — complete removal of all old SSID files.
+
+5. Pending Tasks and Next Steps:
+
+   __IMMEDIATE TASK__: Write the dev plan document to `v2_Dev_Docs/Live_Trading_ssid/ssid_gateway_proxy_topbar_dev_plan.md`
+
+   The document must cover (in this order):
+
+   __Section 1: Executive Summary__
+
+   - What this plan replaces and why
+   - The chosen architecture (Gateway Proxy + independent ssid_service)
+
+   __Section 2: Complete Deprecation Manifest (CRITICAL — user emphasis)__
+
+   - Every file to be DELETED with exact path
+   - Every file to be MODIFIED with what changes
+   - Every import to be removed
+   - Git commands to verify no residue
+   - Checklist format for tracking
+
+   __Section 3: New File Structure__
+
+   ```javascript
+   backend/services/ssid_service/
+   ├── __init__.py
+   ├── main.py              # FastAPI app, port 8001
+   ├── connector.py         # Instance-based SSID connector
+   ├── executor.py          # OTC trade executor
+   ├── routes.py            # /api/connect, /api/trade, /api/status, /api/disconnect, /api/assets
+   └── pocketoptionapi/     # Instance-based API (from Integration Guide)
+       ├── __init__.py
+       └── pocket_option_instance.py  # NO global_value.py
+   ```
+
+   __Section 4: Implementation Phases__
+
+   - Phase 0: Deprecation (delete old files FIRST)
+   - Phase 1: ssid_service standalone FastAPI
+   - Phase 2: ops.py SSID start/stop endpoints
+   - Phase 3: TopBar SSID badge
+   - Phase 4: marketStore.js SSID state
+   - Phase 5: Gateway trading_proxy.py
+   - Phase 6: .env SSID entries + .gitignore
+   - Phase 7: Tests + verification
+
+   __Section 5: API Contract__
+
+   - ssid_service endpoints (port 8001)
+   - Gateway proxy endpoints (port 8000) — unchanged from frontend perspective
+   - Response shapes
+
+   __Section 6: SSID Security__
+
+   - SSIDs in .env only
+   - .gitignore rules
+   - Never log SSIDs
+
+   __Section 7: Verification Checklist__
+
+   - Backend tests
+   - Frontend build
+   - Manual flow verification
+
+   __Key user quote__: "put extra emphasis on the previous implementations deprecation. There must be no residue in the codebase"
+
+   __Files to DELETE (complete list)__:
+
+   - `ssid_integration/__init__.py`
+   - `ssid_integration/connector.py`
+   - `ssid_integration/executor.py`
+   - `ssid_integration/README.md`
+   - `ssid_integration/ssid_integration_task.md`
+   - `ssid_integration/pocketoptionapi/` (entire directory)
+   - `backend/services/gateway/trading_service.py`
+   - `data/settings/trading_config.json` (if exists)
+
+   __Files to KEEP as reference only__ (move to `_legacy/` or `_backups/`):
+
+   - `ssid_integration/INTEGRATIONS_GUIDE_26-02-25.md` → move to `v2_Dev_Docs/Live_Trading_ssid/`
+
+   __Files to MODIFY__:
+
+   - `backend/services/gateway/routes/trading.py` → becomes proxy layer
+   - `backend/services/gateway/routes/ops.py` → add SSID service start/stop
+   - `backend/services/gateway/main.py` → remove trading_service import
+   - `gui/Dashboard/src/components/TopBar.jsx` → add SSID badge
+   - `gui/Dashboard/src/store/marketStore.js` → add ssidStatus/startSsid/stopSsid
+   - `.env` → add QFLX_SSID_DEMO, QFLX_SSID_REAL, QFLX_SSID_SERVICE_PORT
+   - `.env.example` → add SSID placeholders
+   - `.gitignore` → ensure SSID env vars never committed
+
+   __Write the document using write_to_file in sections if needed to avoid context window issues.__

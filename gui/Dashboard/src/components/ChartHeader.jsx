@@ -13,7 +13,6 @@ const ChartHeader = ({
   selectedTimeframe,
   handleTimeframeChange,
   timeframeOptions,
-  csvOptions,
   indicatorOptions,
   addIndicator,
   activeIndicators,

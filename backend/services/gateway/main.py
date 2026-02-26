@@ -352,6 +352,9 @@ if __name__ == "__main__":
     os.environ['QFLX_DEBUG_ERRORS'] = '1' if args.debug_errors else '0'
 
     configure_logging(service_name='gateway')
-    # Use loop="asyncio" to ensure it respects the policy set at the top
+    # Use loop="none" so uvicorn does NOT create its own event loop and instead
+    # inherits the WindowsProactorEventLoopPolicy set at the top of this module.
+    # loop="asyncio" would force SelectorEventLoop on Windows, which does not
+    # support asyncio.create_subprocess_exec and causes the subprocess fallback.
     target = "backend.services.gateway.main:socket_app" if args.reload else socket_app
-    uvicorn.run(target, host=str(args.host), port=int(args.port), reload=bool(args.reload), loop="asyncio", log_level=str(args.log_level).lower())
+    uvicorn.run(target, host=str(args.host), port=int(args.port), reload=bool(args.reload), loop="none", log_level=str(args.log_level).lower())

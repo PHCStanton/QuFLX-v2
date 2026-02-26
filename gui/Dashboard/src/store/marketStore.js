@@ -125,7 +125,7 @@ const createUiSlice = (set) => ({
     })),
 });
 
-const createTickerSlice = (set) => ({
+const createTickerSlice = () => ({
   marketData: {},
   tickerMaxAssets: 15,
   subscribedAssetKeys: [],

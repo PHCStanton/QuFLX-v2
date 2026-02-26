@@ -6,7 +6,6 @@ const OscillatorChart = ({
   mainChart,
   data,
   allSeries,
-  indicator,
   type,
   title,
   params,
@@ -47,7 +46,6 @@ const OscillatorChart = ({
     const isRSI = indicatorValue === 'rsi' || (title && title.toLowerCase().includes('rsi'));
     const isCCI = indicatorValue === 'cci' || (title && title.toLowerCase().includes('cci'));
     const isATR = indicatorValue === 'atr' || (title && title.toLowerCase().includes('atr'));
-    const isStoch = indicatorValue === 'stoch';
     const isWilliams = indicatorValue === 'williams_r';
     const isROC = indicatorValue === 'roc';
 
@@ -282,7 +280,7 @@ const OscillatorChart = ({
       try {
         const oscTimeScale = chartRef.current.timeScale();
         oscTimeScale.setVisibleRange(range);
-      } catch (err) {
+      } catch {
         // Silent catch for sync errors (common during init)
       }
     };

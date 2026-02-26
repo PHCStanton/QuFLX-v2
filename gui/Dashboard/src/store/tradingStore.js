@@ -19,21 +19,24 @@ const DEFAULT_STATE = {
     // Connection
     isConnected: false,
     isConnecting: false,
+    isSwitchingMode: false,
     isDemoMode: true,      // SAFETY: always start in demo
     balance: null,
     lastBalanceUpdate: null,
-    ssidInput: '',         // For the input field only — never persisted
+    ssidInput: '',         // For the input field only
+    ssid_demo: '',         // Persisted demo SSID
+    ssid_real: '',         // Persisted real SSID
 
     // Trade execution
     isExecuting: false,
     lastCooldownEnd: null, // timestamp ms when cooldown expires
 
     // OTC assets loaded from backend
-    assets: [],
+    assets: [],            // Array of { id, name, payout }
     assetsLoaded: false,
 
     // Selected trade parameters (initialized to sensible defaults)
-    selectedAsset: '',
+    selectedAsset: '',     // Stores the id (e.g. EURUSD_otc)
     selectedDirection: null, // 'call' | 'put'
     tradeAmount: 10,
     tradeExpiration: 300,    // seconds
@@ -59,6 +62,7 @@ const useTradingStore = create((set, get) => ({
     setSelectedDirection: (dir) => set({ selectedDirection: dir }),
     setTradeAmount: (amount) => set({ tradeAmount: amount }),
     setTradeExpiration: (exp) => set({ tradeExpiration: exp }),
+    setDemoMode: (demo) => set({ isDemoMode: demo }),
     clearError: () => set({ error: null, connectError: null }),
 
     // ------------------------------------------------------------------ //
@@ -103,8 +107,8 @@ const useTradingStore = create((set, get) => ({
     disconnect: async () => {
         try {
             await fetch(`${API_BASE}/disconnect`, { method: 'POST' });
-        } catch {
-            // best-effort
+        } catch (err) {
+            console.warn('[tradingStore] Disconnect failed:', err.message);
         }
         set({
             isConnected: false,
@@ -135,8 +139,8 @@ const useTradingStore = create((set, get) => ({
                     lastBalanceUpdate: Date.now(),
                 });
             }
-        } catch {
-            // ignore polling errors silently
+        } catch (err) {
+            console.warn('[tradingStore] pollStatus failed:', err.message);
         }
     },
 
@@ -144,7 +148,7 @@ const useTradingStore = create((set, get) => ({
     // Execute trade
     // ------------------------------------------------------------------ //
 
-    executeTrade: async ({ asset, direction, amount, expiration }) => {
+    executeTrade: async ({ asset, direction, amount, expiration, cooldownSeconds = 3 }) => {
         set({ isExecuting: true, error: null });
         try {
             const res = await fetch(`${API_BASE}/execute`, {
@@ -174,7 +178,7 @@ const useTradingStore = create((set, get) => ({
             set((state) => ({
                 isExecuting: false,
                 activeTrade: trade,
-                lastCooldownEnd: Date.now() + (3 * 1000), // 3s default cooldown
+                lastCooldownEnd: Date.now() + (cooldownSeconds * 1000),
                 trades: [trade, ...state.trades].slice(0, 20), // keep last 20
             }));
 
@@ -196,11 +200,15 @@ const useTradingStore = create((set, get) => ({
             const data = await res.json();
             if (!data.success) return null;
 
+            // FIX (BUG-2): Backend returns { win: boolean, profit: number }
+            // Map data.win to status: 'win' | 'loss' | 'error'
+            const status = data.win === true ? 'win' : data.win === false ? 'loss' : 'error';
+
             // Update the matching trade in history
             set((state) => {
                 const trades = state.trades.map((t) =>
                     t.id === orderId
-                        ? { ...t, status: data.result || 'error', profit: data.profit ?? null }
+                        ? { ...t, status, profit: data.profit ?? null }
                         : t
                 );
                 const activeTrade =
@@ -211,7 +219,8 @@ const useTradingStore = create((set, get) => ({
             // Refresh balance after result
             get().pollStatus();
             return data;
-        } catch {
+        } catch (err) {
+            console.warn('[tradingStore] checkResult failed:', err.message);
             return null;
         }
     },
@@ -225,15 +234,20 @@ const useTradingStore = create((set, get) => ({
             const res = await fetch(`${API_BASE}/assets`);
             if (!res.ok) return;
             const data = await res.json();
-            if (data.success && Array.isArray(data.assets)) {
+            if (data.success && Array.isArray(data.assets) && data.assets.length > 0) {
+                // BUG #3 FIX: backend now returns {id}, but handle {symbol} as fallback
+                // for backward compatibility during any transitional state.
+                const firstAsset = data.assets[0];
+                const firstId = firstAsset?.id ?? firstAsset?.symbol ?? '';
                 set({
                     assets: data.assets,
                     assetsLoaded: true,
-                    selectedAsset: data.assets[0] || '',
+                    // Only set selectedAsset if not already set
+                    selectedAsset: get().selectedAsset || firstId,
                 });
             }
-        } catch {
-            // ignore
+        } catch (err) {
+            console.warn('[tradingStore] fetchAssets failed:', err.message);
         }
     },
 
@@ -242,7 +256,7 @@ const useTradingStore = create((set, get) => ({
     // ------------------------------------------------------------------ //
 
     switchMode: async (demo) => {
-        set({ isConnecting: true, error: null });
+        set({ isSwitchingMode: true, error: null });
         try {
             const res = await fetch(`${API_BASE}/switch-mode`, {
                 method: 'POST',
@@ -251,18 +265,22 @@ const useTradingStore = create((set, get) => ({
             });
             const data = await res.json();
             if (!res.ok || !data.success) {
-                set({ isConnecting: false, error: data.error || 'Mode switch failed' });
+                // FIX (BUG-4): FastAPI HTTPException returns { detail: { error: "..." } }
+                // Extract from both possible locations and use connectError for display in connection bar
+                const errMsg = data.detail?.error || data.error || 'Mode switch failed';
+                set({ isSwitchingMode: false, connectError: errMsg });
                 return false;
             }
             set({
-                isConnecting: false,
+                isSwitchingMode: false,
                 isDemoMode: data.demo ?? demo,
                 balance: data.balance,
                 lastBalanceUpdate: Date.now(),
+                connectError: null, // Clear any previous error on success
             });
             return true;
         } catch (err) {
-            set({ isConnecting: false, error: err.message });
+            set({ isSwitchingMode: false, connectError: err.message });
             return false;
         }
     },

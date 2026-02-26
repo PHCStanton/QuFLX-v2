@@ -12,10 +12,77 @@
  * Relies on: tradingStore.js, settingsStore.js (liveTrading section)
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import useTradingStore from '../store/tradingStore';
 import useSettingsStore from '../store/settingsStore';
+import { useShallow } from 'zustand/react/shallow';
 import AssetPayoutPanel from './AssetPayoutPanel';
+import { normalizeSpecificAsset } from '../utils/assetUtils';
+import clickSound from '../assets/Sounds/UIClick-Camera_snapshot.mp3';
+
+// ─── Module-level audio singleton (prevents object leak on rapid toggling) ───
+let clickAudioInstance = null;
+const getClickAudio = () => {
+  if (!clickAudioInstance) {
+    clickAudioInstance = new Audio(clickSound);
+  }
+  return clickAudioInstance;
+};
+
+// ─── Local Components ───────────────────────────────────────────────────────
+
+/**
+ * Customized Neomorphic switch for Demo/Real mode
+ */
+const TradingModeSwitch = React.memo(function TradingModeSwitch({ isDemo, onChange, isConnecting }) {
+  // checked = REAL mode (false = DEMO)
+  const checked = !isDemo;
+
+  const handleChange = () => {
+    if (isConnecting) return;
+    const nextDemo = !isDemo;
+    const audio = getClickAudio();
+    audio.currentTime = 0; // Reset for rapid clicks
+    audio.play().catch((e) => {
+      // Non-critical: audio play was blocked (e.g., user hasn't interacted with page yet)
+      console.debug('[TradingModeSwitch] Audio play blocked:', e?.message || e);
+    });
+    if (onChange) onChange(nextDemo);
+  };
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${isDemo ? 'text-[#3b82f6]' : 'text-text-secondary'}`}>Demo</span>
+
+      <label className="relative inline-block w-[46px] h-[22px] cursor-pointer select-none">
+        <input
+          type="checkbox"
+          className="hidden"
+          checked={checked}
+          onChange={handleChange}
+          disabled={isConnecting}
+        />
+        {/* Track */}
+        <div className={`absolute inset-0 rounded-full transition-all duration-300 border shadow-inner ${checked ? 'border-[#ff4757]/40 bg-[#ff4757]/10' : 'border-[#3b82f6]/40 bg-[#3b82f6]/10'}`}
+          style={{
+            boxShadow: 'inset 2px 2px 5px rgba(0,0,0,0.5)',
+          }}
+        />
+
+        {/* Knob */}
+        <div className={`absolute top-[3px] left-[3px] w-[16px] h-[16px] rounded-full transition-all duration-300 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] border shadow-md flex items-center justify-center
+          ${checked
+            ? 'translate-x-[24px] bg-[#ff4757] border-white/40 shadow-[0_0_8px_rgba(255,71,87,0.4)]'
+            : 'bg-[#3b82f6] border-white/40 shadow-[0_0_8px_rgba(59,130,246,0.4)]'}`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+        </div>
+      </label>
+
+      <span className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${!isDemo ? 'text-[#ff4757]' : 'text-text-secondary'}`}>Real</span>
+    </div>
+  );
+});
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
@@ -24,15 +91,19 @@ const fmt = {
   bal: (n) =>
     n == null ? '—' : `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
 
-  /** Format OTC asset for display */
-  asset: (s) => (s ? s.replace('_otc', '').replace('_OTC', '') : '—'),
+  /** Format OTC asset for display (Normalized format: EURUSDOTC) */
+  asset: (s) => (s ? normalizeSpecificAsset(s) : '—'),
 
-  /** Format expiry seconds for display */
+  /** Format expiry seconds for display (e.g., "1m 30s", "5m", "1h 15m") */
   expiry: (s) => {
-    if (!s) return '—';
+    if (!s || s <= 0) return '—';
     if (s < 60) return `${s}s`;
-    if (s < 3600) return `${s / 60}m`;
-    return `${s / 3600}h`;
+    const m = Math.floor(s / 60);
+    const remSec = s % 60;
+    if (s < 3600) return remSec ? `${m}m ${remSec}s` : `${m}m`;
+    const h = Math.floor(s / 3600);
+    const remMin = Math.floor((s % 3600) / 60);
+    return remMin ? `${h}h ${remMin}m` : `${h}h`;
   },
 
   /** Format timestamp in HH:MM:SS */
@@ -45,14 +116,18 @@ const fmt = {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 /** Countdown timer shown on active/pending trades */
-function TradeCountdown({ expiresAt }) {
+const TradeCountdown = React.memo(function TradeCountdown({ expiresAt }) {
   const [remaining, setRemaining] = useState(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
 
   useEffect(() => {
-    if (remaining <= 0) return;
+    // Check expiry directly from props rather than state to avoid stale closure
+    const msUntilExpiry = expiresAt - Date.now();
+    if (msUntilExpiry <= 0) return;
+
     const id = setInterval(() => {
       const r = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
       setRemaining(r);
+      if (r === 0) clearInterval(id);
     }, 500);
     return () => clearInterval(id);
   }, [expiresAt]);
@@ -62,10 +137,10 @@ function TradeCountdown({ expiresAt }) {
       {fmt.expiry(remaining)}
     </span>
   );
-}
+});
 
 /** CALL / PUT direction buttons */
-function DirectionButtons({ value, onChange, disabled }) {
+const DirectionButtons = React.memo(function DirectionButtons({ value, onChange, disabled }) {
   return (
     <div className="grid grid-cols-2 gap-1.5">
       <button
@@ -94,25 +169,27 @@ function DirectionButtons({ value, onChange, disabled }) {
       </button>
     </div>
   );
-}
+});
 
 /** Trade result badge */
-function ResultBadge({ status }) {
+const ResultBadge = React.memo(function ResultBadge({ status }) {
   if (status === 'win')
     return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#00c97a]/20 text-[#00c97a] uppercase">WIN</span>;
   if (status === 'loss')
     return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#ff4757]/20 text-[#ff4757] uppercase">LOSS</span>;
+  if (status === 'error')
+    return <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-500/20 text-orange-400 uppercase">ERR</span>;
   return (
     <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-yellow-500/20 text-yellow-400 uppercase flex items-center gap-1">
       <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
       WAIT
     </span>
   );
-}
+});
 
 // ─── Real-money Confirmation Modal ───────────────────────────────────────────
 
-function ConfirmTradeModal({ asset, direction, amount, expiration, onConfirm, onCancel }) {
+const ConfirmTradeModal = React.memo(function ConfirmTradeModal({ asset, direction, amount, expiration, onConfirm, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="bg-[#131929] border border-[#ff4757]/40 rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
@@ -145,6 +222,36 @@ function ConfirmTradeModal({ asset, direction, amount, expiration, onConfirm, on
       </div>
     </div>
   );
+});
+
+class LiveTradingErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('LiveTradingPanel caught error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 m-2 rounded-lg bg-[#ff4757]/10 border border-[#ff4757]/40 text-[#ff4757] text-xs">
+          <p className="font-bold mb-2">⚠️ Trading Panel Error</p>
+          <p className="font-mono text-[10px] opacity-80">{this.state.error?.message}</p>
+          <button 
+            onClick={() => this.setState({ hasError: false })}
+            className="mt-3 px-3 py-1 bg-[#ff4757]/20 rounded hover:bg-[#ff4757]/30 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // ─── Main LiveTradingPanel ────────────────────────────────────────────────────
@@ -163,7 +270,7 @@ const EXPIRY_PRESETS = [
 const LiveTradingPanel = () => {
   // ── Store selectors ──────────────────────────────────────────────────
   const {
-    isConnected, isConnecting, isDemoMode,
+    isConnected, isConnecting, isSwitchingMode, isDemoMode,
     balance, lastBalanceUpdate,
     ssidInput, setSsidInput,
     selectedAsset, setSelectedAsset,
@@ -174,10 +281,25 @@ const LiveTradingPanel = () => {
     assets, assetsLoaded,
     trades, activeTrade,
     error, connectError,
-    connect, disconnect, switchMode,
+    connect, disconnect, switchMode, setDemoMode,
     executeTrade, checkResult, fetchAssets,
     clearError,
-  } = useTradingStore();
+  } = useTradingStore(useShallow((s) => ({
+    isConnected: s.isConnected, isConnecting: s.isConnecting, isSwitchingMode: s.isSwitchingMode, isDemoMode: s.isDemoMode,
+    balance: s.balance, lastBalanceUpdate: s.lastBalanceUpdate,
+    ssidInput: s.ssidInput, setSsidInput: s.setSsidInput,
+    selectedAsset: s.selectedAsset, setSelectedAsset: s.setSelectedAsset,
+    selectedDirection: s.selectedDirection, setSelectedDirection: s.setSelectedDirection,
+    tradeAmount: s.tradeAmount, setTradeAmount: s.setTradeAmount,
+    tradeExpiration: s.tradeExpiration, setTradeExpiration: s.setTradeExpiration,
+    isExecuting: s.isExecuting, lastCooldownEnd: s.lastCooldownEnd,
+    assets: s.assets, assetsLoaded: s.assetsLoaded,
+    trades: s.trades, activeTrade: s.activeTrade,
+    error: s.error, connectError: s.connectError,
+    connect: s.connect, disconnect: s.disconnect, switchMode: s.switchMode, setDemoMode: s.setDemoMode,
+    executeTrade: s.executeTrade, checkResult: s.checkResult, fetchAssets: s.fetchAssets,
+    clearError: s.clearError,
+  })));
 
   const settings = useSettingsStore((s) => s.settings);
   const lt = settings.liveTrading || {};
@@ -187,12 +309,16 @@ const LiveTradingPanel = () => {
   const [pendingTrade, setPendingTrade] = useState(null); // for confirm modal
   const ssidRef = useRef(null);
   const pollTimer = useRef(null);
+  const defaultsAppliedRef = useRef(false); // Prevent settings from overwriting user choices
 
-  // ── Init from settings ───────────────────────────────────────────────
+  // ── Init from settings (only once on mount) ───────────────────────────
   useEffect(() => {
-    if (!tradeAmount || tradeAmount === 10) setTradeAmount(lt.defaultAmount ?? 10);
-    if (!tradeExpiration || tradeExpiration === 300) setTradeExpiration(lt.defaultExpiration ?? 300);
-  }, [lt.defaultAmount, lt.defaultExpiration]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!defaultsAppliedRef.current) {
+      setTradeAmount(lt.defaultAmount ?? 10);
+      setTradeExpiration(lt.defaultExpiration ?? 300);
+      defaultsAppliedRef.current = true;
+    }
+  }, [lt.defaultAmount, lt.defaultExpiration, setTradeAmount, setTradeExpiration]); // Run once on mount
 
   // ── Balance polling ──────────────────────────────────────────────────
   useEffect(() => {
@@ -206,8 +332,9 @@ const LiveTradingPanel = () => {
   useEffect(() => {
     if (!activeTrade) return;
     const delay = activeTrade.expiresAt - Date.now() + 3000; // 3s buffer
+    const tradeId = activeTrade.id;
     const id = setTimeout(() => {
-      if (activeTrade?.id) checkResult(activeTrade.id);
+      if (tradeId) checkResult(tradeId);
     }, Math.max(delay, 1000));
     return () => clearTimeout(id);
   }, [activeTrade, checkResult]);
@@ -216,12 +343,16 @@ const LiveTradingPanel = () => {
   const [cooldownLeft, setCooldownLeft] = useState(0);
   useEffect(() => {
     if (!lastCooldownEnd) return;
+    let id = null;
     const tick = () => {
       const left = Math.max(0, Math.ceil((lastCooldownEnd - Date.now()) / 1000));
       setCooldownLeft(left);
+      if (left === 0 && id) {
+        clearInterval(id);
+      }
     };
+    id = setInterval(tick, 500);
     tick();
-    const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [lastCooldownEnd]);
 
@@ -247,20 +378,39 @@ const LiveTradingPanel = () => {
     }
   }, [ssidInput, isDemoMode, connect]);
 
-  const handleModeToggle = useCallback(async () => {
+  const handleModeToggle = useCallback(async (nextDemo) => {
+    // nextDemo is always passed by TradingModeSwitch (true = demo, false = real)
+    if (nextDemo === isDemoMode) return;
+
     if (isConnected) {
-      await switchMode(!isDemoMode);
+      const ok = await switchMode(nextDemo);
+      if (!ok) {
+        // FIX (BUG-3): Mode switch failed (most likely: no saved SSID for target mode).
+        // Auto-disconnect and let the user enter the new mode's SSID.
+        // The error message is already displayed via connectError from the store.
+        await disconnect();
+        setDemoMode(nextDemo);
+        // Focus the SSID input for immediate entry
+        setTimeout(() => ssidRef.current?.focus(), 150);
+      }
     } else {
-      useTradingStore.setState({ isDemoMode: !isDemoMode });
+      setDemoMode(nextDemo);
     }
-  }, [isConnected, isDemoMode, switchMode]);
+  }, [isConnected, isDemoMode, switchMode, setDemoMode, disconnect]);
 
   const handleAmountStep = useCallback((delta) => {
-    setTradeAmount(Math.max(lt.minAmount ?? 1, Math.min(lt.maxAmount ?? 1000, tradeAmount + delta)));
+    const base = Number(tradeAmount) || 0;
+    setTradeAmount(Math.max(lt.minAmount ?? 1, Math.min(lt.maxAmount ?? 1000, base + delta)));
   }, [tradeAmount, lt.minAmount, lt.maxAmount, setTradeAmount]);
 
   const handleExecute = useCallback(async () => {
-    if (!isConnected || !selectedAsset || !selectedDirection) return;
+    // Guard: validate all required inputs (Core Principle #9 — Fail Fast)
+    if (!isConnected) return;
+    if (!selectedAsset) return;
+    if (!selectedDirection) return;
+    if (!Number.isFinite(tradeAmount) || tradeAmount <= 0) return; // Validate positive amount
+    if (tradeExpiration <= 0) return; // Validate positive expiration
+
     const params = {
       asset: selectedAsset,
       direction: selectedDirection,
@@ -272,18 +422,30 @@ const LiveTradingPanel = () => {
       setPendingTrade(params);
       return;
     }
-    await executeTrade(params);
-  }, [isConnected, selectedAsset, selectedDirection, tradeAmount, tradeExpiration, isDemoMode, lt.confirmRealTrades, executeTrade]);
+    await executeTrade({
+      ...params,
+      cooldownSeconds: lt.tradeCooldownSeconds ?? 3,
+    });
+  }, [isConnected, selectedAsset, selectedDirection, tradeAmount, tradeExpiration, isDemoMode, lt.confirmRealTrades, lt.tradeCooldownSeconds, executeTrade]);
 
   const handleConfirmed = useCallback(async () => {
-    if (pendingTrade) await executeTrade(pendingTrade);
+    if (pendingTrade) {
+      await executeTrade({
+        ...pendingTrade,
+        cooldownSeconds: lt.tradeCooldownSeconds ?? 3,
+      });
+    }
     setPendingTrade(null);
-  }, [pendingTrade, executeTrade]);
+  }, [pendingTrade, lt.tradeCooldownSeconds, executeTrade]);
 
+  const hasValidAmount = Number.isFinite(tradeAmount) && tradeAmount > 0;
+  const hasValidExpiration = Number.isFinite(tradeExpiration) && tradeExpiration > 0;
   const canExecute =
     isConnected &&
     Boolean(selectedAsset) &&
     Boolean(selectedDirection) &&
+    hasValidAmount &&
+    hasValidExpiration &&
     !isExecuting &&
     cooldownLeft === 0;
 
@@ -309,11 +471,13 @@ const LiveTradingPanel = () => {
       )}
 
       {/* ── 2. Connection Bar ───────────────────────────────────────── */}
-      <div className="rounded-lg border border-border-primary bg-section-bg p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">SSID Connection</span>
+      <div className="rounded-lg border border-border-primary bg-section-bg p-3 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+            <span className={isConnecting ? 'text-yellow-400' : isConnected ? 'text-accent-green' : 'text-text-secondary'}>●</span> Connection Control
+          </span>
           {/* Status dot */}
-          <span className={`flex items-center gap-1 text-[9px] font-bold uppercase
+          <span className={`flex items-center gap-1.5 text-[10px] font-bold uppercase
             ${isConnecting ? 'text-yellow-400' : isConnected ? 'text-[#00c97a]' : 'text-text-secondary'}`}>
             <span className={`w-1.5 h-1.5 rounded-full inline-block
               ${isConnecting ? 'bg-yellow-400 animate-pulse' : isConnected ? 'bg-[#00c97a]' : 'bg-text-secondary'}`} />
@@ -321,62 +485,60 @@ const LiveTradingPanel = () => {
           </span>
         </div>
 
+        {/* Demo / Real toggle row (Neomorphic) */}
+        <div className="flex items-center justify-center py-2 px-1 rounded-lg bg-[#0e1421]/30 border border-border-primary/30">
+          <TradingModeSwitch
+            isDemo={isDemoMode}
+            isConnecting={isConnecting || isSwitchingMode}
+            onChange={handleModeToggle}
+          />
+        </div>
+
         {/* SSID input row */}
         {!isConnected && (
-          <div className="flex gap-1.5">
-            <input
-              id="ssid-input"
-              ref={ssidRef}
-              type="password"
-              value={ssidInput}
-              onChange={(e) => setSsidInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
-              placeholder="Paste your SSID here…"
-              autoComplete="off"
-              className="flex-1 bg-card-bg border border-border-primary rounded px-2 py-1.5 text-[10px] text-text-primary placeholder-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-green min-w-0"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-secondary text-[10px]">🔒</span>
+              <input
+                id="ssid-input"
+                ref={ssidRef}
+                type="password"
+                value={ssidInput}
+                onChange={(e) => setSsidInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+                placeholder={isDemoMode ? "Paste DEMO SSID…" : "Paste REAL SSID…"}
+                autoComplete="off"
+                className="w-full bg-card-bg border border-border-primary rounded-lg pl-8 pr-2 py-2 text-[10px] text-text-primary placeholder-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-green"
+              />
+            </div>
             <button
               id="connect-btn"
               disabled={isConnecting || !ssidInput.trim()}
               onClick={handleConnect}
-              className="px-3 py-1.5 rounded bg-accent-green hover:opacity-90 text-[#0a0f1c] text-[10px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed transition-opacity whitespace-nowrap"
+              className="px-4 py-2 rounded-lg bg-accent-green hover:opacity-90 text-[#0a0f1c] text-[10px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed transition-opacity whitespace-nowrap"
             >
               {isConnecting ? '…' : 'Connect'}
             </button>
           </div>
         )}
 
-        {/* Connected row: Disconnect + mode toggle */}
+        {/* Connected footer: Disconnect button */}
         {isConnected && (
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex justify-end">
             <button
               id="disconnect-btn"
               onClick={disconnect}
-              className="px-3 py-1.5 rounded bg-section-bg hover:bg-card-bg text-text-secondary text-[10px] font-medium border border-border-primary transition-colors"
+              className="px-4 py-1.5 rounded-lg bg-card-bg hover:bg-[#ff4757]/10 hover:text-[#ff4757] hover:border-[#ff4757]/30 text-text-secondary text-[10px] font-medium border border-border-primary transition-all uppercase tracking-wider"
             >
               Disconnect
-            </button>
-
-            {/* Demo / Real toggle */}
-            <button
-              id="mode-toggle-btn"
-              onClick={handleModeToggle}
-              disabled={isConnecting}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all
-                ${isDemoMode
-                  ? 'bg-[#3b82f6]/15 border-[#3b82f6]/50 text-[#3b82f6]'
-                  : 'bg-[#ff4757]/15 border-[#ff4757]/50 text-[#ff4757]'}
-                disabled:opacity-50 disabled:cursor-not-allowed`}
-              title={isDemoMode ? 'Switch to Real account' : 'Switch to Demo account'}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDemoMode ? 'bg-[#3b82f6]' : 'bg-[#ff4757]'}`} />
-              {isDemoMode ? 'DEMO' : 'REAL'}
             </button>
           </div>
         )}
 
         {connectError && (
-          <p className="text-[9px] text-[#ff4757] leading-tight mt-0.5">{connectError}</p>
+          <div className="p-2 rounded bg-[#ff4757]/10 border border-[#ff4757]/20">
+            <p className="text-[9px] text-[#ff4757] leading-tight font-medium">⚠️ {connectError}</p>
+          </div>
         )}
       </div>
 
@@ -407,19 +569,27 @@ const LiveTradingPanel = () => {
         <p className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">Trade</p>
 
         {/* Asset selector */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[9px] text-text-secondary">Asset</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-medium text-text-secondary pl-1">Trading Asset</label>
           <select
             id="asset-select"
             value={selectedAsset}
             onChange={(e) => setSelectedAsset(e.target.value)}
-            className="bg-card-bg border border-border-primary rounded px-2 py-1.5 text-[10px] text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green w-full"
+            className="bg-card-bg border border-border-primary rounded-lg px-3 py-2 text-[11px] font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green w-full appearance-none dropdown-chevron"
           >
             {!assetsLoaded && <option value="">Loading assets…</option>}
             {assetsLoaded && assets.length === 0 && <option value="">No assets available</option>}
+            {assetsLoaded && assets.length > 0 && <option value="" disabled>Select an asset…</option>}
             {assets.map((a) => (
-              <option key={a} value={a}>{fmt.asset(a)}</option>
+              <option key={a.id} value={a.id}>
+                {fmt.asset(a.id)} {a.payout ? `(${a.payout}%)` : ''}
+              </option>
             ))}
+            {selectedAsset && !assets.find(a => a.id === selectedAsset) && (
+              <option key={selectedAsset} value={selectedAsset}>
+                {fmt.asset(selectedAsset)}
+              </option>
+            )}
           </select>
         </div>
 
@@ -453,7 +623,12 @@ const LiveTradingPanel = () => {
               max={lt.maxAmount ?? 1000}
               step={1}
               onChange={(e) => {
-                const v = parseFloat(e.target.value);
+                const val = e.target.value;
+                if (val === '') {
+                  setTradeAmount(0);
+                  return;
+                }
+                const v = parseFloat(val);
                 if (!isNaN(v)) setTradeAmount(Math.max(lt.minAmount ?? 1, Math.min(lt.maxAmount ?? 1000, v)));
               }}
               className="flex-1 bg-card-bg border border-border-primary rounded px-2 py-1.5 text-[10px] text-text-primary text-center focus:outline-none focus:ring-1 focus:ring-accent-green min-w-0"
@@ -538,10 +713,12 @@ const LiveTradingPanel = () => {
                 {t.status === 'pending' ? (
                   <TradeCountdown expiresAt={t.expiresAt} />
                 ) : (
-                  t.profit !== null && (
+                  t.profit !== null ? (
                     <span className={`text-[9px] font-mono ${t.profit >= 0 ? 'text-[#00c97a]' : 'text-[#ff4757]'}`}>
                       {t.profit >= 0 ? '+' : ''}{fmt.bal(t.profit)}
                     </span>
+                  ) : (
+                    <span className="text-[9px] font-mono text-text-secondary">—</span>
                   )
                 )}
                 <ResultBadge status={t.status} />
@@ -585,4 +762,10 @@ const LiveTradingPanel = () => {
   );
 };
 
-export default LiveTradingPanel;
+export default function LiveTradingPanelWrapper(props) {
+  return (
+    <LiveTradingErrorBoundary>
+      <LiveTradingPanel {...props} />
+    </LiveTradingErrorBoundary>
+  );
+}

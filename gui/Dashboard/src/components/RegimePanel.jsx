@@ -1,4 +1,3 @@
-import React from 'react';
 import useMarketStore from '../store/marketStore';
 import { TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
 

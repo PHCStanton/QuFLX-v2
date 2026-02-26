@@ -96,8 +96,9 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
             stdout, stderr = await process.communicate()
             return_code = process.returncode
         except NotImplementedError:
-            # Fallback for Windows if ProactorEventLoop is not available
-            logger.info("asyncio.create_subprocess_exec not implemented, falling back to subprocess.run in thread")
+            # Fallback: ProactorEventLoop not active (e.g. gateway started externally without policy).
+            # Logged at DEBUG to avoid log spam — root cause should be fixed in main.py (loop="none").
+            logger.debug("asyncio.create_subprocess_exec not implemented, falling back to subprocess.run in thread")
             import subprocess
             def run_sync():
                 p = subprocess.run(

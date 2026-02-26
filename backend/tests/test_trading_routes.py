@@ -11,7 +11,7 @@ Run with:
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
@@ -47,9 +47,20 @@ MOCK_ASSETS = [
 
 
 def _reset_service():
-    """Reset singleton between tests."""
+    """Reset singleton between tests.
+
+    Clears the singleton instance AND redirects _CONFIG_PATH to a non-existent
+    location so that _load_config() always falls back to _DEFAULT_CONFIG.
+    This prevents live test runs (which write demo:false to disk) from leaking
+    into unit tests that expect the default demo:True state.
+    """
+    from backend.services.gateway import trading_service
     from backend.services.gateway.trading_service import TradingService
     TradingService._instance = None
+    # Point config path somewhere that doesn't exist → _load_config uses defaults
+    trading_service._CONFIG_PATH = trading_service.Path(
+        "/nonexistent_test_isolation/trading_config.json"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -79,12 +90,15 @@ class TestAssets:
         _reset_service()
 
     def test_assets_returns_list_without_connection(self):
-        """Assets endpoint reads from OTCExecutor.OTC_ASSETS (no connection needed)."""
-        mock_executor = MagicMock()
-        mock_executor.OTC_ASSETS = MOCK_ASSETS
+        """Assets endpoint reads from OTCExecutor.OTC_ASSETS (no connection needed).
 
-        with patch("backend.services.gateway.trading_service._ensure_imports", return_value=True), \
-             patch("backend.services.gateway.trading_service._OTCExecutor", mock_executor):
+        Patch OTCExecutor directly — the rewrite no longer uses _ensure_imports
+        or _OTCExecutor module-level aliases (those were old internal symbols).
+        """
+        mock_executor_cls = MagicMock()
+        mock_executor_cls.OTC_ASSETS = MOCK_ASSETS
+
+        with patch("backend.services.gateway.trading_service.OTCExecutor", mock_executor_cls):
             resp = client.get("/api/v1/trading/assets")
 
         assert resp.status_code == 200
@@ -92,6 +106,9 @@ class TestAssets:
         assert data["success"] is True
         assert isinstance(data["assets"], list)
         assert data["count"] == len(data["assets"])
+        # BUG #3 regression guard: each asset must have 'id', not 'symbol'
+        for asset in data["assets"]:
+            assert "id" in asset, f"Asset missing 'id' key: {asset}"
 
 
 # ---------------------------------------------------------------------------
@@ -163,17 +180,20 @@ class TestExecute:
         assert resp.status_code == 422  # Pydantic validator
 
     def test_execute_when_connected_calls_service(self):
-        """With a mocked connected service, execute_trade is called."""
+        """With a mocked connected service, execute_trade is called.
+
+        BUG FIX: get_status and execute_trade must be AsyncMock because the
+        route awaits them.  Using plain MagicMock return_value causes:
+          TypeError: object dict can't be used in 'await' expression
+        """
         svc_mock = MagicMock()
-        svc_mock.get_status.return_value = {"connected": True, "demo": True, "balance": 5000.0, "last_updated": "x"}
-        svc_mock.execute_trade = MagicMock(
+        # AsyncMock is required — route does `await svc.get_status()`
+        svc_mock.get_status = AsyncMock(
+            return_value={"connected": True, "demo": True, "balance": 5000.0}
+        )
+        svc_mock.execute_trade = AsyncMock(
             return_value={"success": True, "order_id": "test-123", "asset": "EURUSD_otc"}
         )
-
-        import asyncio
-        async def fake_execute(*a, **kw):
-            return {"success": True, "order_id": "test-123", "asset": "EURUSD_otc"}
-        svc_mock.execute_trade = fake_execute
 
         with patch("backend.services.gateway.routes.trading.get_trading_service", return_value=svc_mock):
             resp = client.post(
@@ -195,14 +215,26 @@ class TestConfig:
         _reset_service()
 
     def test_get_config_masks_ssid(self):
+        """Config must mask SSID values and expose safe runtime settings.
+
+        BUG FIX: old test asserted 'ssid_saved' which is not a key in the
+        config schema. The correct check is that the 'ssid' key exists but
+        is either empty or redacted — never the raw SSID string.
+        """
         resp = client.get("/api/v1/trading/config")
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
         cfg = data["config"]
-        # SSID must never be in plaintext
+        # SSID values must never appear in plaintext
         assert cfg.get("ssid") != VALID_SSID
-        assert "ssid_saved" in cfg
+        # The raw SSID string must not appear anywhere in the response
+        assert VALID_SSID not in str(cfg)
+        # Runtime trading settings must be present
+        assert "default_amount" in cfg
+        assert "min_amount" in cfg
+        assert "max_amount" in cfg
+        assert "trade_cooldown_seconds" in cfg
 
     def test_update_config_valid_fields(self):
         resp = client.put(

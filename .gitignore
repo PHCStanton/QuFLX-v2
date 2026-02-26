@@ -11,6 +11,7 @@ Redis_Streaming_Integration_Package/
 # ssid
 ssid/
 ssid_integration_package/
+ssid_integration/
 
 # gui/Alert-Dispatch
 gui/Alert-Dispatch/

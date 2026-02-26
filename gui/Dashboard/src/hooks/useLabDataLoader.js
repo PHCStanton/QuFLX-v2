@@ -3,7 +3,7 @@
  * Loads candle data from uploaded CSV for Strategy Lab chart
  * Replaces the effectiveHistoryCandles pattern from ChartWorkspace
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { getApiBaseUrl } from '../api/apiBase';
 
 /**
@@ -24,10 +24,9 @@ const normalizeEpochSeconds = (ts) => {
  * @param {Object} params
  * @param {string|null} params.fileId - The uploaded file ID
  * @param {Object} params.strategyLabData - Store's cached lab data
- * @param {Function} params.setSelectedStrategyFileId - Store action to fetch data
  * @returns {Object} { chartData, loadStatus, error }
  */
-const useLabDataLoader = ({ fileId, strategyLabData, setSelectedStrategyFileId }) => {
+const useLabDataLoader = ({ fileId, strategyLabData }) => {
   const [chartData, setChartData] = useState([]);
   const [loadStatus, setLoadStatus] = useState('idle'); // 'idle' | 'loading' | 'loaded' | 'error'
   const [error, setError] = useState(null);

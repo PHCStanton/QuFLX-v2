@@ -91,12 +91,17 @@ async def connect_trading(req: ConnectRequest) -> Dict[str, Any]:
     Initiate a Pocket Option WebSocket connection using the provided SSID.
     Defaults to demo mode for safety.
     """
+    logger.info("POST /connect: Starting connection request (demo=%s)", req.demo)
     svc = get_trading_service()
     result = await svc.connect(req.ssid, req.demo)
+    logger.info("POST /connect: Connection completed with result: %s", {k: v if k != "balance" else f"${v}" if v else "None" for k, v in result.items()})
     if not result.get("success"):
+        logger.warning("POST /connect: Connection failed - %s", result.get("error"))
         raise _fail(result.get("error", "Connection failed"))
-    logger.info("Trading connected | demo=%s", req.demo)
-    return _ok({"balance": result.get("balance"), "demo": result.get("demo"), "message": result.get("message")})
+    logger.info("Trading connected | demo=%s balance=%s", req.demo, result.get("balance"))
+    response = _ok({"balance": result.get("balance"), "demo": result.get("demo"), "message": result.get("message")})
+    logger.info("POST /connect: Sending response to client")
+    return response
 
 
 @router.post("/disconnect")
@@ -112,7 +117,8 @@ async def disconnect_trading() -> Dict[str, Any]:
 async def get_trading_status() -> Dict[str, Any]:
     """Return current connection status, mode, and balance."""
     svc = get_trading_service()
-    return _ok(svc.get_status())
+    status_data = await svc.get_status()
+    return _ok(status_data)
 
 
 @router.post("/execute")
@@ -126,7 +132,7 @@ async def execute_trade(req: ExecuteTradeRequest) -> Dict[str, Any]:
     svc = get_trading_service()
 
     # Guard: must be connected
-    status_data = svc.get_status()
+    status_data = await svc.get_status()
     if not status_data.get("connected"):
         raise _fail("Not connected — connect first", status.HTTP_409_CONFLICT)
 
@@ -150,7 +156,7 @@ async def execute_trade(req: ExecuteTradeRequest) -> Dict[str, Any]:
 async def get_trade_result(order_id: str) -> Dict[str, Any]:
     """Check the WIN/LOSS result of a completed trade by order ID."""
     svc = get_trading_service()
-    result = await svc.check_result(order_id)
+    result = await svc.check_trade_result(order_id)
     if not result.get("success"):
         raise _fail(result.get("error", "Result check failed"))
     return _ok(result)
@@ -158,9 +164,9 @@ async def get_trade_result(order_id: str) -> Dict[str, Any]:
 
 @router.get("/assets")
 async def list_trading_assets() -> Dict[str, Any]:
-    """Return the list of verified OTC assets available for trading."""
+    """Return the list of verified OTC assets enriched with live payout data."""
     svc = get_trading_service()
-    assets = svc.get_assets()
+    assets = await svc.get_assets()
     return _ok({"assets": assets, "count": len(assets)})
 
 

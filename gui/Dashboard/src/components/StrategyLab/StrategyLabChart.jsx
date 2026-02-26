@@ -17,16 +17,6 @@ import useLabIndicators from '../../hooks/useLabIndicators';
 import useMarketStore from '../../store/marketStore';
 
 /**
- * Normalizes timestamp to epoch seconds
- */
-const normalizeEpochSeconds = (ts) => {
-  if (ts === null || ts === undefined) return null;
-  const numeric = typeof ts === 'number' ? ts : Number(ts);
-  if (!Number.isFinite(numeric)) return null;
-  return numeric > 32503680000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
-};
-
-/**
  * StrategyLabChart - Orchestrates lab data visualization
  * 
  * @param {Object} props
@@ -58,9 +48,12 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
 
   // Lab uses its own indicator series key: `lab|{fileId}`
   const labSeriesKey = fileId ? `lab|${fileId}` : null;
-  const indicatorSeries = labSeriesKey
-    ? { [labSeriesKey]: allIndicatorSeries[labSeriesKey] || {} }
-    : allIndicatorSeries;
+  const indicatorSeries = useMemo(
+    () => labSeriesKey
+      ? { [labSeriesKey]: allIndicatorSeries[labSeriesKey] || {} }
+      : allIndicatorSeries,
+    [labSeriesKey, allIndicatorSeries]
+  );
 
   // Load chart data using dedicated hook
   const { chartData, loadStatus, error: loadError } = useLabDataLoader({
@@ -97,8 +90,8 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
       });
 
       setVolumeSeries(volSeries);
-    } catch (err) {
-      console.error('StrategyLabChart: Failed to create volume series', err);
+    } catch (volErr) {
+      console.error('StrategyLabChart: Failed to create volume series', volErr);
     }
   }, []);
 
@@ -176,7 +169,7 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
         if (mainChart.timeScale && typeof mainChart.timeScale === 'function') {
           mainChart.timeScale().fitContent();
         }
-      } catch (err) {
+      } catch {
         // Ignore fit errors during unmount
       }
     }
@@ -309,7 +302,7 @@ const StrategyLabChart = ({ fileId, entries = [], regime, onError }) => {
 
     mainChart.subscribeCrosshairMove(handleCrosshairMove);
     return () => mainChart.unsubscribeCrosshairMove(handleCrosshairMove);
-  }, [mainChart, candleSeries, activeIndicators, indicatorSeries, selectedAsset, selectedTimeframe]);
+  }, [mainChart, candleSeries, activeIndicators, indicatorSeries, selectedAsset, selectedTimeframe, labSeriesKey]);
 
   // Loading state
   if (loadStatus === 'loading') {

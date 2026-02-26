@@ -4,6 +4,8 @@ import TickerTape from './TickerTape';
 import NeomorphicSwitch from './NeomorphicSwitch';
 import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap } from 'lucide-react';
 
+import { normalizeSpecificAsset } from '../utils/assetUtils';
+
 const AssetListView = ({
   isCollapsed,
   onToggleCollapsed,
@@ -37,7 +39,7 @@ const AssetListView = ({
       if (typeof asset !== 'string') {
         return false;
       }
-      return asset.toLowerCase().includes(q);
+      return asset.toLowerCase().includes(q) || normalizeSpecificAsset(asset).toLowerCase().includes(q);
     });
   }, [payoutAssets, assetSearchQuery]);
 
@@ -147,7 +149,7 @@ const AssetListView = ({
                         >
                           <X size={10} />
                         </button>
-                        <span className="font-medium text-sm">{asset}</span>
+                        <span className="font-medium text-sm">{normalizeSpecificAsset(asset)}</span>
                         {onUseForTrade && (
                           <button
                             type="button"

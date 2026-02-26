@@ -36,7 +36,7 @@ const useLabMarkers = ({ candleSeries, entries, chartData }) => {
       // Clear markers if no data
       try {
         candleSeries.setMarkers([]);
-      } catch (e) {
+      } catch {
         // Series may be disposed, ignore
       }
       return;
@@ -46,7 +46,7 @@ const useLabMarkers = ({ candleSeries, entries, chartData }) => {
     if (!Array.isArray(entries) || entries.length === 0) {
       try {
         candleSeries.setMarkers([]);
-      } catch (e) {
+      } catch {
         // Series may be disposed, ignore
       }
       return;
@@ -93,7 +93,7 @@ const useLabMarkers = ({ candleSeries, entries, chartData }) => {
       if (candleSeries) {
         try {
           candleSeries.setMarkers([]);
-        } catch (e) {
+        } catch {
           // Series may be disposed, ignore
         }
       }
