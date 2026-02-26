@@ -7,11 +7,15 @@ const TopBar = () => {
   const { 
     wsStatus, 
     chromeStatus,
+    ssidStatus,
     opsChromeBusy,
     opsStreamBusy,
+    opsSsidBusy,
     startChrome,
     startStream,
-    pauseStream
+    pauseStream,
+    startSsidService,
+    stopSsidService
   } = useMarketStore();
 
   const health = useStreamHealth();
@@ -34,6 +38,13 @@ const TopBar = () => {
           onClick={health === 'streaming' ? pauseStream : startStream}
           disabled={opsStreamBusy}
           busyLabel={health === 'streaming' ? 'Pausing...' : 'Starting...'}
+        />
+        <StatusBadge
+          label="SSID"
+          status={ssidStatus}
+          onClick={ssidStatus === 'connected' ? stopSsidService : startSsidService}
+          disabled={opsSsidBusy}
+          busyLabel={ssidStatus === 'connected' ? 'Stopping...' : 'Starting...'}
         />
       </div>
       

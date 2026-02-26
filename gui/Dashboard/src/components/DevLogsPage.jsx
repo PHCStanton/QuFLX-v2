@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
+import { getApiBaseUrl } from '../api/apiBase';
 import {
   fetchDevLogsIndex,
   fetchDevLogsState,
@@ -190,7 +191,7 @@ const DevLogsPage = ({
 
   useEffect(() => {
     if (!showHeartbeatPanel) return;
-    const socket = io('http://localhost:8000', {
+    const socket = io(getApiBaseUrl(), {
       transports: ['websocket', 'polling'],
       autoConnect: true
     });

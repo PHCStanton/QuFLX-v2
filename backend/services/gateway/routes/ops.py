@@ -35,6 +35,14 @@ _registry: Dict[str, Dict[str, Any]] = {
         "log_path": None,
         "log_file": None,
     },
+    "ssid_service": {
+        "proc": None,
+        "pid": None,
+        "started_at": None,
+        "last_error": None,
+        "log_path": None,
+        "log_file": None,
+    },
 }
 
 
@@ -210,6 +218,34 @@ def _spawn_collector(*, log_path: Path) -> subprocess.Popen:
     return proc
 
 
+def _spawn_ssid_service(*, log_path: Path) -> subprocess.Popen:
+    ssid_service_path = project_root / "backend" / "services" / "ssid_service" / "main.py"
+    if not ssid_service_path.exists():
+        raise FileNotFoundError(str(ssid_service_path))
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(log_path, "w", encoding="utf-8")
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONPATH"] = str(project_root)
+
+    # Use the port from .env or default to 8001
+    port = os.getenv("QFLX_SSID_SERVICE_PORT", "8001")
+
+    # Start FastAPI with uvicorn directly via module path
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "backend.services.ssid_service.main:app", "--host", "127.0.0.1", "--port", str(port)],
+        cwd=str(project_root),
+        stdout=log_f,
+        stderr=subprocess.STDOUT,
+        env=env,
+    )
+
+    _registry["ssid_service"]["log_file"] = log_f
+    return proc
+
+
 def _stop_process(proc: subprocess.Popen) -> None:
     try:
         proc.terminate()
@@ -366,6 +402,121 @@ async def stream_status(request: Request, x_qflx_ops_token: Optional[str] = Head
 
     async with _ops_lock:
         entry = _registry["collector"]
+        _cleanup_if_exited(entry)
+        proc = entry.get("proc")
+        running = proc is not None
+        return {
+            "ok": True,
+            "running": running,
+            "pid": entry.get("pid"),
+            "log_path": entry.get("log_path"),
+            "last_error": entry.get("last_error"),
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+
+@router.post("/ssid/start")
+async def start_ssid_service(request: Request, x_qflx_ops_token: Optional[str] = Header(default=None)):
+    gate_err = _check_dev_gate(request, x_qflx_ops_token)
+    if gate_err is not None:
+        return gate_err
+
+    try:
+        port = int(os.getenv("QFLX_SSID_SERVICE_PORT", "8001"))
+        if _is_port_open("127.0.0.1", port):
+            return {"ok": True, "status": "already_running", "port": port}
+
+        async with _ops_lock:
+            entry = _registry["ssid_service"]
+            _cleanup_if_exited(entry)
+            proc = entry.get("proc")
+            if proc is not None:
+                return {
+                    "ok": True,
+                    "status": "already_running",
+                    "pid": entry.get("pid"),
+                    "log_path": entry.get("log_path"),
+                }
+
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            log_path = project_root / "data" / "data_output" / "logs" / f"ssid_service_{ts}.log"
+            proc = _spawn_ssid_service(log_path=log_path)
+            entry["proc"] = proc
+            entry["pid"] = proc.pid
+            entry["started_at"] = datetime.now(timezone.utc).isoformat()
+            entry["last_error"] = None
+            entry["log_path"] = str(log_path)
+
+        return {"ok": True, "status": "started", "pid": proc.pid, "log_path": str(log_path)}
+    except FileNotFoundError as exc:
+        return _json_error(
+            status_code=424,
+            error_code="ssid_service_entrypoint_missing",
+            error_message=str(exc),
+            user_message="SSID Service entrypoint not found.",
+        )
+    except Exception as exc:
+        logger.error("SSID Service start failed: %s", exc, exc_info=True)
+        async with _ops_lock:
+            _registry["ssid_service"]["last_error"] = str(exc)
+        return _json_error(
+            status_code=500,
+            error_code="ssid_service_start_failed",
+            error_message=str(exc),
+            user_message="Failed to start SSID Service.",
+        )
+
+
+@router.post("/ssid/stop")
+async def stop_ssid_service(request: Request, x_qflx_ops_token: Optional[str] = Header(default=None)):
+    gate_err = _check_dev_gate(request, x_qflx_ops_token)
+    if gate_err is not None:
+        return gate_err
+
+    try:
+        async with _ops_lock:
+            entry = _registry["ssid_service"]
+            _cleanup_if_exited(entry)
+            proc = entry.get("proc")
+            if proc is None:
+                return {"ok": True, "status": "already_stopped"}
+
+        await asyncio.to_thread(_stop_process, proc)
+
+        async with _ops_lock:
+            entry = _registry["ssid_service"]
+            log_f = entry.get("log_file")
+            if log_f is not None:
+                try:
+                    log_f.close()
+                except Exception:
+                    pass
+            entry["proc"] = None
+            entry["pid"] = None
+            entry["log_file"] = None
+            entry["started_at"] = None
+
+        return {"ok": True, "status": "stopped"}
+    except Exception as exc:
+        logger.error("SSID Service stop failed: %s", exc, exc_info=True)
+        async with _ops_lock:
+            _registry["ssid_service"]["last_error"] = str(exc)
+        return _json_error(
+            status_code=500,
+            error_code="ssid_service_stop_failed",
+            error_message=str(exc),
+            user_message="Failed to stop SSID Service.",
+        )
+
+
+@router.get("/ssid/status")
+async def ssid_service_status(request: Request, x_qflx_ops_token: Optional[str] = Header(default=None)):
+    gate_err = _check_dev_gate(request, x_qflx_ops_token)
+    if gate_err is not None:
+        return gate_err
+
+    async with _ops_lock:
+        entry = _registry["ssid_service"]
         _cleanup_if_exited(entry)
         proc = entry.get("proc")
         running = proc is not None

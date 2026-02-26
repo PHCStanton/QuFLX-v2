@@ -33,7 +33,7 @@ if project_root_str not in sys.path:
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
 from backend.services.ai.service import AIService
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, ai, ai_voice, asset_control, ops, dev_logs
+from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, profiles, ai, ai_voice, asset_control, ops, dev_logs, alerts, strategy, trading
 from backend.services.gateway.socket_events import register_socket_events
 
 from backend.services.gateway.request_context import ContextFilter, request_id_var
@@ -243,8 +243,6 @@ app.add_middleware(
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 socket_app = socketio.ASGIApp(sio, app)
 
-from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, profiles, ai, ai_voice, asset_control, ops, dev_logs, alerts, strategy, trading
-
 # API Routers
 logger.debug(f"Registering assets router: {assets.router}")
 app.include_router(assets.router, prefix="/api/v1/assets", tags=["Assets"])
@@ -263,61 +261,87 @@ app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
 app.include_router(strategy.router, prefix="/api/v1/strategy", tags=["Strategy Lab"])
 app.include_router(trading.router, prefix="/api/v1/trading", tags=["Live Trading"])
 
-async def redis_listener():
-    """Listen to Redis channels and broadcast to Socket.IO"""
-    pubsub = redis_client.pubsub()
-    await pubsub.subscribe("market_data", "trading:signals", "system_status", "alerts:dispatched", "scan:heartbeat", "strategy:regime")
-    
-    logger.info("Subscribed to Redis channels: market_data, trading:signals, system_status, alerts:dispatched, scan:heartbeat, strategy:regime")
-    
-    async for message in pubsub.listen():
-        if message['type'] == 'message':
-            channel = message['channel']
-            data = message['data']
-            
+_REDIS_CHANNELS = (
+    "market_data", "trading:signals", "system_status",
+    "alerts:dispatched", "scan:heartbeat", "strategy:regime",
+)
+
+async def _process_redis_message(channel: str, data: str) -> None:
+    """Process a single Redis pub/sub message and emit to Socket.IO."""
+    try:
+        parsed_data = json.loads(data)
+    except json.JSONDecodeError:
+        logger.warning("Received non-JSON message on %s: %s", channel, data)
+        return
+
+    try:
+        if channel == "market_data":
+            if not validate_market_data(parsed_data):
+                logger.warning("Invalid market_data contract: %s", parsed_data)
+            if 'asset' in parsed_data:
+                asset = parsed_data['asset']
+                system_state["last_tick_ts"] = parsed_data.get('timestamp', 0)
+                system_state["last_tick_asset"] = asset
+                await sio.emit('market_data', parsed_data, room=f'market_data:{asset}')
+                await sio.emit('market_data', parsed_data, room='monitor')
+
+        elif channel == "trading:signals":
+            await sio.emit('trading_signal', parsed_data)
+
+        elif channel == "strategy:regime":
+            await sio.emit('regime_update', parsed_data)
+
+        elif channel == "alerts:dispatched":
+            await sio.emit('new_alert', parsed_data)
+
+        elif channel == "scan:heartbeat":
+            await sio.emit('scan_heartbeat', parsed_data)
+
+        elif channel == "system_status":
             try:
-                parsed_data = json.loads(data)
-                
-                if channel == "market_data":
-                    if not validate_market_data(parsed_data):
-                        logger.warning(f"Invalid market_data contract: {parsed_data}")
-                    
-                    if 'asset' in parsed_data:
-                        asset = parsed_data['asset']
-                        system_state["last_tick_ts"] = parsed_data.get('timestamp', 0)
-                        system_state["last_tick_asset"] = asset
-                        await sio.emit('market_data', parsed_data, room=f'market_data:{asset}')
-                        # Also broadcast to monitor room for the Collector page
-                        await sio.emit('market_data', parsed_data, room='monitor')
-                        
-                elif channel == "trading:signals":
-                    await sio.emit('trading_signal', parsed_data)
-
-                elif channel == "strategy:regime":
-                    # Broadcast regime updates to all clients
-                    await sio.emit('regime_update', parsed_data)
-
-                elif channel == "alerts:dispatched":
-                    await sio.emit('new_alert', parsed_data)
-
-                elif channel == "scan:heartbeat":
-                    await sio.emit('scan_heartbeat', parsed_data)
-
-                elif channel == "system_status":
-                    try:
-                        status_event = SystemStatus(**parsed_data)
-                        if status_event.service == "collector":
-                            system_state["collector"] = status_event.status
-                            system_state["stream"] = "streaming" if status_event.status == "connected" else "idle"
-                        await sio.emit('system_status', status_event.dict())
-                    except Exception as e:
-                        logger.error(f"Invalid system status message: {e}")
-                        continue
-                    
-            except json.JSONDecodeError:
-                logger.warning(f"Received non-JSON message on {channel}: {data}")
+                status_event = SystemStatus(**parsed_data)
+                if status_event.service == "collector":
+                    system_state["collector"] = status_event.status
+                    system_state["stream"] = "streaming" if status_event.status == "connected" else "idle"
+                await sio.emit('system_status', status_event.dict())
             except Exception as e:
-                logger.error(f"Error processing message: {e}")
+                logger.error("Invalid system status message: %s", e)
+
+    except Exception as e:
+        logger.error("Error emitting Socket.IO event for channel=%s: %s", channel, e)
+
+
+async def redis_listener():
+    """
+    Listen to Redis pub/sub channels and broadcast to Socket.IO.
+    Auto-reconnects with exponential backoff on connection failure.
+    Principle 8: Zero Silent Failures — errors are logged and recovered, never swallowed.
+    """
+    _RETRY_DELAYS = (1, 2, 5, 10, 30)  # seconds between reconnect attempts
+    attempt = 0
+
+    while True:
+        try:
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe(*_REDIS_CHANNELS)
+            logger.info("Redis listener subscribed to channels: %s", ", ".join(_REDIS_CHANNELS))
+            attempt = 0  # Reset backoff on successful connection
+
+            async for message in pubsub.listen():
+                if message['type'] == 'message':
+                    await _process_redis_message(message['channel'], message['data'])
+
+        except asyncio.CancelledError:
+            logger.info("Redis listener cancelled — shutting down.")
+            return
+        except Exception as e:
+            delay = _RETRY_DELAYS[min(attempt, len(_RETRY_DELAYS) - 1)]
+            logger.error(
+                "Redis listener crashed (attempt %d): %s — retrying in %ds",
+                attempt + 1, e, delay
+            )
+            attempt += 1
+            await asyncio.sleep(delay)
 
 # Core Endpoints
 @app.get("/health")

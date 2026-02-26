@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getApiBaseUrl } from '../api/apiBase';
 
 /**
  * Hook to manage Alert Dispatcher status and controls.
@@ -16,7 +17,7 @@ const useAlerts = () => {
 
     const fetchStatus = useCallback(async () => {
         try {
-            const res = await fetch('http://localhost:8000/api/v1/alerts/status');
+            const res = await fetch(`${getApiBaseUrl()}/api/v1/alerts/status`);
             const data = await res.json();
             if (data.ok) {
                 setStatus({
@@ -45,7 +46,7 @@ const useAlerts = () => {
     const startAlerts = async (assets = [], useRedis = true) => {
         setStatus(prev => ({ ...prev, loading: true }));
         try {
-            const res = await fetch('http://localhost:8000/api/v1/alerts/start', {
+            const res = await fetch(`${getApiBaseUrl()}/api/v1/alerts/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ assets, use_redis: useRedis })
@@ -62,7 +63,7 @@ const useAlerts = () => {
     const stopAlerts = async () => {
         setStatus(prev => ({ ...prev, loading: true }));
         try {
-            const res = await fetch('http://localhost:8000/api/v1/alerts/stop', {
+            const res = await fetch(`${getApiBaseUrl()}/api/v1/alerts/stop`, {
                 method: 'POST'
             });
             const data = await res.json();

@@ -266,14 +266,54 @@ def calculate_weighted_score(signals: Dict[str, bool], weights: Dict[str, float]
     return round(total_score, 1)
 
 
+def _ensure_regime_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure regime-specific derived columns exist (column mapping + body analysis).
+    Lightweight — skips the full indicator pipeline if core indicators already present.
+    """
+    result_df = df
+
+    # Map Pipeline B column names to regime detector's expected names (if not already mapped)
+    COLUMN_MAP = {
+        'ema_16': 'ema16', 'ema_89': 'ema89', 'macd_histogram': 'macd_hist',
+        'bb_upper': 'bb_high', 'bb_lower': 'bb_low', 'bb_width': 'bb_wband',
+        'atr_14': 'atr', 'rsi_14': 'rsi',
+        'resistance_level': 'pivot_h', 'support_level': 'pivot_l',
+    }
+    for src, dst in COLUMN_MAP.items():
+        if src in result_df.columns and dst not in result_df.columns:
+            result_df[dst] = result_df[src]
+
+    # Candle Body Analysis (only if not already computed)
+    if 'body_ratio' not in result_df.columns:
+        result_df['body_size'] = (result_df['close'] - result_df['open']).abs()
+        result_df['total_range'] = (result_df['high'] - result_df['low']).abs()
+        result_df['body_ratio'] = result_df['body_size'] / result_df['total_range'].replace(0, 0.0001)
+
+    if 'large_body' not in result_df.columns:
+        if 'atr' in result_df.columns:
+            atr_median = result_df['atr'].rolling(window=14).median()
+            result_df['large_body'] = (result_df['body_ratio'] > 0.7) & (result_df['atr'] > atr_median * 1.1)
+        else:
+            result_df['large_body'] = result_df['body_ratio'] > 0.7
+
+    if 'atr_baseline' not in result_df.columns and 'atr' in result_df.columns:
+        result_df['atr_baseline'] = result_df['atr'].rolling(window=20).median()
+    if 'bb_width_baseline' not in result_df.columns and 'bb_wband' in result_df.columns:
+        result_df['bb_width_baseline'] = result_df['bb_wband'].rolling(window=20).median()
+
+    return result_df
+
+
 def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeResult]:
     """
     Detect the current market regime based on technical indicators.
     
     Args:
         df: DataFrame with OHLC data and calculated indicators
-        lab_mode: When True, skips the volatility guard (used by detect_regime_series
-                  which has enough dataset context to make that judgment itself).
+        lab_mode: When True, skips the volatility guard AND the full indicator
+                  recalculation (used by detect_regime_series which pre-calculates
+                  indicators once for the entire dataset).
         
     Returns:
         RegimeResult if a tradeable regime is detected, None otherwise
@@ -282,17 +322,28 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
         logger.debug(f"Not enough candles for regime detection ({len(df)})")
         return None
     
-    # Calculate indicators / map columns / add body analysis
-    # ALWAYS call this to ensure mapping and body analysis happens, 
-    # even if pipeline ran externally.
-    df = calculate_indicators(df)
+    # In lab_mode, indicators are already calculated by detect_regime_series().
+    # Only ensure derived columns (mapping + body analysis) exist — O(1) per window.
+    if lab_mode:
+        df = _ensure_regime_columns(df)
+    else:
+        # Full calculation for live/standalone usage
+        df = calculate_indicators(df)
     
     current = df.iloc[-1]
     prev = df.iloc[-2]
     
-    # Extract S/R levels
-    current_resistance = df[df['high'] == df['pivot_h']]['high'].iloc[-1] if not df[df['high'] == df['pivot_h']].empty else None
-    current_support = df[df['low'] == df['pivot_l']]['low'].iloc[-1] if not df[df['low'] == df['pivot_l']].empty else None
+    # Extract S/R levels — guard against missing pivot columns (Principle 4: Zero Assumptions)
+    current_resistance = None
+    current_support = None
+    if 'pivot_h' in df.columns:
+        pivot_h_matches = df[df['high'] == df['pivot_h']]
+        if not pivot_h_matches.empty:
+            current_resistance = pivot_h_matches['high'].iloc[-1]
+    if 'pivot_l' in df.columns:
+        pivot_l_matches = df[df['low'] == df['pivot_l']]
+        if not pivot_l_matches.empty:
+            current_support = pivot_l_matches['low'].iloc[-1]
     
     # Extract key values
     price = float(current['close'])
@@ -305,13 +356,14 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
     prev_atr = prev.get('atr', 0)
     is_atr_spike = atr_val > (prev_atr * 1.2)
     
-    ema16 = current['ema16']
-    ema89 = current['ema89']  # Fibonacci period, works with 100-candle payloads
-    st_val = current['supertrend']
-    stoch_k = current['stoch_k']
-    stoch_d = current['stoch_d']
-    macd_hist = current['macd_hist']
-    prev_macd_hist = prev['macd_hist']
+    # Safe column access — Principle 9: Fail Fast with meaningful defaults rather than KeyError crashes
+    ema16 = current.get('ema16', current.get('close', 0))
+    ema89 = current.get('ema89', current.get('close', 0))
+    st_val = current.get('supertrend', current.get('close', 0))
+    stoch_k = current.get('stoch_k', 50.0)
+    stoch_d = current.get('stoch_d', 50.0)
+    macd_hist = current.get('macd_hist', 0.0)
+    prev_macd_hist = prev.get('macd_hist', 0.0)
     
     # R4: Weighted Confluence Model
     # ADX 25%, MACD 20%, Body/Volume 20%, Supertrend 15%, Oscillator 10%, ATR 10%

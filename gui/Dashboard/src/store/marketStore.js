@@ -62,6 +62,8 @@ const getErrorMessage = (err) => {
   return String(err);
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const createUiSlice = (set) => ({
   isSidebarOpen: false,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
@@ -463,7 +465,7 @@ const createMarketSlice = (set, get) => ({
         payload.params = params;
       }
 
-      const res = await fetch('http://localhost:8000/api/v1/indicators', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/indicators`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -513,7 +515,7 @@ const createMarketSlice = (set, get) => ({
     if (!asset || !candle) return;
 
     try {
-      const res = await fetch('http://localhost:8000/api/v1/history/append-candle', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/history/append-candle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ asset, timeframe, candle })
@@ -580,7 +582,7 @@ const createMarketSlice = (set, get) => ({
       // Step 1: Quick check for existing CSV file
       console.log(`[LoadHistory] Checking for existing history: ${asset} @ ${timeframe}`);
       const checkRes = await fetch(
-        `http://localhost:8000/api/v1/history/${encodeURIComponent(asset)}?timeframe=${timeframeMin}&limit=${limit}`
+        `${getApiBaseUrl()}/api/v1/history/${encodeURIComponent(asset)}?timeframe=${timeframeMin}&limit=${limit}`
       );
 
       if (checkRes.ok) {
@@ -603,7 +605,7 @@ const createMarketSlice = (set, get) => ({
       console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
       console.log(`[LoadHistory] ⏳ Waiting for ${asset} data (Timeout: ${waitTime}s)`);
 
-      const bootstrapRes = await fetch('http://localhost:8000/api/v1/history/bootstrap-history', {
+      const bootstrapRes = await fetch(`${getApiBaseUrl()}/api/v1/history/bootstrap-history`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -752,7 +754,7 @@ const createMarketSlice = (set, get) => ({
         ...filterOptions
       };
 
-      const res = await fetch('http://localhost:8000/api/v1/assets/refresh-assets', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/assets/refresh-assets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -786,7 +788,7 @@ const createMarketSlice = (set, get) => ({
   },
   collectHistory: async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/history/collect-history', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/history/collect-history`, {
         method: 'POST'
       });
 
@@ -823,7 +825,7 @@ const createMarketSlice = (set, get) => ({
   startAlerts: async (assets = []) => {
     set((state) => ({ alertsStatus: { ...state.alertsStatus, loading: true } }));
     try {
-      const res = await fetch('http://localhost:8000/api/v1/alerts/start', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/alerts/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -844,7 +846,7 @@ const createMarketSlice = (set, get) => ({
   stopAlerts: async () => {
     set((state) => ({ alertsStatus: { ...state.alertsStatus, loading: true } }));
     try {
-      const res = await fetch('http://localhost:8000/api/v1/alerts/stop', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/alerts/stop`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -859,7 +861,7 @@ const createMarketSlice = (set, get) => ({
   },
   checkAlertsStatus: async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/alerts/status');
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/alerts/status`);
       const data = await res.json();
       if (res.ok) {
         set({
@@ -886,13 +888,16 @@ const createConnectionSlice = (set, get) => ({
   setChromeStatus: (status) => set({ chromeStatus: status }),
   streamStatus: 'idle',
   setStreamStatus: (status) => set({ streamStatus: status }),
+  ssidStatus: 'disconnected',
+  setSsidStatus: (status) => set({ ssidStatus: status }),
   opsChromeBusy: false,
   opsStreamBusy: false,
+  opsSsidBusy: false,
   startChrome: async () => {
     if (get().opsChromeBusy) return;
     set({ opsChromeBusy: true });
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ops/chrome/start', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/ops/chrome/start`, {
         method: 'POST'
       });
       const data = await res.json().catch(() => ({}));
@@ -914,7 +919,7 @@ const createConnectionSlice = (set, get) => ({
     if (get().opsStreamBusy) return;
     set({ opsStreamBusy: true });
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ops/stream/start', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/ops/stream/start`, {
         method: 'POST'
       });
       const data = await res.json().catch(() => ({}));
@@ -936,7 +941,7 @@ const createConnectionSlice = (set, get) => ({
     if (get().opsStreamBusy) return;
     set({ opsStreamBusy: true });
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ops/stream/pause', {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/ops/stream/pause`, {
         method: 'POST'
       });
       const data = await res.json().catch(() => ({}));
@@ -952,6 +957,81 @@ const createConnectionSlice = (set, get) => ({
       set({ lastError: `Network error pausing Stream: ${getErrorMessage(err)}` });
     } finally {
       set({ opsStreamBusy: false });
+    }
+  },
+  startSsidService: async () => {
+    if (get().opsSsidBusy) return;
+    set({ opsSsidBusy: true, ssidStatus: 'connecting' });
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/ops/ssid/start`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = data.user_message || data.detail || `Failed to start SSID service (HTTP ${res.status})`;
+        set({ lastError: msg, ssidStatus: 'error' });
+        return;
+      }
+
+      let running = false;
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        await sleep(500);
+        running = await get().checkSsidStatus();
+        if (running) break;
+      }
+
+      if (!running) {
+        set({
+          ssidStatus: 'error',
+          lastError: 'SSID service did not report running state after start. Check service logs and retry.'
+        });
+        return;
+      }
+
+      get().checkBackendStatus();
+    } catch (err) {
+      set({ lastError: `Network error starting SSID service: ${getErrorMessage(err)}`, ssidStatus: 'error' });
+    } finally {
+      set({ opsSsidBusy: false });
+    }
+  },
+  stopSsidService: async () => {
+    if (get().opsSsidBusy) return;
+    set({ opsSsidBusy: true });
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/ops/ssid/stop`, {
+        method: 'POST'
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = data.user_message || data.detail || `Failed to stop SSID service (HTTP ${res.status})`;
+        set({ lastError: msg });
+        return;
+      }
+
+      set({ ssidStatus: 'disconnected' });
+      get().checkBackendStatus();
+    } catch (err) {
+      set({ lastError: `Network error stopping SSID service: ${getErrorMessage(err)}` });
+    } finally {
+      set({ opsSsidBusy: false });
+    }
+  },
+  checkSsidStatus: async () => {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/ops/ssid/status`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return false;
+      }
+      const running = Boolean(data.running);
+      set({ ssidStatus: running ? 'connected' : 'disconnected' });
+      return running;
+    } catch (err) {
+      console.warn('SSID status check failed:', getErrorMessage(err));
+      return false;
     }
   },
   backendStatus: {
@@ -971,7 +1051,7 @@ const createConnectionSlice = (set, get) => ({
     }
   },
   connectSocket: () => {
-    const socket = io('http://localhost:8000', {
+    const socket = io(getApiBaseUrl(), {
       transports: ['websocket', 'polling'],
       autoConnect: true
     });
@@ -983,6 +1063,7 @@ const createConnectionSlice = (set, get) => ({
       const { selectedAsset } = get();
       get().syncSubscriptions();
       get().publishMonitoringAssets(); // Sync dispatcher whitelist on connect
+      get().checkBackendStatus();
       if (selectedAsset) socket.emit('select_asset', selectedAsset);
     });
 
@@ -1067,8 +1148,10 @@ const createConnectionSlice = (set, get) => ({
 
     socket.on('system_status', (data) => {
       if (data && data.service === 'collector') {
-        set({ chromeStatus: data.status });
         set({ streamStatus: data.status === 'connected' ? 'streaming' : 'idle' });
+      }
+      if (data && data.service === 'ssid_service') {
+        set({ ssidStatus: data.status === 'connected' ? 'connected' : 'disconnected' });
       }
     });
 
@@ -1094,7 +1177,8 @@ const createConnectionSlice = (set, get) => ({
         error: data.error || null
       });
       set({
-        chromeStatus: data.chrome_debugging_available ? 'connected' : 'disconnected'
+        chromeStatus: data.chrome_debugging_available ? 'connected' : 'disconnected',
+        ssidStatus: data.ssid_service_available ? 'connected' : 'disconnected'
       });
     });
   },

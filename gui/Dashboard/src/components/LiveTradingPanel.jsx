@@ -14,6 +14,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import useTradingStore from '../store/tradingStore';
+import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import { useShallow } from 'zustand/react/shallow';
 import AssetPayoutPanel from './AssetPayoutPanel';

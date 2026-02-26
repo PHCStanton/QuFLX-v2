@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
+import { getApiBaseUrl } from '../api/apiBase';
 
 const SETTINGS_VERSION = 5;
 
@@ -367,7 +368,7 @@ const useSettingsStore = create(
       fetchSettings: async () => {
         try {
           const current = get().settings;
-          const response = await fetch('http://localhost:8000/api/v1/settings');
+          const response = await fetch(`${getApiBaseUrl()}/api/v1/settings`);
           if (response.ok) {
             const backendSettings = await response.json();
             set({ settings: mergeSettings(current, backendSettings) });
@@ -381,7 +382,7 @@ const useSettingsStore = create(
         try {
           const current = get().settings;
           const payload = sanitizeSettingsForBackend(normalizeSettings(newSettings || current));
-          const response = await fetch('http://localhost:8000/api/v1/settings', {
+          const response = await fetch(`${getApiBaseUrl()}/api/v1/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),

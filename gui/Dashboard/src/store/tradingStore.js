@@ -12,8 +12,9 @@
  */
 
 import { create } from 'zustand';
+import { getApiBaseUrl } from '../api/apiBase';
 
-const API_BASE = 'http://localhost:8000/api/v1/trading';
+const API_BASE = `${getApiBaseUrl()}/api/v1/trading`;
 
 const DEFAULT_STATE = {
     // Connection

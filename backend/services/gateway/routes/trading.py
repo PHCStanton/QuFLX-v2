@@ -1,41 +1,56 @@
 """
-routes/trading.py — Live Trading REST Endpoints
+routes/trading.py — Thin Proxy to SSID Service
 
-Endpoints under /api/v1/trading:
-
-  POST   /connect         Connect with SSID + demo flag
-  POST   /disconnect      Disconnect session
-  GET    /status          Connection status + balance
-  POST   /execute         Execute a trade
-  GET    /result/{id}     Check trade WIN/LOSS result
-  GET    /assets          List verified OTC assets
-  POST   /switch-mode     Switch Demo <-> Real
-  GET    /config          Get trading config (SSID masked)
-  PUT    /config          Update trading settings
+This module forwards trading requests from the Gateway (Port 8000)
+to the standalone SSID Service (Port 8001).
 """
 
-from __future__ import annotations
-
+import os
 import logging
+import httpx
+import re
 from typing import Any, Dict, Optional
-
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, validator
 
-from backend.services.gateway.trading_service import get_trading_service
-
-logger = logging.getLogger("gateway.trading.routes")
+logger = logging.getLogger("gateway.trading.proxy")
 router = APIRouter()
 
+# SSID Service configuration
+SSID_SERVICE_PORT = os.getenv("QFLX_SSID_SERVICE_PORT", "8001")
+SSID_SERVICE_URL = f"http://127.0.0.1:{SSID_SERVICE_PORT}/api"
+PROXY_TIMEOUT_SECONDS = float(os.getenv("QFLX_SSID_PROXY_TIMEOUT_SECONDS", "35"))
+
+# Shared httpx client for connection pooling (created lazily, reused across requests)
+_shared_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient, creating it lazily on first use."""
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(timeout=httpx.Timeout(PROXY_TIMEOUT_SECONDS))
+    return _shared_client
 
 # ---------------------------------------------------------------------------
-# Request / Response models
+# Request Models (kept for validation at the gateway level)
 # ---------------------------------------------------------------------------
 
 class ConnectRequest(BaseModel):
     ssid: str = Field(..., min_length=50, description="Pocket Option SSID cookie value")
     demo: bool = Field(True, description="True = demo account (default), False = real")
 
+    @validator("ssid")
+    @classmethod
+    def validate_ssid(cls, v: str) -> str:
+        value = (v or "").strip()
+        if not value.startswith('42["auth"'):
+            raise ValueError('ssid must start with 42["auth"')
+        # Keep validation lightweight at gateway; deep validation happens in ssid_service.
+        pattern = re.compile(r'^42\["auth",\{.*"session".*"isDemo".*\}\]$')
+        if not pattern.match(value):
+            raise ValueError('ssid must be a full 42["auth",{...}] payload')
+        return value
 
 class ExecuteTradeRequest(BaseModel):
     asset: str = Field(..., description="OTC asset symbol e.g. EURUSD_otc")
@@ -59,149 +74,126 @@ class ExecuteTradeRequest(BaseModel):
             raise ValueError("asset cannot be empty")
         return v
 
-
 class SwitchModeRequest(BaseModel):
     demo: bool = Field(..., description="True = demo, False = real")
 
 
-class UpdateConfigRequest(BaseModel):
-    default_amount: Optional[float] = Field(None, gt=0)
-    default_expiration: Optional[int] = Field(None, gt=0)
-    min_amount: Optional[float] = Field(None, gt=0)
-    max_amount: Optional[float] = Field(None, gt=0)
-    confirm_real_trades: Optional[bool] = None
-    trade_cooldown_seconds: Optional[int] = Field(None, ge=1, le=60)
+def _extract_error_message(payload: Any, fallback: str) -> str:
+    if isinstance(payload, dict):
+        # Handle fastapi error envelope: {"detail": ...}
+        if "detail" in payload:
+            detail = payload.get("detail")
+            if isinstance(detail, dict):
+                for key in ("error", "message", "detail", "user_message"):
+                    value = detail.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+            elif isinstance(detail, str) and detail.strip():
+                return detail.strip()
 
+        for key in ("error", "message", "user_message"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
 
-def _ok(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {"success": True, **data}
+    if isinstance(payload, str) and payload.strip():
+        return payload.strip()
 
-
-def _fail(message: str, code: int = status.HTTP_400_BAD_REQUEST) -> HTTPException:
-    return HTTPException(status_code=code, detail={"success": False, "error": message})
-
+    return fallback
 
 # ---------------------------------------------------------------------------
-# Endpoints
+# Helper for Proxying
+# ---------------------------------------------------------------------------
+
+async def _proxy_request(method: str, path: str, json_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    url = f"{SSID_SERVICE_URL}{path}"
+    try:
+        client = _get_client()
+        if method.upper() == "GET":
+            resp = await client.get(url)
+        elif method.upper() == "POST":
+            resp = await client.post(url, json=json_data)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
+                detail={"success": False, "error": f"Unsupported proxy method: {method}"},
+            )
+
+        if resp.status_code != 200:
+            try:
+                upstream_payload = resp.json()
+            except ValueError:
+                upstream_payload = resp.text
+
+            error_message = _extract_error_message(
+                upstream_payload,
+                f"SSID service request failed with status {resp.status_code}",
+            )
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail={"success": False, "error": error_message},
+            )
+
+        return resp.json()
+    except HTTPException:
+        raise
+    except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+        logger.error("SSID Service unavailable for %s %s: %s", method, url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "success": False,
+                "error": "SSID service is unavailable or not responding. Start it from the TopBar SSID button.",
+            },
+        )
+    except httpx.RequestError as exc:
+        logger.error("SSID Service request failed for %s %s: %s", method, url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"success": False, "error": "SSID service unavailable"},
+        )
+    except Exception as exc:
+        logger.error("Unexpected trading proxy error for %s %s: %s", method, url, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"success": False, "error": "Trading proxy error"},
+        )
+
+# ---------------------------------------------------------------------------
+# Proxy Endpoints
 # ---------------------------------------------------------------------------
 
 @router.post("/connect")
 async def connect_trading(req: ConnectRequest) -> Dict[str, Any]:
-    """
-    Initiate a Pocket Option WebSocket connection using the provided SSID.
-    Defaults to demo mode for safety.
-    """
-    logger.info("POST /connect: Starting connection request (demo=%s)", req.demo)
-    svc = get_trading_service()
-    result = await svc.connect(req.ssid, req.demo)
-    logger.info("POST /connect: Connection completed with result: %s", {k: v if k != "balance" else f"${v}" if v else "None" for k, v in result.items()})
-    if not result.get("success"):
-        logger.warning("POST /connect: Connection failed - %s", result.get("error"))
-        raise _fail(result.get("error", "Connection failed"))
-    logger.info("Trading connected | demo=%s balance=%s", req.demo, result.get("balance"))
-    response = _ok({"balance": result.get("balance"), "demo": result.get("demo"), "message": result.get("message")})
-    logger.info("POST /connect: Sending response to client")
-    return response
-
+    """Proxy connect request to SSID Service."""
+    return await _proxy_request("POST", "/connect", req.model_dump())
 
 @router.post("/disconnect")
 async def disconnect_trading() -> Dict[str, Any]:
-    """Gracefully disconnect the current trading session."""
-    svc = get_trading_service()
-    result = await svc.disconnect()
-    logger.info("Trading disconnected")
-    return _ok({"message": result.get("message", "Disconnected")})
-
+    """Proxy disconnect request to SSID Service."""
+    return await _proxy_request("POST", "/disconnect")
 
 @router.get("/status")
 async def get_trading_status() -> Dict[str, Any]:
-    """Return current connection status, mode, and balance."""
-    svc = get_trading_service()
-    status_data = await svc.get_status()
-    return _ok(status_data)
-
+    """Proxy live trading status from SSID Service."""
+    return await _proxy_request("GET", "/status")
 
 @router.post("/execute")
 async def execute_trade(req: ExecuteTradeRequest) -> Dict[str, Any]:
-    """
-    Execute a binary options trade.
-
-    ⚠️ REAL MONEY WARNING: When demo=False this trades real USD.
-    The frontend must show a confirmation dialog before calling this endpoint.
-    """
-    svc = get_trading_service()
-
-    # Guard: must be connected
-    status_data = await svc.get_status()
-    if not status_data.get("connected"):
-        raise _fail("Not connected — connect first", status.HTTP_409_CONFLICT)
-
-    result = await svc.execute_trade(
-        asset=req.asset,
-        direction=req.direction,
-        amount=req.amount,
-        expiration=req.expiration,
-    )
-    if not result.get("success"):
-        raise _fail(result.get("error", "Trade execution failed"))
-
-    logger.info(
-        "Trade executed | asset=%s dir=%s amount=$%.2f exp=%ds",
-        req.asset, req.direction, req.amount, req.expiration,
-    )
-    return _ok(result)
-
+    """Proxy trade execution to SSID Service."""
+    return await _proxy_request("POST", "/trade", req.model_dump())
 
 @router.get("/result/{order_id}")
 async def get_trade_result(order_id: str) -> Dict[str, Any]:
-    """Check the WIN/LOSS result of a completed trade by order ID."""
-    svc = get_trading_service()
-    result = await svc.check_trade_result(order_id)
-    if not result.get("success"):
-        raise _fail(result.get("error", "Result check failed"))
-    return _ok(result)
-
-
-@router.get("/assets")
-async def list_trading_assets() -> Dict[str, Any]:
-    """Return the list of verified OTC assets enriched with live payout data."""
-    svc = get_trading_service()
-    assets = await svc.get_assets()
-    return _ok({"assets": assets, "count": len(assets)})
-
+    """Proxy trade result check to SSID Service."""
+    return await _proxy_request("GET", f"/result/{order_id}")
 
 @router.post("/switch-mode")
 async def switch_trading_mode(req: SwitchModeRequest) -> Dict[str, Any]:
-    """
-    Switch between Demo and Real account modes.
-    Requires a prior successful connection (SSID must be saved in config).
+    """Proxy mode switch to SSID Service."""
+    return await _proxy_request("POST", "/switch-mode", req.model_dump())
 
-    ⚠️ Switching to Real mode reconnects with real trading enabled.
-    """
-    svc = get_trading_service()
-    result = await svc.switch_mode(req.demo)
-    if not result.get("success"):
-        raise _fail(result.get("error", "Mode switch failed"))
-    logger.info("Trading mode switched | demo=%s", req.demo)
-    return _ok({"balance": result.get("balance"), "demo": result.get("demo")})
-
-
-@router.get("/config")
-async def get_trading_config() -> Dict[str, Any]:
-    """
-    Return current trading configuration.
-    The SSID field is masked — never returned in plaintext.
-    """
-    svc = get_trading_service()
-    return _ok({"config": svc.get_config_safe()})
-
-
-@router.put("/config")
-async def update_trading_config(req: UpdateConfigRequest) -> Dict[str, Any]:
-    """Update trading settings (amount limits, cooldowns, confirmations)."""
-    svc = get_trading_service()
-    updates = req.dict(exclude_none=True)
-    if not updates:
-        raise _fail("No valid fields to update")
-    updated = svc.update_config(updates)
-    return _ok({"config": updated})
+@router.get("/assets")
+async def list_trading_assets() -> Dict[str, Any]:
+    """Proxy assets list request to SSID Service."""
+    return await _proxy_request("GET", "/assets")
