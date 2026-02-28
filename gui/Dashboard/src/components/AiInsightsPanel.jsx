@@ -1,4 +1,4 @@
-import { CollapsibleCard } from './Card';
+import CollapsiblePanel from './CollapsiblePanel';
 import AssetPayoutPanel from './AssetPayoutPanel';
 import { Volume2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -234,60 +234,37 @@ const AiInsightsPanel = () => {
   };
 
   return (
-    <div className="col-span-3 flex flex-col gap-2 h-full min-h-0">
+    <div className="col-span-3 flex flex-col gap-3 h-full min-h-0 bg-dashboard-bg p-2 custom-scrollbar overflow-y-auto">
       {/* 92% Payout Assets Section */}
-      <div className="flex-none min-h-[40px] max-h-[40%] overflow-hidden">
-        <AssetPayoutPanel
-          showControls={false}
-          defaultIsTopCollapsed={true}
-          initialTopHeight={0}
-        />
-      </div>
+      <CollapsiblePanel
+        id="ai-insights-assets"
+        title="92% Payout Assets"
+        defaultOpen={false}
+        expandable={true}
+        className="bg-section-bg"
+      >
+        <div className="overflow-hidden rounded-lg">
+          <AssetPayoutPanel
+            showControls={false}
+          />
+        </div>
+      </CollapsiblePanel>
 
-      <CollapsibleCard
-        className="p-3 rounded-lg flex-1 overflow-y-auto quflx-section-light"
-        headerClassName="mb-2"
+      <CollapsiblePanel
+        id="ai-insights-main"
+        title="AI Insights"
+        expandable={true}
+        className="bg-section-bg"
         headerLeft={
-          <div>
-            <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">AI Insights</h3>
-            <div className="text-[11px] text-gray-500 mt-0.5">Image: {imageSourceLabel}</div>
-          </div>
-        }
-        headerRight={
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            {isSpeaking ? (
-              <>
-                {readBackMode === 'browser' && (
-                  <button
-                    type="button"
-                    onClick={isTtsPaused ? resumeTts : pauseTts}
-                    className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
-                  >
-                    {isTtsPaused ? 'Resume' : 'Pause'}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={stopSpeaking}
-                  className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
-                >
-                  Stop
-                </button>
-              </>
-            ) : null}
-            <button
-              type="button"
-              onClick={clearAiMessages}
-              className="px-2 py-1 text-[11px] rounded bg-[#0f1419] text-gray-300 border border-gray-700 hover:bg-gray-800"
-            >
-              Clear
-            </button>
+          <div className="flex items-center gap-2">
+            <Volume2 className={isSpeaking ? "text-accent-primary animate-pulse" : "text-text-secondary"} size={18} />
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-tight">AI Insights</h3>
           </div>
         }
       >
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col h-full min-h-[400px]">
           {Array.isArray(aiMessages) && aiMessages.length ? (
-            <div className="space-y-2 max-h-[55vh] overflow-auto pr-1">
+            <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1 max-h-[500px]">
               {aiMessages.map((m, idx) => (
                 <div
                   key={`${m.ts || 0}-${idx}`}
@@ -326,7 +303,7 @@ const AiInsightsPanel = () => {
             </div>
           )}
 
-          <div className="pt-3 mt-1 border-t border-gray-800">
+          <div className="pt-3 mt-auto border-t border-gray-800 shrink-0">
             {/* Analysis Toggles */}
             <div className="flex items-center gap-2 mb-2 overflow-x-auto no-scrollbar pb-1">
               <AnalysisToggle
@@ -434,7 +411,7 @@ const AiInsightsPanel = () => {
             </div>
           </div>
         </div>
-      </CollapsibleCard>
+      </CollapsiblePanel>
     </div >
   );
 };

@@ -1,22 +1,10 @@
 import React, { useId } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-export const SettingsSection = ({ title, children, defaultOpen = true }) => {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-
-  return (
-    <div className="mb-4 rounded-lg border border-border-primary quflx-section-light overflow-hidden quflx-settings-card">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between p-3 text-left hover:bg-white/5 transition-colors"
-      >
-        <h3 className="text-xs font-bold uppercase tracking-widest text-text-secondary">{title}</h3>
-        {isOpen ? <ChevronUp size={14} className="text-text-secondary" /> : <ChevronDown size={14} className="text-text-secondary" />}
-      </button>
-      {isOpen && <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-6">{children}</div>}
-    </div>
-  );
-};
+/**
+ * NOTE: SettingsSection is deprecated. Use CollapsiblePanel instead for consistency.
+ */
+// export const SettingsSection = ({ title, children, defaultOpen = true }) => { ... };
 
 export const SettingRow = ({ label, description, children }) => (
   <div className="flex flex-col gap-1">

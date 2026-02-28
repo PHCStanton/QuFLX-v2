@@ -282,6 +282,22 @@ async def check_result(order_id: str, request: Request):
     return await asyncio.to_thread(executor.check_result, order_id)
 
 
+@router.get("/ssid-status")
+async def ssid_status(request: Request):
+    """
+    Fix 2: Return whether a Demo and/or Real SSID is configured in the environment.
+    Does NOT expose raw SSID values — booleans only (security).
+    """
+    app = request.app
+    has_demo = bool((getattr(app.state, "ssid_demo", None) or "").strip())
+    has_real = bool((getattr(app.state, "ssid_real", None) or "").strip())
+    return {
+        "success": True,
+        "hasDemoSsid": has_demo,
+        "hasRealSsid": has_real,
+    }
+
+
 @router.get("/assets")
 async def list_assets():
     return {"success": True, "assets": OTC_ASSETS, "count": len(OTC_ASSETS)}

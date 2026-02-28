@@ -27,6 +27,8 @@ const DEFAULT_STATE = {
     ssidInput: '',         // For the input field only
     ssid_demo: '',         // Persisted demo SSID
     ssid_real: '',         // Persisted real SSID
+    hasDemoSsid: false,    // Fix 4: True if .env has a saved demo SSID
+    hasRealSsid: false,    // Fix 4: True if .env has a saved real SSID
 
     // Trade execution
     isExecuting: false,
@@ -92,8 +94,9 @@ const useTradingStore = create((set, get) => ({
                 ssidInput: '',      // clear from field after successful connect
                 connectError: null,
             });
-            // Load assets after connecting
+            // Load assets and refresh SSID status badges after connecting
             get().fetchAssets();
+            get().fetchSsidStatus();
             return true;
         } catch (err) {
             set({ isConnecting: false, connectError: err.message });
@@ -152,10 +155,18 @@ const useTradingStore = create((set, get) => ({
     executeTrade: async ({ asset, direction, amount, expiration, cooldownSeconds = 3 }) => {
         set({ isExecuting: true, error: null });
         try {
+            // Ensure types match backend expectations (float amount, int expiration)
+            const payload = {
+                asset,
+                direction,
+                amount: Number(amount),
+                expiration: parseInt(expiration, 10)
+            };
+
             const res = await fetch(`${API_BASE}/execute`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ asset, direction, amount, expiration }),
+                body: JSON.stringify(payload),
             });
             const data = await res.json();
 
@@ -223,6 +234,27 @@ const useTradingStore = create((set, get) => ({
         } catch (err) {
             console.warn('[tradingStore] checkResult failed:', err.message);
             return null;
+        }
+    },
+
+    // ------------------------------------------------------------------ //
+    // Fetch SSID configuration status (Fix 4)
+    // ------------------------------------------------------------------ //
+
+    fetchSsidStatus: async () => {
+        try {
+            const res = await fetch(`${API_BASE}/ssid-status`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.success) {
+                set({
+                    hasDemoSsid: Boolean(data.hasDemoSsid),
+                    hasRealSsid: Boolean(data.hasRealSsid),
+                });
+            }
+        } catch (err) {
+            // Non-fatal: silently ignore if SSID service is not yet running
+            console.debug('[tradingStore] fetchSsidStatus failed:', err.message);
         }
     },
 

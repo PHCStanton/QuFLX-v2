@@ -2,13 +2,11 @@ import { useMemo } from 'react';
 import Card from './Card';
 import TickerTape from './TickerTape';
 import NeomorphicSwitch from './NeomorphicSwitch';
-import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap } from 'lucide-react';
+import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap, Star } from 'lucide-react';
 
 import { normalizeSpecificAsset } from '../utils/assetUtils';
 
 const AssetListView = ({
-  isCollapsed,
-  onToggleCollapsed,
   panelMode,
   onTogglePanelMode,
   minPayout,
@@ -27,7 +25,9 @@ const AssetListView = ({
   tickerAssets,
   assetSearchQuery,
   onSearchQueryChange,
-  onUseForTrade
+  onUseForTrade,
+  favorites = [],
+  onToggleFavorite
 }) => {
   const filteredPayoutAssets = useMemo(() => {
     const source = Array.isArray(payoutAssets) ? payoutAssets : [];
@@ -43,25 +43,28 @@ const AssetListView = ({
     });
   }, [payoutAssets, assetSearchQuery]);
 
+  const easyAccessAssets = useMemo(() => {
+    if (!Array.isArray(favorites)) return [];
+    // Only show favorites that are NOT in the current payout list to avoid duplication if we want separate section?
+    // Or just show all favorites.
+    // If I show a separate section, I should probably filter them out of the main list or just duplicate them.
+    // Duplication is fine for "Easy Access".
+    return favorites;
+  }, [favorites]);
+
+  const isFavorite = (asset) => {
+    if (!favorites) return false;
+    return favorites.includes(asset);
+  };
+
   const count = Array.isArray(payoutAssets) ? payoutAssets.length : 0;
 
   return (
     <Card
-      className={`p-3 rounded-lg flex flex-col min-h-0 quflx-section-light transition-all duration-300 ease-in-out ${isCollapsed ? 'h-10 flex-none overflow-hidden' : 'flex-1'
-        }`}
+      className="p-3 rounded-lg flex flex-col min-h-0 quflx-section-light transition-all duration-300 ease-in-out flex-1"
     >
       <div
-        className="flex justify-between items-center mb-2 shrink-0 cursor-pointer"
-        role="button"
-        tabIndex={0}
-        onClick={onToggleCollapsed}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onToggleCollapsed();
-          }
-        }}
-        aria-expanded={!isCollapsed}
+        className="flex justify-between items-center mb-2 shrink-0"
       >
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
@@ -82,33 +85,16 @@ const AssetListView = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {!isCollapsed && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <NeomorphicSwitch
-                checked={panelMode === 'ticker'}
-                onChange={onTogglePanelMode}
-                leftLabel={`${minPayout}% Assets`}
-                rightLabel="Ticker View"
-              />
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleCollapsed();
-            }}
-            className="p-1 hover:bg-section-bg/50 rounded text-text-secondary transition-colors"
-            title={isCollapsed ? 'Expand' : 'Collapse'}
-          >
-            {isCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+          <NeomorphicSwitch
+            checked={panelMode === 'ticker'}
+            onChange={onTogglePanelMode}
+            leftLabel={`${minPayout}% Assets`}
+            rightLabel="Ticker View"
+          />
         </div>
       </div>
 
-      {!isCollapsed && (
-        <>
-          {panelMode === 'list' ? (
+      {panelMode === 'list' ? (
             <>
               <div className="mb-2">
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-section-bg/50 border border-border-primary rounded text-xs text-text-primary">
@@ -123,6 +109,55 @@ const AssetListView = ({
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+                
+                {/* Easy Access Section */}
+                {easyAccessAssets.length > 0 && !assetSearchQuery && (
+                  <div className="mb-2 pb-2 border-b border-border-primary/50">
+                    <div className="px-2 mb-1 text-[10px] font-bold text-accent-blue uppercase tracking-widest flex items-center gap-1">
+                      <Star size={10} className="fill-accent-blue" />
+                      Easy Access
+                    </div>
+                    {easyAccessAssets.map((asset) => (
+                       <div
+                       key={`fav-${asset}`}
+                       onClick={() => !selectedAssetLoading && onSelectAsset(asset)}
+                       className={`p-1.5 rounded flex justify-between items-center transition-colors ${selectedAsset === asset
+                         ? 'bg-accent-green/20 text-accent-green border border-accent-green/50'
+                         : 'hover:bg-section-bg/50 text-text-secondary'
+                         } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
+                     >
+                       <div className="flex items-center gap-2">
+                         <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleFavorite && onToggleFavorite(asset);
+                            }}
+                            className="w-4 h-4 flex items-center justify-center rounded-full text-accent-blue hover:bg-accent-blue/20 transition-colors"
+                            title="Remove from Easy Access"
+                         >
+                           <Star size={10} className="fill-accent-blue" />
+                         </button>
+                         <span className="font-medium text-sm">{normalizeSpecificAsset(asset)}</span>
+                         {onUseForTrade && (
+                           <button
+                             type="button"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               onUseForTrade(asset);
+                             }}
+                             className="p-1 rounded bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/30 transition-all ml-1"
+                             title="Use for Live Trade"
+                           >
+                             <Zap size={10} />
+                           </button>
+                         )}
+                       </div>
+                     </div>
+                    ))}
+                  </div>
+                )}
+
                 {filteredPayoutAssets.length === 0 ? (
                   <div className="p-2 text-[11px] text-text-secondary text-center border border-dashed border-border-primary rounded">
                     No assets match your search.
@@ -138,6 +173,17 @@ const AssetListView = ({
                         } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavorite && onToggleFavorite(asset);
+                          }}
+                          className={`w-4 h-4 flex items-center justify-center rounded-full border border-border-primary hover:bg-white/10 transition-colors ${isFavorite(asset) ? 'text-accent-blue border-accent-blue' : 'text-text-secondary'}`}
+                          title={isFavorite(asset) ? "Remove from Easy Access" : "Add to Easy Access"}
+                        >
+                          <Star size={10} className={isFavorite(asset) ? "fill-accent-blue" : ""} />
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -232,8 +278,6 @@ const AssetListView = ({
               <TickerTape assets={tickerAssets} quotesByAssetKey={quotesByAssetKey} />
             </div>
           )}
-        </>
-      )}
     </Card>
   );
 };

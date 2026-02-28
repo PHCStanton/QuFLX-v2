@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { createChart } from 'lightweight-charts';
 import { prepareChartData } from '../utils/chartData';
-import { CollapsibleCard } from './Card';
+import CollapsiblePanel from './CollapsiblePanel';
 import { Upload, FileText, TrendingUp, AlertCircle, Loader, Brain, Shield, ExternalLink } from 'lucide-react';
 import { getApiBaseUrl } from '../api/apiBase';
 import useMarketStore from '../store/marketStore';
@@ -281,9 +281,10 @@ const StrategyLabPanel = () => {
   }, [uploadedFile, entries, fileId, fetchFullData]);
 
   return (
-    <div className="col-span-3 flex flex-col gap-3 h-full min-h-0">
-      <CollapsibleCard
-        className="p-4"
+    <div className="col-span-3 flex flex-col gap-3 h-full min-h-0 bg-dashboard-bg p-2 custom-scrollbar overflow-y-auto">
+      <CollapsiblePanel
+        id="strategy-lab-header"
+        className="bg-section-bg"
         headerLeft={
           <div>
             <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">
@@ -309,10 +310,12 @@ const StrategyLabPanel = () => {
       />
 
       {!uploadedFile && (
-        <CollapsibleCard
-          className="p-6 flex-1"
-          headerClassName="mb-4"
-          headerLeft={<h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">Upload Zone</h3>}
+        <CollapsiblePanel
+          id="strategy-lab-upload"
+          title="Upload Zone"
+          expandable={true}
+          className="bg-section-bg"
+          bodyClassName="p-6"
         >
           <div
             className={`border-2 border-dashed rounded-xl p-8 transition-all ${dragActive
@@ -357,16 +360,18 @@ const StrategyLabPanel = () => {
               <p className="text-xs text-red-400">{error}</p>
             </div>
           )}
-        </CollapsibleCard>
+        </CollapsiblePanel>
       )}
 
       {/* Analysis Results */}
       {uploadedFile && (
-        <div className="flex-1 flex flex-col gap-3 min-h-0">
-          <CollapsibleCard
-            className="p-4"
-            headerClassName="mb-3"
-            headerLeft={<h4 className="text-sm font-semibold text-text-primary">File Info</h4>}
+        <div className="flex flex-col gap-3 min-h-0">
+          <CollapsiblePanel
+            id="strategy-lab-file-info"
+            title="File Info"
+            expandable={true}
+            className="bg-section-bg"
+            bodyClassName="p-4"
           >
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-accent-primary" />
@@ -378,12 +383,14 @@ const StrategyLabPanel = () => {
               </div>
               {loading && <Loader className="w-4 h-4 text-accent-primary animate-spin" />}
             </div>
-          </CollapsibleCard>
+          </CollapsiblePanel>
 
           {regime && (
-            <CollapsibleCard
-              className="p-4"
-              headerClassName="mb-3"
+            <CollapsiblePanel
+              id="strategy-lab-market-regime"
+              expandable={true}
+              className="bg-section-bg"
+              bodyClassName="p-4"
               headerLeft={
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-accent-primary" />
@@ -473,57 +480,53 @@ const StrategyLabPanel = () => {
                 </div>
                 <div ref={chartContainerRef} className="w-full" />
               </div>
-            </CollapsibleCard>
+            </CollapsiblePanel>
           )}
 
           {entries.length > 0 && (
-            <CollapsibleCard
-              className="p-4 flex-1 flex flex-col min-h-0"
-              headerClassName="mb-3"
-              headerLeft={<h4 className="text-sm font-semibold text-text-primary">Entry Signals</h4>}
-              headerRight={
-                <span className="text-xs text-text-secondary">
-                  {entries.length} signal{entries.length !== 1 ? 's' : ''} found
-                </span>
-              }
-              bodyClassName="flex-1 flex flex-col min-h-0"
-            >
-              <div className="flex-1 overflow-y-auto min-h-0">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-card-bg border-b border-border-primary">
+        <CollapsiblePanel
+          id="strategy-lab-entry-signals"
+          title="Entry Signals"
+          expandable={true}
+          className="bg-section-bg"
+          bodyClassName="p-0"
+        >
+          <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+            <table className="w-full text-xs">
+              <thead className="bg-card-bg border-b border-border-primary sticky top-0 z-10">
                     <tr className="text-left text-text-secondary">
-                      <th className="pb-2 font-medium">Direction</th>
-                      <th className="pb-2 font-medium">Entry Price</th>
-                      <th className="pb-2 font-medium">Confidence</th>
-                      <th className="pb-2 font-medium">Expiry</th>
-                      <th className="pb-2 font-medium">Reason</th>
+                      <th className="px-4 py-3 font-semibold uppercase tracking-wider">Direction</th>
+                      <th className="px-4 py-3 font-semibold uppercase tracking-wider">Entry Price</th>
+                      <th className="px-4 py-3 font-semibold uppercase tracking-wider">Confidence</th>
+                      <th className="px-4 py-3 font-semibold uppercase tracking-wider">Expiry</th>
+                      <th className="px-4 py-3 font-semibold uppercase tracking-wider">Reason</th>
                     </tr>
                   </thead>
                   <tbody>
                     {entries.map((entry, idx) => (
-                      <tr key={idx} className="border-b border-border-primary/50 hover:bg-accent-primary/5">
-                        <td className="py-2">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${entry.direction === 'CALL'
+                      <tr key={idx} className="border-b border-border-primary/50 hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${entry.direction === 'CALL'
                             ? 'bg-green-500/10 text-green-400'
                             : 'bg-red-500/10 text-red-400'
                             }`}>
                             {entry.direction}
                           </span>
                         </td>
-                        <td className="py-2 text-text-primary">{(entry.entry_price ?? 0).toFixed(5)}</td>
-                        <td className="py-2">
+                        <td className="px-4 py-3 text-text-primary font-mono text-[10px]">{(entry.entry_price ?? 0).toFixed(5)}</td>
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 bg-border-primary rounded-full overflow-hidden">
+                            <div className="w-16 h-1.5 bg-border-primary/30 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-accent-primary"
+                                className={`h-full ${(entry.confidence ?? 0) > 0.7 ? 'bg-accent-green' : 'bg-accent-primary'}`}
                                 style={{ width: `${(entry.confidence ?? 0) * 100}%` }}
                               />
                             </div>
-                            <span className="text-text-primary">{Math.round((entry.confidence ?? 0) * 100)}%</span>
+                            <span className="text-text-primary text-[10px] font-medium">{Math.round((entry.confidence ?? 0) * 100)}%</span>
                           </div>
                         </td>
-                        <td className="py-2 text-text-primary">{entry.suggested_expiry}</td>
-                        <td className="py-2 text-text-secondary max-w-xs truncate" title={entry.reason}>
+                        <td className="px-4 py-3 text-text-primary text-[10px]">{entry.suggested_expiry}</td>
+                        <td className="px-4 py-3 text-text-secondary text-[10px] max-w-xs truncate" title={entry.reason}>
                           {entry.reason}
                         </td>
                       </tr>
@@ -532,42 +535,50 @@ const StrategyLabPanel = () => {
                 </table>
               </div>
 
-              {/* Stats */}
+              {/* Stats Summary */}
               {stats && (
-                <div className="mt-3 pt-3 border-t border-border-primary flex items-center gap-6 text-xs">
+                <div className="p-4 bg-card-bg/50 border-t border-border-primary flex items-center gap-6 text-[10px] font-medium uppercase tracking-wider">
                   <div>
                     <span className="text-text-secondary">Avg Confidence: </span>
-                    <span className="text-text-primary font-medium">
+                    <span className="text-text-primary">
                       {Math.round((stats.avg_confidence || 0) * 100)}%
                     </span>
                   </div>
                   <div>
                     <span className="text-text-secondary">Total Signals: </span>
-                    <span className="text-text-primary font-medium">{stats.total_signals}</span>
+                    <span className="text-text-primary">{stats.total_signals}</span>
                   </div>
                 </div>
               )}
-            </CollapsibleCard>
+            </CollapsiblePanel>
           )}
 
           {regime && regime.is_tradeable && entries.length === 0 && !loading && (
-            <CollapsibleCard
-              className="p-6 flex-1 flex items-center justify-center"
-              headerClassName="mb-3"
-              headerLeft={<h4 className="text-sm font-semibold text-text-primary">Entry Signals</h4>}
+            <CollapsiblePanel
+              id="strategy-lab-no-signals"
+              title="Entry Signals"
+              expandable={true}
+              className="bg-section-bg flex-1 flex items-center justify-center"
+              bodyClassName="p-12"
             >
-              <div className="text-center text-text-secondary">
-                <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No entry signals found for this regime</p>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+                  <AlertCircle className="w-6 h-6 text-text-secondary opacity-50" />
+                </div>
+                <p className="text-sm font-medium text-text-primary mb-1">No entry signals</p>
+                <p className="text-xs text-text-secondary">No tradeable patterns found for this regime</p>
               </div>
-            </CollapsibleCard>
+            </CollapsiblePanel>
           )}
 
           {/* Error Display */}
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-red-400">{error}</p>
+            <div className="p-4 bg-accent-red/10 border border-accent-red/20 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-accent-red mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-accent-red mb-1">Analysis Error</p>
+                <p className="text-xs text-accent-red/80">{error}</p>
+              </div>
             </div>
           )}
         </div>

@@ -158,12 +158,34 @@ class PocketOptionInstance:
                     self.uid = payload.get("uid")
                     self.is_demo_account = payload.get("isDemo")
                     self.logger.info(f"Authenticated! UID: {self.uid}")
-                    
+
+                elif event in ("successopenOrder", "failopenOrder", "openOrder"):
+                    # Trade order response — resolve the pending future by requestId
+                    req_id = None
+                    if isinstance(payload, dict):
+                        req_id = payload.get("requestId") or payload.get("id")
+                    if req_id and req_id in self.pending_requests:
+                        future = self.pending_requests[req_id]
+                        if not future.done():
+                            if event == "successopenOrder":
+                                future.set_result({"status": "success", "data": payload})
+                            else:
+                                future.set_result({"status": "error", "error": str(payload)})
+                    else:
+                        # Fallback: resolve any pending request that matches by scanning
+                        for rid, future in list(self.pending_requests.items()):
+                            if not future.done():
+                                if event == "successopenOrder":
+                                    future.set_result({"status": "success", "data": payload})
+                                else:
+                                    future.set_result({"status": "error", "error": str(payload)})
+                                break
+
                 elif event == "updateBalance":
                     self.balance = payload
                     if self.on_balance_update:
                         self.on_balance_update(self.balance)
-                        
+
                 elif "NotAuthorized" in str(payload):
                     self.logger.error("Authorization Failed: Invalid SSID")
                     self.is_connected = False
@@ -242,7 +264,8 @@ class PocketOptionInstance:
             
             try:
                 result = await asyncio.wait_for(future, timeout=10.0)
-                return {"status": "success", "data": result}
+                # Future already resolves with {"status": "success"/"error", "data": ...}
+                return result
             except asyncio.TimeoutError:
                 self.logger.error(f"Buy order timeout [ID: {request_id}]")
                 return {"status": "error", "error": "Timeout waiting for order confirmation"}

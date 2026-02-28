@@ -1,4 +1,5 @@
-import { Settings } from 'lucide-react';
+import React from 'react';
+import { Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import AnimatedLogo from './AnimatedLogo';
@@ -73,7 +74,7 @@ const AiInsightsChipBotIcon = ({ size = 20 }) => (
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      d="M11.7336 10.9952V9.30799c0.5699 0.02387 0.8554 -0.02887 1.1986 -0.26692 0.3068 -0.21281 0.4088 -0.61411 0.3083 -0.9737 -0.9828 -3.51296 -2.508 -7.06273 -6.90456 -7.06273V12.9952h3.39763c1.10453 0 2.00003 -0.8954 2.00003 -2Z"
+      d="M11.7336 10.9952V9.30799c0.5699 0.02387 0.8554 -0.02887 1.1986 -0.26692 0.3068 -0.21281 0.4088 -0.61411 0.3083 -0.9737 -0.9828 -3.51296 -2.508 -7.06273 -6.90456 -7.06273V12.9952h3.39763c1.10453 0 2.00003 -0.8954 2.00003 -2"
       strokeWidth="1"
     ></path>
     <path
@@ -382,32 +383,64 @@ const Sidebar = () => {
 
   return (
     <div
-      className={`${isSidebarOpen ? 'w-64' : 'w-16'} quflx-sidebar bg-card-bg border-r border-border-primary transition-all duration-300 flex flex-col`}
+      className={`${isSidebarOpen ? 'w-64' : 'w-16'} quflx-sidebar bg-card-bg border-r border-border-primary transition-all duration-300 flex flex-col shadow-2xl z-20`}
       style={
         sidebarSkinDataUrl
           ? { '--quflx-sidebar-bg-image': `url("${sidebarSkinDataUrl}")` }
           : undefined
       }
     >
-      <div className="p-4 flex items-center justify-between border-b border-border-primary">
+      <div className="p-4 flex items-center justify-between border-b border-border-primary/50">
         {isSidebarOpen && (
-          <div className="quflx-logo">
+          <div className="quflx-logo group cursor-default">
             <AnimatedLogo />
             <div className="quflx-logo-text">
-              <span className="quflx-logo-text-main" data-text="QuFLX">QuFLX</span>
-              <span className="quflx-logo-text-version" data-text="_v.2">_v.2</span>
+              <span className="quflx-logo-text-main group-hover:text-accent-green transition-colors" data-text="QuFLX">QuFLX</span>
+              <span className="quflx-logo-text-version opacity-50 group-hover:opacity-100 transition-opacity" data-text="_v.2">_v.2</span>
             </div>
           </div>
         )}
-        <button onClick={toggleSidebar} className="quflx-neo-square-btn text-text-primary" aria-label="Toggle sidebar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
-            <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2H6a2 2 0 0 1 -2 -2z" strokeWidth="2"></path>
-            <path d="m9 4 0 16" strokeWidth="2"></path>
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {isSidebarOpen && (
+            <div className="flex items-center gap-1.5 mr-1.5">
+              <button
+                onClick={() => {
+                  Object.keys(localStorage)
+                    .filter(key => key.startsWith('quflx-panel-'))
+                    .forEach(key => localStorage.setItem(key, 'true'));
+                  window.dispatchEvent(new Event('storage'));
+                  window.dispatchEvent(new CustomEvent('quflx-panels-expand-all'));
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text-primary transition-all hover:scale-105 active:scale-95"
+                title="Expand all panels"
+              >
+                <ChevronDown size={15} />
+              </button>
+              <button
+                onClick={() => {
+                  Object.keys(localStorage)
+                    .filter(key => key.startsWith('quflx-panel-'))
+                    .forEach(key => localStorage.setItem(key, 'false'));
+                  window.dispatchEvent(new Event('storage'));
+                  window.dispatchEvent(new CustomEvent('quflx-panels-collapse-all'));
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text-primary transition-all hover:scale-105 active:scale-95"
+                title="Collapse all panels"
+              >
+                <ChevronUp size={15} />
+              </button>
+            </div>
+          )}
+          <button onClick={toggleSidebar} className="quflx-neo-square-btn text-text-primary hover:text-accent-green transition-colors" aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+              <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2H6a2 2 0 0 1 -2 -2z" strokeWidth="2"></path>
+              <path d="m9 4 0 16" strokeWidth="2"></path>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <nav className="flex-1 p-2 space-y-2">
+      <nav className="flex-1 p-2 space-y-1.5 overflow-y-auto custom-scrollbar">
         {SIDEBAR_TABS.map((tab) => (
           <SidebarItem
             key={tab.id}
@@ -420,29 +453,49 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-border-primary">
-        <div className="flex items-center gap-2 text-sm text-text-secondary">
-          <div className="w-2 h-2 rounded-full bg-accent-green"></div>
-          {isSidebarOpen && <span>System Online</span>}
+      <div className="p-4 border-t border-border-primary/50">
+        <div className="flex items-center gap-3 text-xs text-text-secondary font-medium tracking-wide uppercase">
+          <div className="relative">
+            <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse"></div>
+            <div className="absolute inset-0 w-2 h-2 rounded-full bg-accent-green blur-[2px] opacity-50"></div>
+          </div>
+          {isSidebarOpen && <span className="animate-in fade-in slide-in-from-left-2 duration-500">System Online</span>}
         </div>
       </div>
     </div>
   );
 };
 
-const SidebarItem = ({ icon, label, isOpen, active, onClick }) => (
+const SidebarItem = React.memo(({ icon, label, isOpen, active, onClick }) => (
   <div
     onClick={onClick}
-    className={`quflx-sidebar-item flex items-center gap-3 p-3 rounded cursor-pointer transition-colors ${active
-        ? 'quflx-sidebar-item-active bg-accent-green/10 text-accent-green border-r-2 border-accent-green'
-        : 'hover:bg-section-bg/50 text-text-secondary'
+    className={`quflx-sidebar-item group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 relative overflow-hidden ${active
+        ? 'bg-accent-green/10 text-accent-green shadow-[inset_0_0_12px_rgba(34,197,94,0.1)]'
+        : 'hover:bg-white/[0.03] text-text-secondary hover:text-text-primary'
       }`}
   >
-    {icon && <span className="flex items-center justify-center w-5 h-5"><IconWrapper icon={icon} /></span>}
-    {isOpen && <span className="font-medium">{label}</span>}
-  </div>
-);
+    {active && (
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-accent-green rounded-r-full shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+    )}
+    
+    <div className={`flex items-center justify-center w-6 h-6 transition-transform duration-200 group-hover:scale-110 ${active ? 'scale-110' : ''}`}>
+      <IconWrapper icon={icon} active={active} />
+    </div>
+    
+    {isOpen && (
+      <span className={`font-semibold text-[13px] tracking-tight transition-all duration-200 ${active ? 'translate-x-1' : 'group-hover:translate-x-1'}`}>
+        {label}
+      </span>
+    )}
 
-const IconWrapper = ({ icon: Icon }) => <Icon size={20} />;
+    {!active && (
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-gradient-to-r from-accent-green/5 to-transparent transition-opacity pointer-events-none" />
+    )}
+  </div>
+));
+
+const IconWrapper = ({ icon: Icon, active }) => (
+  <Icon size={20} className={`transition-colors duration-200 ${active ? 'stroke-[2px]' : 'stroke-[1.5px]'}`} />
+);
 
 export default Sidebar;

@@ -1210,7 +1210,8 @@ const useMarketStore = create(
       activeIndicators: state.activeIndicators,
       autoRunAlertMonitor: state.autoRunAlertMonitor,
       enableTickLogging: state.enableTickLogging,
-      monitoringAssetKeys: state.monitoringAssetKeys
+      monitoringAssetKeys: state.monitoringAssetKeys,
+      favorites: state.favorites
     })
   })((set, get) => ({
     ...createUiSlice(set),

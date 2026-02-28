@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import useTradingStore from '../store/tradingStore';
 import useSettingsStore from '../store/settingsStore';
 import useMarketStore from '../store/marketStore';
+import useProfileStore from '../store/profileStore';
 import useUserStore from '../store/userStore';
+import CollapsiblePanel from './CollapsiblePanel';
 import {
-  SettingsSection,
   SettingRow,
   SliderInput,
   DropdownInput,
@@ -17,6 +19,31 @@ import useTextToSpeech from '../utils/useTextToSpeech';
 
 const SettingsPanel = () => {
   const { settings, updateSection, resetAll, saveSettings } = useSettingsStore();
+  const { connect, isConnecting, connectError, isConnected, isDemoMode,
+    hasDemoSsid, hasRealSsid, fetchSsidStatus } = useTradingStore();
+  const { activeProfileId, profiles, updateProfile } = useProfileStore();
+  const { setActiveTab } = useMarketStore();
+  const [demoSsid, setDemoSsid] = useState('');
+  const [realSsid, setRealSsid] = useState('');
+  const [saveToast, setSaveToast] = useState(false);
+
+  // Fix 5a: Fetch SSID saved-status on mount so badges survive tab switches
+  useEffect(() => {
+    fetchSsidStatus();
+  }, [fetchSsidStatus]);
+
+  const handleConnectDemo = async () => {
+    if (!demoSsid.trim()) return;
+    await connect(demoSsid.trim(), true);
+    setDemoSsid('');
+  };
+
+  const handleConnectReal = async () => {
+    if (!realSsid.trim()) return;
+    await connect(realSsid.trim(), false);
+    setRealSsid('');
+  };
+
   const { assetFilterState, setAssetFilterState, activeIndicators, setActiveIndicators } = useMarketStore();
   const { user, updateUser } = useUserStore();
   const sidebarSkinFileInputRef = useRef(null);
@@ -97,11 +124,40 @@ const SettingsPanel = () => {
   }, [settings.global.sidebarSkinDataUrl]);
 
   const handleSave = async () => {
+    // Fix 6: Save & Close — save settings, flush to active profile, show toast, navigate away
     const success = await saveSettings();
     if (success) {
-      // Could add a toast notification here
-      console.log('Settings saved successfully');
+      // Immediate flush to active profile JSON (profile system debounces normally,
+      // but "Save & Close" must be instant before navigating away)
+      if (activeProfileId) {
+        await updateProfile(activeProfileId, { settings });
+      }
+      // Show inline toast with active profile name
+      setSaveToast(true);
+      setTimeout(() => setSaveToast(false), 2500);
+      // Navigate away (the "Close" part)
+      setTimeout(() => setActiveTab('analysis'), 600);
     }
+  };
+
+  const handleExportConfig = () => {
+    // Fix 7: Export current settings as a named JSON file
+    const profileName = profiles.find((p) => p.id === activeProfileId)?.name || 'Default';
+    const date = new Date().toISOString().slice(0, 10);
+    const payload = JSON.stringify(
+      { profileName, exportedAt: new Date().toISOString(), settings },
+      null,
+      2
+    );
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `QuFLX_Settings_${profileName}_${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleResetAllPersisted = () => {
@@ -204,7 +260,13 @@ const SettingsPanel = () => {
           <h1 className="text-2xl font-bold text-text-primary tracking-tight flex items-center gap-3">
             <span className="text-accent-green">⚙️</span> SETTINGS
           </h1>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            {/* Fix 6: Inline save toast */}
+            {saveToast && (
+              <span className="text-xs font-bold text-accent-green animate-in fade-in duration-300 px-3 py-1.5 rounded-lg bg-accent-green/10 border border-accent-green/30">
+                ✓ Saved to {profiles.find((p) => p.id === activeProfileId)?.name || 'Profile'}
+              </span>
+            )}
             <button
               onClick={resetAll}
               className="flex items-center gap-2 px-4 py-2 bg-section-bg hover:bg-section-bg/80 text-text-primary rounded-lg transition-colors text-sm font-medium border border-border-primary shadow-sm"
@@ -220,8 +282,96 @@ const SettingsPanel = () => {
           </div>
         </div>
 
+        {/* Connection Settings */}
+        <CollapsiblePanel
+          id="settings-connection"
+          title="Exchange Connection"
+          defaultOpen={!isConnected}
+          bodyClassName="flex flex-col gap-4 p-4"
+        >
+          <div className="p-3 rounded bg-accent-blue/10 border border-accent-blue/30 text-xs text-text-secondary">
+            <p className="mb-2 font-bold text-accent-blue">SSID Management</p>
+            <p>Enter your Pocket Option SSID below. Clicking "Connect & Save" will verify the SSID and save it to your local environment file if valid.</p>
+          </div>
+
+          <SettingRow
+            label="Demo Account SSID"
+            description="Pocket Option SSID for Demo trading"
+          >
+            <div className="flex flex-col gap-2 w-full">
+              {/* Fix 5a: Show saved badge — survives tab switches (reads from store, not local state) */}
+              {hasDemoSsid && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent-green/10 border border-accent-green/30 w-fit">
+                  <span className="text-[10px] font-black text-accent-green">✓ Demo SSID saved</span>
+                  <span className="text-[9px] text-text-secondary opacity-60">— paste new to replace</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={demoSsid}
+                  onChange={(e) => setDemoSsid(e.target.value)}
+                  placeholder={hasDemoSsid ? 'SSID saved — paste new to replace' : 'Paste Demo SSID...'}
+                  className="flex-1 bg-card-bg border border-border-primary rounded px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+                />
+                <button
+                  onClick={handleConnectDemo}
+                  disabled={isConnecting || !demoSsid.trim()}
+                  className="px-4 py-2 bg-accent-blue/20 text-accent-blue border border-accent-blue/50 rounded text-xs font-bold hover:bg-accent-blue/30 disabled:opacity-50"
+                >
+                  {isConnecting ? '...' : 'Connect & Save'}
+                </button>
+              </div>
+              {isConnected && isDemoMode && <span className="text-[10px] text-accent-green font-bold">✓ Connected to Demo</span>}
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            label="Real Account SSID"
+            description="Pocket Option SSID for Real trading"
+          >
+            <div className="flex flex-col gap-2 w-full">
+              {/* Fix 5a: Show saved badge for real SSID */}
+              {hasRealSsid && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#ff4757]/10 border border-[#ff4757]/30 w-fit">
+                  <span className="text-[10px] font-black text-[#ff4757]">✓ Real SSID saved</span>
+                  <span className="text-[9px] text-text-secondary opacity-60">— paste new to replace</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={realSsid}
+                  onChange={(e) => setRealSsid(e.target.value)}
+                  placeholder={hasRealSsid ? 'SSID saved — paste new to replace' : 'Paste Real SSID...'}
+                  className="flex-1 bg-card-bg border border-border-primary rounded px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
+                />
+                <button
+                  onClick={handleConnectReal}
+                  disabled={isConnecting || !realSsid.trim()}
+                  className="px-4 py-2 bg-[#ff4757]/20 text-[#ff4757] border border-[#ff4757]/50 rounded text-xs font-bold hover:bg-[#ff4757]/30 disabled:opacity-50"
+                >
+                  {isConnecting ? '...' : 'Connect & Save'}
+                </button>
+              </div>
+              {isConnected && !isDemoMode && <span className="text-[10px] text-[#ff4757] font-bold">✓ Connected to Real</span>}
+            </div>
+          </SettingRow>
+
+          {connectError && (
+            <div className="p-3 rounded bg-[#ff4757]/10 border border-[#ff4757]/30 text-xs text-[#ff4757]">
+              Error: {connectError}
+            </div>
+          )}
+        </CollapsiblePanel>
+
         {/* User Account */}
-        <SettingsSection title="User Account" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-user-account"
+          title="User Account"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Display Name" description="How you appear in the platform">
             <input
               type="text"
@@ -253,10 +403,15 @@ const SettingsPanel = () => {
               className="bg-section-bg/50 border border-border-primary rounded px-3 py-1.5 text-xs text-text-secondary cursor-not-allowed w-48"
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         {/* Global Settings */}
-        <SettingsSection title="Global Settings" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-global"
+          title="Global Settings"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Theme" description="Overall appearance of the dashboard">
             <DropdownInput
               value={settings.global.theme}
@@ -339,10 +494,15 @@ const SettingsPanel = () => {
               onChange={() => updateSection('global', { autoStartGateway: !settings.global.autoStartGateway })}
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         {/* Automation & Execution */}
-        <SettingsSection title="Automation & Execution" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-automation"
+          title="Automation & Execution"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="History Wait Time" description="How long to wait for manual asset click (seconds)">
             <SliderInput
               value={settings.automation.historyWaitTime}
@@ -381,10 +541,15 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('automation', { retryDelay: val })}
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         {/* Analysis & Charting */}
-        <SettingsSection title="Analysis & Charting" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-analysis"
+          title="Analysis & Charting"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Data Source Mode" description="Controls how chart data is populated">
             <DropdownInput
               value={settings.analysis.dataSourceMode}
@@ -423,10 +588,15 @@ const SettingsPanel = () => {
               onChange={() => updateSection('analysis', { autoLoadIndicators: !settings.analysis.autoLoadIndicators })}
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         {/* AI Assistant */}
-        <SettingsSection title="AI Assistant" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-ai"
+          title="AI Assistant"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Response Verbosity" description="Detail level of AI analysis">
             <RadioGroup
               value={settings.ai.responseVerbosity}
@@ -550,10 +720,15 @@ const SettingsPanel = () => {
               onChange={(e) => updateSection('ai', { customInstructions: e.target.value })}
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         {/* Alerts & Notifications */}
-        <SettingsSection title="Alerts & Notifications" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-alerts"
+          title="Alerts & Notifications"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Enable AI Confirmation" description="Use AI to verify scanner alerts before dispatching">
             <NeomorphicSwitch
               checked={settings.alerts?.enableAIConfirm || false}
@@ -660,9 +835,14 @@ const SettingsPanel = () => {
               />
             </SettingRow>
           </div>
-        </SettingsSection>
+        </CollapsiblePanel>
 
-        <SettingsSection title="Screenshot & Markup" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-screenshot"
+          title="Screenshot & Markup"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Default Tool" description="Tool selected when screenshot editor opens">
             <DropdownInput
               value={settings.screenshot.defaultTool}
@@ -737,10 +917,15 @@ const SettingsPanel = () => {
               }
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         {/* Live Trading */}
-        <SettingsSection title="Live Trading" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-live-trading"
+          title="Live Trading"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Default Trade Amount" description="Amount pre-filled in the trade form (USD)">
             <SliderInput
               value={settings.liveTrading?.defaultAmount ?? 10}
@@ -812,10 +997,14 @@ const SettingsPanel = () => {
               }
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
-        <SettingsSection title="Risk Manager" defaultOpen={false}>
-
+        <CollapsiblePanel
+          id="settings-risk-manager"
+          title="Risk Manager"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Daily Max Trades" description="Maximum trades per day">
             <SliderInput
               value={settings.riskManager.dailyMaxTrades}
@@ -854,9 +1043,14 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('riskManager', { maxDrawdownPercent: val })}
             />
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
-        <SettingsSection title="Advanced" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-advanced"
+          title="Advanced"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="Reset All Settings" description="Clears local persistence and resets backend settings">
             <button
               type="button"
@@ -866,9 +1060,14 @@ const SettingsPanel = () => {
               <RotateCcw size={16} /> Reset All Settings
             </button>
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
-        <SettingsSection title="Asset Controls" defaultOpen={false}>
+        <CollapsiblePanel
+          id="settings-asset-controls"
+          title="Asset Controls"
+          defaultOpen={false}
+          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
+        >
           <SettingRow label="OTC Only" description="Persist the OTC-only filter in the Dashboard Data Source">
             <NeomorphicSwitch
               checked={assetFilterState?.filterMode === 'otc'}
@@ -929,13 +1128,14 @@ const SettingsPanel = () => {
                 : 'None'}
             </div>
           </SettingRow>
-        </SettingsSection>
+        </CollapsiblePanel>
 
         <div className="pt-8 border-t border-border-primary flex justify-between items-center">
           <div className="text-xs text-text-secondary">
             QuFLX v2.0.0-beta | Settings Version: {settings.version}
           </div>
           <button
+            onClick={handleExportConfig}
             className="flex items-center gap-2 px-4 py-2 bg-section-bg hover:bg-section-bg/80 text-text-primary rounded-lg transition-colors text-sm font-medium border border-border-primary shadow-sm"
           >
             <Download size={16} /> Export Config (JSON)

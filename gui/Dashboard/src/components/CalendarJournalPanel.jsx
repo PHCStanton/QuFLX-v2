@@ -1,15 +1,15 @@
-import { CollapsibleCard } from './Card';
+import CollapsiblePanel from './CollapsiblePanel';
 
 const CalendarJournalPanel = () => {
   return (
-    <div className="col-span-3 flex flex-col gap-2 h-full min-h-0">
-      <CollapsibleCard
-        className="p-3 rounded-lg h-full overflow-y-auto quflx-section-light"
-        headerClassName="mb-2"
-        headerLeft={<h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Calendar & Journal</h3>}
+    <div className="col-span-3 flex flex-col gap-2 h-full min-h-0 bg-dashboard-bg p-2 custom-scrollbar overflow-y-auto">
+      <CollapsiblePanel
+        id="calendar-journal-main"
+        title="Calendar & Journal"
+        className="flex-1 overflow-y-auto"
       >
         <p className="text-sm text-gray-400">Calendar and journal features will appear here.</p>
-      </CollapsibleCard>
+      </CollapsiblePanel>
     </div>
   );
 };

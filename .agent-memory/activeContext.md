@@ -1,168 +1,118 @@
 # Active Context
 
-## Current Focus
-- **Indicators & Regimes (Next Implementation Wave):** Implement overlays + oscillators on Lightweight Charts using backend-calculated series.
-- **AI Assistant (Incremental Integration):** Keep `/api/v1/ai/ask` usable now while building towards an AI Gateway + TradingContext schema enforcement.
-- **Voice UX (Dictation + Read-Back):** Voice dictation is in place for Ask AI Modal and AI Insights; browser TTS read-back added for AI outputs.
-- **Protocol Robustness:** Maintain explicit HTTP error semantics and consistent API shapes (`candles`) to prevent silent failures.
+## Current Focus (as of 28-02-2026)
+- **SSID Persistence**: 7 targeted fixes implemented and verified — gateway validator, /ssid-status endpoint, store badges, SettingsPanel Save&Close/Export, LiveTradingPanel indicator.
+- **Settings Panel**: "Save & Close" and "Export Config (JSON)" are now fully functional.
+- **Test Organization**: All test files have been moved from project root into `backend/tests/` and `tests/`. Path references fixed.
+- **Next Priorities**: Oscillator pane polish, Profile UX enhancements, AI TradingContext hardening.
 
-## Recent Changes
-- **History bootstrap now returns correct HTTP status codes** (4xx/5xx) with structured error bodies; removed semantic 200/ok:false failures.
-- **History API shape unified around `candles`** (GET includes `candles` and keeps legacy `data` for compatibility).
-- **Crosshair sync is unidirectional** (Main → Oscillators); removed oscillator → main pathway.
-- **ChartWorkspace refactor completed**:
-  - Static options extracted to `gui/Dashboard/src/config/chartOptions.js`.
-  - Orchestration moved into focused hooks and small UI components.
-  - `ChartWorkspace.jsx` reduced to ~240 LOC (<250 target met).
-- **Ask AI UX upgraded (Quick Modal + Panel thread):** removed `window.prompt()` from the Dashboard and added an in-app Ask AI modal with a handoff to AI Insights.
-- **Voice dictation wired (Modal + Insights):** realtime WS voice session used for dictation; transcript inserts into prompt flows.
-- **AI speech read-back added (Browser TTS):** AI messages can be read aloud via Web Speech API (SpeechSynthesis) with Settings controls.
-- **Ask AI response shaping improved:** modal vs insights mode and verbosity now influence backend system prompt and max token limits.
-- **Screenshot → AI linkage:** screenshot editor includes an Ask AI action that sends the current canvas (respects crop mode) into Ask AI.
-- **Annotated screenshot persistence:** latest annotated screenshot is persisted across refresh and supports “Image Source: Annotated”.
-- **Indicators Implemented**:
-  - **Support & Resistance**: Pivot-based levels (fractals) rendered as stepped lines (Red/Green).
-  - **EMA Cross-Over**: 3-EMA system (21/50/100) with colored lines (Blue/White/Red) for trend identification.
-  - Infrastructure in place for further overlays and oscillators.
-  - OTC ticker panel and 92% payout assets panel are wired to live data.
-  - Stream status and health badges are driven by tick recency and backend `backend_status` events.
-- **AI Caching & Token Reduction (Grok API):**
-  - Implemented prefix caching using `x-grok-conv-id` header tracking.
-  - Restructured prompts to separate static system context from dynamic market data, achieving ~85-90% cache hit rates on system instructions.
-  - Added cache telemetry (cached tokens, savings) to AI service logs.
-- **Alert Dispatcher Redesign & Enhancements (Scanners + Concurrency):**
-  - Added **MarketScanner** with technical indicators: ADX (Trend Strength), RSI (Momentum), Bollinger Bands (Volatility), and Fractal Pivots (Support/Resistance).
-  - Implemented **Confidence (Confluence) Scoring**: Signals are weighted (EMA Cross 20%, BB Breakout 30%, Squeeze 25%, etc.) to prioritize high-quality alerts.
-  - Added **Alerts & Notifications Settings UI**: Full control over AI confirmation, confidence thresholds, candle counts, and cooldowns from the Settings Panel.
-  - Added **Tick Logging Controls**: User-configurable chunk sizes (default 1000) and storage directories.
-  - Implemented **Concurrency Control**: Max 3 concurrent AI calls via Semaphore + configurable per-asset cooldown (default 5 min).
-  - Implemented **Ticker Synchronization**: Dispatcher whitelists assets via Redis `ticker:active`, synced with the Frontend Ticker Tape.
-- **AI Service Refactoring (Stability & Performance):**
-  - Integrated `AIService` into the FastAPI `lifespan` for clean startup/shutdown.
-  - Implemented a persistent `aiohttp.ClientSession` with a `TCPConnector` (keep-alive) to prevent socket exhaustion.
-  - Added **Retries & Error Handling**: Robust recovery for transient network issues or LLM timeouts.
-  - Standardized all API calls to absolute URLs (`localhost:8000`) in `settingsStore.js` to ensure reliable communication.
+## Recent Changes (chronological)
 
-- **Pocket Option Timeframe Automation Hardening**:
-  - Successfully resolved the "Span-vs-Anchor" click obstruction by implementing automatic parent-anchor traversal in `local_selenium_utils/selenium_ui_controls.py`.
-  - Hardened timeframe dropdown detection (`_is_open`) to specifically target the PocketOption `.items__list` container.
-  - Verified stability with a successful `TopdownSelectTest2` run confirming `ok: true` for the `M1` timeframe selection on the first attempt.
-  - Full implementation details available in `reports/implementation_report_topdown_select_25-12-31.md`.
+### Live Trading Panel Refinement
+- Added dedicated Demo/Real toggle in `LiveTradingPanel` using `isDemoMode` from `tradingStore`.
+- Implemented seamless mode switching (POST `/switch-mode`) with persistent SSIDs per mode.
+- OTC asset labels normalized from `EURUSD_otc` → `EURUSDOTC` across all UI components.
+- Asset dropdown sorted by payout percentage (descending). Asset selection synced across panels.
 
-- **Indicator Infrastructure (Backend)**:
-  - `backend/services/strategy/indicators.py` provides a comprehensive `TechnicalIndicatorsPipeline` with trend, momentum, volatility, and band indicators (SMA/EMA/WMA, MACD, Bollinger, RSI, Stoch, Williams %R, ROC, ATR, Supertrend, Schaff TC, DeMarker, CCI).
-  - `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md` defines how these indicators map to market regimes (trending with pullbacks, strong momentum, ranging, breakout, reversal) and which indicators are primary vs confluence per regime.
+### OTC Asset Expansion
+- Extended `ssid_service/routes.py` OTC asset categories to include: Cryptocurrencies, Commodities, Stocks, Indices (in addition to existing Currencies).
+- No disruption to existing Currencies handling.
 
-- **Indicator Integration Research (Frontend + Backend)**:
-  - `Research/research_lightweight-charts-indicators_2025-12-23.md` documents how to implement indicators with TradingView Lightweight Charts:
-    - Helper-based overlays (e.g., `applyMovingAverageIndicator`) attached to the main candlestick series.
-    - Separate chart instances for oscillator-style indicators, vertically stacked and time-scale synchronized.
-    - Clear rules for locking indicators to timeframe and visible range.
+### Statement Analysis Page
+- Built `/statement-analysis` full-page route (`StatementAnalysisPage.jsx`).
+- Allows CSV upload, displays trading performance metrics, AI coaching insights.
+- Accessible via "Statements & Logs" group in the ProfileMenu dropdown.
 
-- **AI Integration Research (xAI / Grok)**:
-  - `Research/research_ai_integration_vision_files_2025-12-20.md` defines the "Context Injection" architecture for xAI:
-    - Data context: JSON snapshot of candles, indicators, positions, regimes.
-    - Visual context: base64 chart screenshots captured in the Dashboard and sent with the prompt.
-    - File/historical context: on-demand loading of history/logs from controlled directories.
-  - We have high-level plans for:
-    - An `AI Gateway` backend module that centralizes all xAI calls (chat + vision + voice).
-    - A `TradingContext` schema built from existing strategy/indicator modules.
-    - Frontend hooks (`useChartCapture`) and an Ask-AI panel that talk to `/api/v1/ai/ask`.
+### Strategy Lab Integration
+- `StrategyLabPanel.jsx` supports CSV upload and file management.
+- `marketStore.selectedStrategyFileId` tracks active strategy file.
+- `ChartWorkspace` fetches and renders strategy-lab OHLC data when a file is selected.
+- `ChartHeader` CSV dropdown selects strategy files.
+
+### Oscillator Panes
+- `OscillatorChart.jsx` renders secondary charts (RSI, MACD, Stochastic, CCI).
+- `OscillatorPanel.jsx` manages panel visibility and toggle controls.
+- Time-scale synchronized with main chart via `lightweight-charts` API.
+
+### Profile System (Full CRUD)
+- `backend/services/gateway/routes/profiles.py`: Full CRUD + active profile management.
+- `profileStore.js`: Zustand store with debounced settings sync to active profile.
+- `ProfileMenu.jsx`: UI for creating, switching, renaming profiles with avatar and display name.
+- `ProfilePicEditorModal.jsx`: Avatar editing.
+- Profiles stored in `data/profiles/*.json` (one file per profile).
+
+### SSID Persistence Fixes (28-02-2026)
+- **Fix 1** (`trading.py`): `ConnectRequest.ssid` changed to `default=""` — validator skips empty SSID.
+- **Fix 2** (`ssid_service/routes.py`): New `GET /ssid-status` endpoint — returns `{hasDemoSsid, hasRealSsid}` booleans only.
+- **Fix 3** (`trading.py`): Gateway proxy for `/ssid-status`.
+- **Fix 4** (`tradingStore.js`): `hasDemoSsid`/`hasRealSsid` state + `fetchSsidStatus()` action.
+- **Fix 5a** (`SettingsPanel.jsx`): SSID saved badges on mount; smart placeholder text.
+- **Fix 5b** (`LiveTradingPanel.jsx`): "✓ Saved SSID ready" indicator; `fetchSsidStatus()` on mount.
+- **Fix 6** (`SettingsPanel.jsx`): "Save & Close" — saves settings + profile flush + toast + navigates to `'analysis'` tab.
+- **Fix 7** (`SettingsPanel.jsx`): "Export Config (JSON)" — triggers browser download of settings JSON.
+
+### Test File Reorganization
+- Moved 10 `test_*.py` + `smoke_test.py` from root → `backend/tests/` (8 files) and `tests/` (2 files).
+- Moved 7 `verify_*.py` / `check_*.py` / `debug_*.py` / `diagnose_*.py` → `backend/tests/` (3 files) and `tests/` (4 files).
+- All files with `Path(__file__)` root resolution corrected to use proper `.parents[N]` offset.
 
 ## Current State
-- **Backend**:
-  - Collector/Strategy/Gateway are functioning as described in `systemPatterns.md`.
-  - History endpoints are now explicit and reliable:
-    - `POST /api/v1/history/bootstrap-history` returns non-200 on failure with `HistoryErrorResponse`.
-    - `GET /api/v1/history/{asset}` returns `candles` (and legacy `data`) for a single frontend parsing path.
-  - Indicator pipeline is implemented and documented; regime mapping doc exists but regime detection logic is not yet wired into runtime.
-  - AI integration is partially wired:
-    - `/api/v1/ai/ask` exists and supports `conversation_id` for prefix caching.
-    - Voice WS relay endpoint exists for realtime voice sessions (currently used for dictation).
-    - AI service includes telemetry for token usage and cache performance.
-  - Settings architecture foundation implemented:
-    - Versioned settings schema with persisted JSON in `data/settings/settings.json`.
-    - `GET /api/v1/settings` and `PUT /api/v1/settings` endpoints in the Gateway for centralized configuration.
-    - **Recommended Platform Settings Scaffolding** provisioned in `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`, detailing modular sections for Global, Automation, Analysis, AI Behavioral, and Risk management settings.
-  - Local Ops endpoints implemented (local-only, disabled by default):
-    - `POST /api/v1/ops/chrome/start`
-    - `POST /api/v1/ops/stream/start`
-    - `POST /api/v1/ops/stream/pause`
-    - `GET /api/v1/ops/stream/status`
-  - Pocket Option timeframe sync path is now **stable** and verified.
 
-- **Frontend**:
-  - Core Dashboard is stable for streaming and basic visualization.
-  - ChartWorkspace is now modular and smaller (<250 LOC) to reduce regression risk.
-  - Indicator visualization (overlays + oscillator panes) is still the next major feature implementation.
-  - Ask AI is implemented with two UX surfaces:
-    - Ask AI modal (quick assist + voice dictation → transcript insert + “thinking” indicator + optional TTS read-back).
-    - AI Insights panel (threaded chat + input box + voice dictation + Speak buttons).
-  - Screenshot editor includes an Ask AI action to analyze annotated screenshots.
-  - Latest annotated screenshot is persisted across refresh to support “Annotated” image source.
-  - A dedicated `useSettingsStore` (Zustand) and `settingsClient` are in place to manage Global/User/AI + per-tab settings separately from `useMarketStore`.
-  - TopBar **Chrome** and **Stream** badges are now clickable controls backed by Gateway ops endpoints.
-  - **MarketStore Sync**: Emits `update_active_ticker` to sync background monitoring (Alert Dispatcher) with frontend UI ticker state.
+### Backend
+- Collector / Strategy / Gateway are operational.
+- SSID Service (`ssid_service`) is running as a standalone FastAPI microservice.
+- History endpoints are explicit and reliable (`POST .../bootstrap-history`, `GET .../history/{asset}`).
+- Profile system fully operational — CRUD, active profile, settings sync.
+- AI Service integrated into Gateway lifespan with persistent `aiohttp` client.
+- `/api/v1/ai/ask` supports prefix caching via `x-grok-conv-id`.
+- Voice WS relay at `/api/v1/ai/voice/realtime`.
+- Settings: `GET/PUT /api/v1/settings` + versioned `data/settings/settings.json`.
+- Local Ops endpoints implemented (local-only, opt-in via `QFLX_ENABLE_OPS=1`).
+- `GET /api/v1/trading/ssid-status` — new endpoint for SSID config status.
+
+### Frontend
+- Core Dashboard stable for streaming and visualization.
+- `ChartWorkspace.jsx` is modular (<250 LOC).
+- Overlay indicators on main chart: SuperTrend, Bollinger Bands, EMA Cross-Over (21/50/100), Support/Resistance.
+- Oscillator panes: RSI, MACD, Stochastic, CCI — time-scale synchronized.
+- Ask AI: Modal (quick assist) + AI Insights Panel (thread).
+- Voice: dictation in Modal + Insights; TTS read-back (browser + xAI voice).
+- Settings Panel: fully wired (Save & Close → profile flush + toast + navigate; Export Config → JSON download).
+- SSID saved badges in Settings Panel and LiveTradingPanel.
+- Profile system UI: ProfileMenu, ProfilePicEditorModal, profile sync.
+- Statement Analysis page at `/statement-analysis`.
+- Strategy Lab: CSV upload, chart integration, file selector in ChartHeader.
+- `MarketStore`: emits `update_active_ticker` for Alert Dispatcher whitelist sync.
+- Supplementary pages (AlertDispatchPage, CollectorPage, DevLogsPage, VoiceParticlePage, KnowledgeBase).
+
+## Active Files (Key)
+
+### Frontend
+- `gui/Dashboard/src/store/marketStore.js` — market state, socket, tickers, activeTab
+- `gui/Dashboard/src/store/settingsStore.js` — platform settings
+- `gui/Dashboard/src/store/tradingStore.js` — live trading + SSID status
+- `gui/Dashboard/src/store/profileStore.js` — profile CRUD + settings sync
+- `gui/Dashboard/src/components/SettingsPanel.jsx` — settings UI (Save&Close, Export, SSID badges)
+- `gui/Dashboard/src/components/LiveTradingPanel.jsx` — trading UI (SSID indicator, connect, trade)
+- `gui/Dashboard/src/components/Dashboard.jsx` — layout orchestrator
+- `gui/Dashboard/src/components/ContextPanelRouter.jsx` — tab → panel routing
+- `gui/Dashboard/src/components/ChartWorkspace.jsx` — chart core
+- `gui/Dashboard/src/components/ProfileMenu.jsx` — profile switcher UI
+
+### Backend
+- `backend/services/gateway/main.py` — Gateway startup, lifespan, routes
+- `backend/services/gateway/routes/trading.py` — SSID proxy (Fix 1, Fix 3)
+- `backend/services/gateway/routes/profiles.py` — profile CRUD
+- `backend/services/ssid_service/routes.py` — SSID Service (Fix 2)
+- `backend/services/ssid_service/connector.py` — PocketOption WS connector
+- `backend/services/strategy/regime_detector.py` — market regime detection
+- `backend/services/strategy/indicators.py` — `TechnicalIndicatorsPipeline`
+- `backend/scripts/otc_alert_dispatch.py` — Alert Dispatcher with MarketScanner
 
 ## Next Steps
-1. **Indicator Visualization Implementation (Frontend + Gateway)**
-   - Implement oscillator panes (RSI, MACD histogram, Stochastic, CCI) synchronized with main time scale.
-   - Refine overlay interactions (e.g., toggle visibility per series).
-
-2. **AI Assistant Backend Hardening (Gateway + AI Service)**
-   - Enforce strict request schema for `/api/v1/ai/ask` (pydantic model + size limits).
-   - Improve structured error responses and reduce sensitive logging.
-
-3. **Voice Conversation (Optional Upgrade)**
-   - If desired, add realtime conversation mode (audio output) in AI Insights.
-   - Keep modal voice as dictation-only; use read-back for modal answers.
-
-3. **AI Gateway + TradingContext (Backend)**
-   - Introduce a dedicated AI Gateway module and a TradingContext builder.
-   - Keep Gateway `/api/v1/ai/ask` as a thin adapter.
-
-4. **Settings modular layout (Frontend)**
-   - Implement modular settings UI per `v2_Dev_Docs/Recommended_Platform_Settings_Scaffolding.md`.
-
-## Active Files
-- Frontend:
-  - `gui/Dashboard/src/store/marketStore.js`
-  - `gui/Dashboard/src/store/settingsStore.js`
-  - `gui/Dashboard/src/components/Dashboard.jsx`
-  - `gui/Dashboard/src/components/AssetPanel.jsx`
-  - `gui/Dashboard/src/components/TopBar.jsx`
-  - `gui/Dashboard/src/components/SettingsPanel.jsx`
-  - `gui/Dashboard/src/utils/useTextToSpeech.js`
-  - `gui/Dashboard/README.md`
-  - `gui/Dashboard/src/components/ChartWorkspace.jsx`
-  - `gui/Dashboard/src/components/ChartWorkspaceOverlays.jsx`
-  - `gui/Dashboard/src/hooks/useChartWorkspaceIndicators.js`
-  - `gui/Dashboard/src/hooks/useChartWorkspaceHeaderControls.js`
-  - `gui/Dashboard/src/config/chartOptions.js`
-  - (Planned) Settings UI components.
-
-- Backend:
-  - `backend/services/gateway/main.py`
-  - `backend/services/gateway/routes/ai_voice.py`
-  - `backend/services/gateway/routes/ops.py`
-  - `backend/services/gateway/routes/history.py`
-  - `backend/services/gateway/routes/settings.py`
-  - `backend/models/errors.py`
-  - `local_selenium_utils/selenium_ui_controls.py`
-  - `capabilities_v2/timeframe_menu.py`
-  - `backend/services/strategy/indicators.py`
-  - `backend/services/strategy/strat_docs/Indicators_vs_Market_Structures.md`
-  - `backend/scripts/otc_alert_dispatch.py` (Redesigned with Technical Scanners)
-  - `backend/scripts/How_it_Works.md` (Dispatcher Documentation)
-  - `Research/research_lightweight-charts-indicators_2025-12-23.md`
-  - `Research/research_ai_integration_vision_files_2025-12-20.md`
-
-
-## Topdown v2 Timeframe & Collection Status
-- v2 selenium capabilities for PocketOption timeframe automation are now **stable and verified** under `capabilities_v2/`:
-  - `timeframe_menu.py` provides low-level dropdown open + label selection with span-to-a traversal.
-  - `timeframe_select_sync.py` wraps `timeframe_menu` with retries, chart-focus recovery, and detailed per-label diagnostics.
-  - `topdown_select_test_2.py` orchestrates session validation and confirmed robust timeframe selection.
-- Full implementation summary in `reports/implementation_report_topdown_select_25-12-31.md`.
-- Next incremental steps:
-  - Use `collect_history` with `use_tf_sync=true` to build multi-day datasets for v2 strategy and indicator experiments.
+1. **Oscillator pane polish** — toggle visibility per pane, persist visibility pref in settings.
+2. **Profile UX** — import/export profile JSON (round-trip with Export Config).
+3. **AI TradingContext hardening** — enforce strict Pydantic schema + size limits on `/api/v1/ai/ask`.
+4. **Risk Manager Panel** — currently a placeholder (`RiskManagerPanel.jsx`), needs implementation.
+5. **Calendar & Journal** — currently a placeholder (`CalendarJournalPanel.jsx`), needs implementation.
+6. **Comprehensive integration tests** — especially for SSID service, profile sync, and trading flow.

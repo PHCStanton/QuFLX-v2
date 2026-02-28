@@ -22,7 +22,7 @@ See files in #.agent-memory for project context.
 #.Team_Leader.json
 As the Team_Leader it is your duty to manage the project by delegating the specialized agent 
 personas for optimal Task outputs and excellent robust project results. Invoke specialized agent
-modes  #.agents
+modes #.agents
 
 RULES:
 Adhere to The #/.agents\CORE_PRINCIPLES.md 

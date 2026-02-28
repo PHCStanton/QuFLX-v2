@@ -1,13 +1,19 @@
-import Card from './Card';
+import CollapsiblePanel from './CollapsiblePanel';
 import { TrendingUp } from 'lucide-react';
 
 const StatsPanel = () => {
   return (
-    <Card className="h-40 p-4 rounded-lg grid grid-cols-3 gap-4">
-      <StatCard label="Market Condition" value="Volatile" trend="up" />
-      <StatCard label="Signal Strength" value="85%" trend="neutral" />
-      <StatCard label="Predicted Direction" value="BULLISH" trend="up" color="text-accent-green" />
-    </Card>
+    <CollapsiblePanel
+      id="stats-main"
+      title="Market Statistics"
+      className="bg-dashboard-bg"
+    >
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard label="Market Condition" value="Volatile" trend="up" />
+        <StatCard label="Signal Strength" value="85%" trend="neutral" />
+        <StatCard label="Predicted Direction" value="BULLISH" trend="up" color="text-accent-green" />
+      </div>
+    </CollapsiblePanel>
   );
 };
 

@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 from pydantic import BaseModel, Field, ConfigDict
 
 router = APIRouter()
@@ -133,7 +133,7 @@ async def get_platform_settings():
     return load_settings()
 
 @router.put("")
-async def update_platform_settings(payload: Dict[str, Any] = Body(...)):
+async def update_platform_settings(request: Request, payload: Dict[str, Any] = Body(...)):
     """Update platform settings with validation."""
     try:
         # Validate payload against Pydantic model

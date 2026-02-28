@@ -1,4 +1,4 @@
-import Card from './Card';
+import CollapsiblePanel from './CollapsiblePanel';
 import ToggleSwitch from './ToggleSwitch';
 import useMarketStore from '../store/marketStore';
 
@@ -6,8 +6,11 @@ const AutomationsPanel = () => {
   const { automations, toggleAutomation } = useMarketStore();
 
   return (
-    <Card className="p-4 rounded-lg h-full">
-      <h3 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wider">Automations</h3>
+    <CollapsiblePanel 
+      id="automations-panel"
+      title="Automations"
+      className="bg-dashboard-bg"
+    >
       <div className="space-y-2">
         <div className="flex items-center justify-between p-2 bg-gray-800 rounded border border-gray-700">
           <span className="text-sm">Auto-Select Favorites</span>
@@ -24,7 +27,7 @@ const AutomationsPanel = () => {
           />
         </div>
       </div>
-    </Card>
+    </CollapsiblePanel>
   );
 };
 

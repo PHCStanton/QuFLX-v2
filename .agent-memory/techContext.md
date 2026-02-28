@@ -1,123 +1,117 @@
 # Technical Context
 
 ## Technologies Used
-- **Python 3.11+**: Backend services (Collector, Strategy, Gateway, future AI Gateway).
-- **FastAPI**: API Gateway framework.
+- **Python 3.11+**: Backend services (Collector, Strategy, Gateway, SSID Service, AI).
+- **FastAPI**: API Gateway and SSID Service framework.
 - **Redis**: Message broker and in-memory database.
 - **React + Vite**: Frontend framework.
-- **JavaScript (JS/JSX)**: Dashboard codebase is currently JS/JSX (TypeScript not adopted in `src/`).
-- **Zustand**: Frontend state management.
-- **Lightweight Charts**: Financial charting library (price chart + planned oscillator panes).
-- **Pydantic**: Data validation and settings management.
-- **Selenium**: Browser automation for data collection.
+- **JavaScript (JS/JSX)**: Dashboard codebase (`src/` is JS/JSX — TypeScript not adopted).
+- **Zustand**: Frontend state management (multiple stores).
+- **Lightweight Charts**: Financial charting library (price + oscillator panes).
+- **Pydantic v2**: Data validation and settings management. NOTE: avoid deprecated class-based `Config`; use `model_config = ConfigDict(...)`.
+- **Selenium**: Browser automation for data collection (PocketOption WebSocket interception).
 - **xAI API (Grok)**: External AI service for text, vision, and voice assistants.
-- **Web Speech API (Browser)**: SpeechSynthesis for TTS read-back of AI answers.
+- **Web Speech API (Browser)**: SpeechSynthesis for TTS read-back.
+- **pocketoptionapi**: Thin wrapper inside `ssid_service/` for WS-based trade execution.
 
 ## Development Setup
-1. **Backend**:
-   - `python -m venv venv`
-   - `pip install -r requirements.txt`
-   - Run services via `python -m backend.services.[service].main`
-   - Configure xAI via environment variables (e.g. `XAI_API_KEY`) and never hardcode secrets.
+1. **Backend / Conda**:
+   - Conda env: `QuFLX-v2` — always activate with `conda activate QuFLX-v2`.
+   - Run services: `python -m backend.services.[service].main`
+   - Backend tests: `python -m pytest -q` (discovers `tests/` and `backend/tests/`).
+   - **PowerShell note**: avoid `&&`; run commands on separate lines or use `;`.
 2. **Frontend**:
-   - `npm install`
-   - `npm run dev`
-   - PowerShell note: prefer running commands on separate lines (avoid `&&`).
+   - `npm install` → `npm run dev` in `gui/Dashboard/`
+   - Vite port: `5173` (may shift to `5174+` if in use — check `Local:` URL in output).
 3. **Infrastructure**:
-   - Redis running on default port 6379.
+   - Redis on default port `6379`.
    - Chrome with DevTools Protocol enabled for the Collector.
+4. **Environment Variables** (`.env` at project root):
+   - `QFLX_SSID_DEMO` / `QFLX_SSID_REAL`: Persisted Pocket Option SSIDs.
+   - `QFLX_SSID_SERVICE_PORT` / `QFLX_SSID_PROXY_TIMEOUT_SECONDS`: SSID service config.
+   - `QFLX_ENABLE_OPS=1`: Enable local ops endpoints.
+   - `QFLX_OPS_TOKEN`, `QFLX_CHROME_PATH`, `QFLX_CHROME_URL`: Ops config.
+   - `XAI_API_KEY`: xAI/Grok API key.
+
+## Frontend Store Architecture (Zustand)
+All stores live in `gui/Dashboard/src/store/`:
+- **`marketStore.js`**: Market data, tickers, active tab (`activeTab`/`setActiveTab`), socket.IO, asset whitelist, chart/indicator state, stream health, strategy-lab file selection.
+- **`settingsStore.js`**: Global/User/AI/per-tab settings. Syncs with `GET/PUT /api/v1/settings`. Separate from `useMarketStore`.
+- **`tradingStore.js`**: Live trading state — connection (`isConnected`, `isDemoMode`, `hasDemoSsid`, `hasRealSsid`), balance, trade execution, trade history, OTC assets, `fetchSsidStatus()`.
+- **`profileStore.js`**: Multi-profile management. Calls `GET/POST/PUT/DELETE /api/v1/profiles`. Auto-syncs active profile settings via a `settingsStore` subscription.
+- **`userStore.js`**: Minimal user identity (display name, avatar).
+- **`persistMiddleware.js`**: Shared Zustand `persist` middleware wrapper using `localStorage`. Key prefix: `quflx-v2-*`.
+
+## Gateway API Endpoints Summary
+All prefixed with `/api/v1/`:
+| Route Prefix | File | Purpose |
+|---|---|---|
+| `/history` | `history.py` | Bootstrap + fetch OHLC candles |
+| `/trading` | `trading.py` | Proxy to ssid_service (connect, trade, balance, switch-mode, ssid-status) |
+| `/assets` | `assets.py` | OTC asset listing + refresh (92% payout sweep) |
+| `/profiles` | `profiles.py` | Multi-profile CRUD + active profile |
+| `/settings` | `settings.py` | Global platform settings (versioned JSON) |
+| `/ai` | `ai.py` | AI ask endpoint + conversation management |
+| `/ai/voice` | `ai_voice.py` | WebSocket voice relay to xAI realtime |
+| `/strategy` | `strategy.py` | Strategy Lab — regime detection, OHLC data upload |
+| `/ops` | `ops.py` | Local-only Chrome + Stream controls |
+| `/indicators` | `indicators.py` | Indicator series for charts |
+| `/alerts` | `alerts.py` | Alert dispatch log access |
+| `/screenshots` | `screenshots.py` | Screenshot persistence |
+| `/timeframe` | `timeframe.py` | Selenium timeframe sync |
+| `/dev-logs` | `dev_logs.py` | Dev log streaming |
+
+## SSID Service (ssid_service)
+- Standalone FastAPI microservice in `backend/services/ssid_service/`.
+- **Endpoints**: `POST /connect`, `POST /trade`, `GET /balance`, `POST /switch-mode`, `GET /ssid-status`, `GET /assets`.
+- `GET /ssid-status` returns `{hasDemoSsid: bool, hasRealSsid: bool}` — booleans only, no raw SSID exposure.
+- SSIDs are persisted to `.env` (`QFLX_SSID_DEMO` / `QFLX_SSID_REAL`) via `_persist_ssid()`.
+- `app.state.ssid_demo` / `app.state.ssid_real` hold in-memory copies loaded from `.env` at startup.
+- Fallback chain: if `ConnectRequest.ssid == ""`, the service falls back to in-memory env SSID.
+- Gateway proxies all ssid_service calls via `_proxy_request()` in `routes/trading.py`.
+- Gateway `ConnectRequest.ssid` is `default=""` (empty allowed). Validator skips format check when empty.
+
+## Profile System
+- Profiles stored as JSON files in `data/profiles/<profileId>.json`.
+- Active profile tracked in `data/profiles/active_profile.json`.
+- Each profile contains `{ id, name, settings, createdAt, updatedAt }`.
+- `profileStore.js` auto-syncs settings changes (debounced 800ms) to the active profile.
+- "Save & Close" in SettingsPanel does an immediate `profileStore.updateProfile()` (no debounce wait) before navigating away.
+- Export Config (JSON) triggers a browser download of `QuFLX_Settings_[ProfileName]_[date].json`.
+
+## Test Organization
+- `pytest.ini`: `pythonpath = .`, `testpaths = tests backend/tests`, `python_files = test_*.py`.
+- `backend/tests/`: Backend unit/integration tests (strategy, API, indicators, ssid, trading proxy).
+- `tests/`: Infra/integration/capabilities tests (smoke, Redis checks, capabilities_v2, Selenium debug).
+- All moved test files have corrected `Path(__file__).resolve().parents[N]` for accurate root resolution.
 
 ## Dashboard API Base URL
-- Dashboard API clients support `VITE_API_BASE_URL` (fallback `http://localhost:8000`).
-- Use this to avoid hardcoding localhost in multi-env builds.
-
-## Dashboard Dev Server Ports
-- Vite may move from `5173` to `5174+` if the port is in use. Always use the printed `Local:` URL from the dev server output.
-
-## Local Ops Controls (Gateway)
-
-- Gateway supports local-only ops endpoints for starting Chrome and starting/pausing the Collector.
-- Config via environment variables:
-  - `QFLX_ENABLE_OPS=1` to enable ops (disabled by default).
-  - Optional `QFLX_OPS_TOKEN` to require `X-QFLX-OPS-TOKEN` header.
-  - Optional `QFLX_CHROME_PATH` to override Chrome executable detection.
-  - Optional `QFLX_CHROME_URL` to control the startup URL.
-- Chrome profile directory used by the ops launcher is `Chrome_profile/` at project root.
-
-## Dependencies
-- `fastapi`, `uvicorn`, `python-socketio`: Gateway.
-- `redis`: Redis client.
-- `selenium`: Chrome automation.
-- `pandas`, `pandas-ta` (optional), `talib` (optional): Indicator calculation.
-- `lightweight-charts`: Frontend charting.
-- `xai-sdk` or HTTP client: Integration with xAI chat/vision/voice APIs.
-
-- Realtime voice WS relay uses the same key source (Authorization bearer) and connects to `wss://api.x.ai/v1/realtime`.
-- **Grok Prefix Caching**: Backend injects `x-grok-conv-id` into Grok API requests to enable caching of static prompt prefixes (System Prompts).
-- **Persistent AI Client**: `AIService` utilizes a persistent `aiohttp.ClientSession` with a `TCPConnector` (keep-alive) and managed lifecycle via FastAPI lifespan.
-
-## AI Speech Read-Back (Frontend)
-- AI answer speech uses browser `speechSynthesis` with Settings:
-  - `ai.voiceReadBackEnabled`
-  - `ai.voiceReadBackRate`
-  - `ai.voiceReadBackPitch`
-  - `ai.voiceReadBackVoiceURI`
-
-## Settings & Configuration
-- Gateway exposes `GET /api/v1/settings` and `PUT /api/v1/settings` as the central API for platform settings, backed by a versioned JSON file in `data/settings/settings.json`.
-- Dashboard uses a dedicated Zustand `useSettingsStore` (separate from `useMarketStore`) to manage Global, User Profile, AI Assistant, and per-tab settings in a single, structured object.
-- A small `settingsClient` module in the Dashboard handles HTTP communication with the settings endpoints.
- - `automation.historyWaitTime` is now standardized to 1–8 seconds across UI and backend validation.
-- **Alerts & Notifications**: Managed via the Settings UI and passed to `otc_alert_dispatch.py` via dynamic environment variables (`ENABLE_AI_CONFIRM`, `TICK_CHUNK_SIZE`, etc.).
-- **Tick Logging**: Supports chunked CSV persistence (default 1000 ticks/file) and Redis-mode subscription.
-
-## Technical Constraints
-- **Latency**: Must process ticks and update charts within ~100ms for a responsive UI.
-- **Chrome Dependency**: The Collector requires a running Chrome instance with DevTools Protocol enabled.
-- **Redis Availability**: The system cannot function without Redis.
-- **External AI Calls**: xAI requests are network-bound and must not block the core trading loop. AI integration should be best-effort and tolerant of latency/failures.
-- **Background Service Sync**: Services like Alert Dispatcher depend on Redis channel `ticker:active` for asset whitelisting from the frontend.
-
-## Layout & Resizing Strategy
-- **Flexbox Architecture:** The Dashboard uses a nested flexbox layout for dynamic panel sizing.
-- **Synchronized Resizing:** Implemented using `ResizeObserver` in `ChartContainer` and `OscillatorChart` to ensure charts re-render and adjust their dimensions immediately when their parent containers change size (e.g., during workspace dragging).
-- **Time-Scale Synchronization:** Oscillator charts sync their visible range with the main chart via the `lightweight-charts` API, with an initial sync delay to ensure cross-component readiness.
+- `getApiBaseUrl()` from `api/apiBase.js` uses `VITE_API_BASE_URL` env var (fallback `http://localhost:8000`).
+- All store network calls use `getApiBaseUrl()` — never hardcode `localhost`.
 
 ## Chart & Indicator Conventions
-- **Intraday Candles**: Use UNIX timestamps in seconds for `time` values when rendering intraday series.
-- **Time Axis**: Enable intraday display using `timeScale.timeVisible` (and keep `secondsVisible` disabled for `1m`).
-- **Indicators**:
-  - Backend is the canonical source for indicator values and market regimes (via `TechnicalIndicatorsPipeline` and strategy docs).
-  - Frontend uses Lightweight Charts to visualize:
-    - Overlay indicators (e.g. MAs, Bollinger, Supertrend) on the main pane.
-    - Oscillators (e.g. RSI, Stoch, MACD) in separate, time-synchronized panes.
+- **Intraday Candles**: UNIX timestamps in seconds for `time` values.
+- **Overlays** (on main pane): SuperTrend, Bollinger Bands, EMA Cross-Over (21/50/100), Support/Resistance (pivot fractals).
+- **Oscillators** (separate synced panes): RSI, MACD histogram, Stochastic, CCI — time-scale synchronized with main chart via `lightweight-charts` API.
+- `ChartWorkspace.jsx` is the orchestrator (<250 LOC target); logic extracted to hooks and sub-components.
+- Static chart options in `gui/Dashboard/src/config/chartOptions.js`.
+
+## Layout & Navigation
+- Sidebar tabs: `Dashboard`, `Analysis`, `AI Insights`, `Live Trading`, `Risk Manager`, `Strategy Lab`, `Calendar & Journal`, `Settings`.
+- `activeTab` in `marketStore`: drives `ContextPanelRouter.jsx` to render the correct panel.
+- `setActiveTab('analysis')` navigates away from Settings after "Save & Close".
+- Tabs with "Statements & Logs" grouping in ProfileMenu: `Alert Dispatch Logs`, `Statement Analysis`, `Collector`, `Dev Logs`.
+
+## AI & Grok Integration
+- `x-grok-conv-id` header enables Grok API prefix caching (~85% savings on system prompt tokens).
+- AI Service uses persistent `aiohttp.ClientSession` with `TCPConnector` (keep-alive), managed via FastAPI lifespan.
+- Voice WS relay: Browser ↔ Backend (local WS for PCM audio) ↔ xAI `wss://api.x.ai/v1/realtime`.
 
 ## Coding Standards
-- **Python**: PEP 8, Type Hints (mypy), Pydantic models for all data structures and xAI request/response schemas.
-- **TypeScript**: Strict mode, functional components, hooks for logic, clear separation between store and view.
-- **AI Integration**: All xAI calls go through a dedicated AI Gateway module; no direct HTTP calls to xAI from scattered modules.
-
-## Testing Requirements
-- **Unit Tests**: For core logic (parsers, indicators, regime detection, AI Gateway request shaping).
-- **Integration Tests**: Verify Redis pub/sub flow and Gateway endpoints (including `/api/v1/ai/ask`).
-- **End-to-End Tests**: Verify full pipeline from Chrome to Chart; later, add flows that include Ask-AI interactions to ensure context injection wiring is correct.
-
-## Current Build/QA Commands
-- Backend tests: `python -m pytest -q`
-- Dashboard lint: `npm run lint`
-- Dashboard build: `npm run build`
-- Dashboard E2E smoke: `npm run test:qa`
+- **Python**: PEP 8, type hints, Pydantic v2 models. No `&&` in PowerShell commands.
+- **JS/JSX**: Functional components, hooks for logic, clear store/view separation.
+- **AI Integration**: All xAI calls go through `backend/services/ai/` — no direct HTTP calls from scattered modules.
 
 ## Known Warnings / Follow-ups
-- Pydantic v2 deprecation warnings are present (class-based `Config`); migrate incrementally to `ConfigDict`.
-- Vite may warn that `settingsStore.js` is both statically and dynamically imported; this is informational and not a build failure.
-
-
-## Selenium Capabilities for PocketOption Topdown v2
-- v2 Selenium capabilities under `capabilities_v2/` formalize the PocketOption automation layer:
-  - `session_foundations.py`: validates that the current Chrome session is on a suitable PocketOption layout and that key UI elements (chart, favorites bar, timeframe control) are present.
-  - `favorites_bar.py`: provides `reset_to_left`, `scroll_right`, `get_visible_favorites`, and `click_favorite` actions over the PocketOption favorites bar.
-  - `timeframe_menu.py`: encapsulates timeframe dropdown opening and label selection, including alias normalization and iframe-aware search.
-  - `timeframe_select_sync.py`: adds retries, chart-focus recovery, and diagnostics around `timeframe_menu` to stabilize timeframe selection.
-  - `history_collector.py` + `collect_history_loop.py`: bridge from Selenium-attached Chrome to WebSocket-based candle collection and CSV output.
-- `capabilities_v2/runner.py` exposes these via a generic CLI entry point, and the Gateway is expected to call `runner.py` rather than importing Selenium code directly.
+- Pydantic v2 deprecation: migrate class-based `Config` to `model_config = ConfigDict(...)` incrementally.
+- Vite may warn that `settingsStore.js` is both statically and dynamically imported (informational only).

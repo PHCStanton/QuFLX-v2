@@ -9,8 +9,6 @@ import { normalizeSpecificAsset, parseSpecificAssets } from '../utils/assetUtils
 const AssetPayoutPanel = ({
     showControls = true,
     initialTopHeight = 220,
-    defaultIsTopCollapsed = false,
-    defaultIsBottomCollapsed = false,
     onUseForTrade = null, // Integration prop
     className = ""
 }) => {
@@ -40,6 +38,8 @@ const AssetPayoutPanel = ({
         checkAlertsStatus,
         enableTickLogging,
         toggleTickLogging,
+        favorites,
+        toggleFavorite,
     } = useMarketStore();
 
     // Poll Alerts Status
@@ -59,8 +59,6 @@ const AssetPayoutPanel = ({
     const otcOnly = assetFilterState?.filterMode === 'otc';
 
     const [topHeight, setTopHeight] = useState(initialTopHeight);
-    const [isTopCollapsed, setIsTopCollapsed] = useState(defaultIsTopCollapsed);
-    const [isBottomCollapsed, setIsBottomCollapsed] = useState(defaultIsBottomCollapsed);
 
     const containerRef = useRef(null);
     const resizeHandleRef = useRef(null);
@@ -79,7 +77,6 @@ const AssetPayoutPanel = ({
 
         const applyHalfSplit = () => {
             if (hasUserResizedRef.current) return;
-            if (isTopCollapsed || isBottomCollapsed) return;
 
             const containerHeight = container.getBoundingClientRect().height;
             if (!Number.isFinite(containerHeight) || containerHeight <= 0) return;
@@ -109,7 +106,7 @@ const AssetPayoutPanel = ({
         return () => {
             observer.disconnect();
         };
-    }, [isTopCollapsed, isBottomCollapsed]);
+    }, []);
 
     const handleResizeStart = (event) => {
         hasUserResizedRef.current = true;
@@ -236,9 +233,6 @@ const AssetPayoutPanel = ({
             {showControls && (
                 <DataSourceControls
                     height={topHeight}
-                    isCollapsed={isTopCollapsed}
-                    onToggleCollapsed={() => setIsTopCollapsed((prev) => !prev)}
-                    isBottomCollapsed={isBottomCollapsed}
                     backendReady={backendReady}
                     autoRefresh={autoRefresh}
                     onToggleAutoRefresh={toggleAutoRefresh}
@@ -289,7 +283,7 @@ const AssetPayoutPanel = ({
                 </DataSourceControls>
             )}
 
-            {showControls && !isTopCollapsed && !isBottomCollapsed && (
+            {showControls && (
                 <div
                     ref={resizeHandleRef}
                     onMouseDown={handleResizeStart}
@@ -302,8 +296,6 @@ const AssetPayoutPanel = ({
             )}
 
             <AssetListView
-                isCollapsed={isBottomCollapsed}
-                onToggleCollapsed={() => setIsBottomCollapsed((prev) => !prev)}
                 panelMode={panelMode}
                 onTogglePanelMode={() => setPanelMode(panelMode === 'list' ? 'ticker' : 'list')}
                 minPayout={minPayout}
@@ -323,6 +315,8 @@ const AssetPayoutPanel = ({
                 assetSearchQuery={assetSearchQuery}
                 onSearchQueryChange={setAssetSearchQuery}
                 onUseForTrade={onUseForTrade}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
             />
         </div>
     );

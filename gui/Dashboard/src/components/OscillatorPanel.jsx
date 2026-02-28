@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 import OscillatorChart from './OscillatorChart';
+import CollapsiblePanel from './CollapsiblePanel';
 
 const OscillatorPanel = ({
   mainChart,
@@ -74,11 +75,16 @@ const OscillatorPanel = ({
   const statusKey = key && indicatorStatus ? indicatorStatus[key] : null;
 
   return (
-    <>
+    <CollapsiblePanel
+      id="oscillator-indicators"
+      title="Oscillators"
+      className="border-t border-gray-700/50 bg-dashboard-bg"
+      bodyClassName="p-0 flex flex-col"
+    >
       <div
         className={`h-2 cursor-row-resize flex items-center justify-center transition-colors duration-200 ${
           isDragging ? 'bg-accent-primary/40' : 'bg-gray-800/80 hover:bg-gray-700'
-        } border-y border-gray-700/50`}
+        } border-b border-gray-700/50`}
         onMouseDown={handleDragStart}
       >
         <div className="flex gap-1">
@@ -87,7 +93,7 @@ const OscillatorPanel = ({
           <div className="w-1 h-1 rounded-full bg-gray-500"></div>
         </div>
       </div>
-      <div className="mt-1 flex flex-col" style={{ height: oscillatorHeight }}>
+      <div className="flex flex-col" style={{ height: oscillatorHeight }}>
         <div className="flex-1 flex flex-col gap-2 overflow-y-auto p-1">
           {oscillatorIndicators.map((ind) => {
             const data = seriesForKey && seriesForKey[ind.key] ? seriesForKey[ind.key] : [];
@@ -125,7 +131,7 @@ const OscillatorPanel = ({
           })}
         </div>
       </div>
-    </>
+    </CollapsiblePanel>
   );
 };
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import useMarketStore from '../store/marketStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
@@ -14,6 +14,7 @@ const Dashboard = () => {
 
   const containerRef = useRef(null);
   const isDraggingRef = useRef(false);
+  const [isResizing, setIsResizing] = useState(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(0);
 
@@ -48,43 +49,67 @@ const Dashboard = () => {
     }
   }, [rightPanelWidthPx]);
 
-  const getMaxRightPanelWidthPx = () => {
+  const getMaxRightPanelWidthPx = useCallback(() => {
     const container = containerRef.current;
-    const width = container?.getBoundingClientRect?.().width;
+    if (!container) return defaultRightPanelWidthPx;
+    const width = container.getBoundingClientRect?.().width;
     if (!Number.isFinite(width) || width <= 0) return Math.max(minRightPanelWidthPx, defaultRightPanelWidthPx);
     const max = Math.round(width - minChartWidthPx - resizeHandleWidthPx);
     return Math.max(minRightPanelWidthPx, max);
-  };
+  }, [containerRef]);
 
-  const clampRightPanelWidthPx = (next) => {
-    const max = getMaxRightPanelWidthPx();
-    const bounded = Math.max(minRightPanelWidthPx, Math.min(max, Math.round(next)));
-    return bounded;
-  };
+  const clampRightPanelWidthPx = useCallback((next, maxWidthOverride = null) => {
+    const max = maxWidthOverride ?? getMaxRightPanelWidthPx();
+    return Math.max(minRightPanelWidthPx, Math.min(max, Math.round(next)));
+  }, [getMaxRightPanelWidthPx]);
 
   const handleResizeStart = (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    
     isDraggingRef.current = true;
+    setIsResizing(true);
     dragStartXRef.current = event.clientX;
-    dragStartWidthRef.current = clampRightPanelWidthPx(rightPanelWidthPx);
+    dragStartWidthRef.current = rightPanelWidthPx;
+    
+    // Immediate feedback
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
 
-    const handleMove = (e) => {
+    // Pre-calculate max width for the current resize session
+    const maxWidth = getMaxRightPanelWidthPx();
+
+    // Use a single move listener for the entire drag session
+    const onMove = (e) => {
       if (!isDraggingRef.current) return;
       const delta = e.clientX - dragStartXRef.current;
       const nextWidth = dragStartWidthRef.current - delta;
-      setRightPanelWidthPx(clampRightPanelWidthPx(nextWidth));
+      
+      // Update state directly for immediate visual feedback
+      const clampedWidth = clampRightPanelWidthPx(nextWidth, maxWidth);
+      setRightPanelWidthPx(clampedWidth);
     };
 
-    const handleUp = () => {
+    const onUp = () => {
       isDraggingRef.current = false;
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      setIsResizing(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
 
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('mousemove', onMove, { passive: true });
+    window.addEventListener('mouseup', onUp);
   };
+
+  // Ensure body styles are cleaned up if the component unmounts during resize
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
 
   const handleResizeReset = () => {
     setRightPanelWidthPx(defaultRightPanelWidthPx);
@@ -97,6 +122,11 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-screen bg-dashboard-bg text-text-primary overflow-hidden font-sans">
+      {/* Drag Overlay to prevent iframe interference */}
+      {isResizing && (
+        <div className="fixed inset-0 z-[9999] cursor-col-resize select-none" />
+      )}
+      
       {/* 1. Collapsible Sidebar */}
       <Sidebar />
 
@@ -130,10 +160,20 @@ const Dashboard = () => {
                 tabIndex={0}
                 onMouseDown={handleResizeStart}
                 onDoubleClick={handleResizeReset}
-                className="h-full cursor-col-resize select-none flex items-stretch"
+                className={`h-full w-[10px] cursor-col-resize select-none flex items-center justify-center group relative transition-all duration-300 ${isResizing ? 'bg-accent-green/10 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'hover:bg-white/5'}`}
               >
-                <div className="w-full bg-transparent hover:bg-white/5 transition-colors">
-                  <div className="h-full w-[2px] mx-auto bg-white/10" />
+                {/* Visual Handle Bar */}
+                <div className={`h-16 w-[2px] rounded-full transition-all duration-500 relative overflow-hidden ${isResizing ? 'bg-accent-green scale-y-110 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-white/10 group-hover:bg-white/30 group-hover:scale-y-105'}`}>
+                  {/* Subtle moving shine effect when active */}
+                  {isResizing && (
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-transparent animate-[shimmer_1.5s_infinite]" />
+                  )}
+                </div>
+
+                {/* Left/Right arrow hints on hover */}
+                <div className={`absolute flex gap-4 transition-all duration-300 opacity-0 group-hover:opacity-40 ${isResizing ? 'scale-125' : 'scale-100'}`}>
+                   <div className="w-1 h-1 rounded-full bg-accent-green" />
+                   <div className="w-1 h-1 rounded-full bg-accent-green" />
                 </div>
               </div>
               <div className="h-full min-h-0 pl-2 quflx-right-panel">

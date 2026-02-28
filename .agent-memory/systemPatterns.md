@@ -1,158 +1,109 @@
 # System Patterns
 
 ## Architecture Overview
-QuFLX v2 uses an **Event-Driven Modular Monolith** architecture.
+QuFLX v2 uses an **Event-Driven Modular Monolith** architecture with a standalone Live Trading microservice.
+
 - **Central Nervous System**: Redis (Pub/Sub for real-time, Streams for history).
 - **Services**:
-    - **Collector**: Stateless data miner (Chrome -> Redis).
-    - **Strategy**: Independent analysis engine (Redis -> Redis) that calculates indicators and emits signals.
-    - **Gateway**: API and WebSocket server (Redis <-> Frontend).
-    - (Planned) **AI Gateway**: Dedicated module/service that wraps all xAI API calls (chat, vision, voice) and exposes a stable interface to other backend components.
-- **Frontend**: "Smart Store, Dumb Components" pattern using Zustand and Lightweight Charts, with planned Ask-AI and voice assistant panels.
+  - **Collector**: Stateless data miner (Chrome → Redis).
+  - **Strategy**: Independent analysis engine (Redis → Redis) — indicators and signals.
+  - **Gateway**: API and Socket.IO server (Redis ↔ Frontend). Single entry point for the frontend.
+  - **SSID Service**: Dedicated FastAPI microservice (separate process) managing PocketOption WebSocket sessions, trade execution, balance polling, and SSID persistence to `.env`.
+  - **AI Service**: Wraps all xAI API calls (chat, vision, voice). Integrated into Gateway lifespan.
+- **Frontend**: "Smart Store, Dumb Components" with Zustand stores and Lightweight Charts.
 
 ## Key Design Patterns
-- **Event Sourcing**: The state of the market is derived from a stream of `Tick` events.
+- **Event Sourcing**: Market state derived from a stream of `Tick` events.
 - **Pub/Sub**: Decouples producers (Collector) from consumers (Strategy, Gateway).
-- **Adapter Pattern**:
-  - The Collector acts as an adapter for the Chrome DevTools Protocol.
-  - Indicator adapters (in V1 docs) and future AI Gateway act as adapters between internal data structures and external APIs (xAI).
-- **Repository Pattern**: Abstract data access for historical data (Redis Streams).
-- **Context Injection (AI)**: AI calls do not introspect the app directly; instead, the backend builds a `TradingContext` (candles, indicators, regimes, positions) and injects it into xAI requests, optionally with chart screenshots.
-- **AI Prefix Caching**: The system uses `conversation_id` mapped to `x-grok-conv-id` to cache static prompt prefixes. Prompt construction is tiered: 
-    1. Static System Instructions (Cached).
-    2. Semi-static Tool Definitions (Cached).
-    3. Dynamic Market Context (User Message).
+- **Adapter Pattern**: Collector adapts Chrome DevTools Protocol; Gateway proxies SSID service.
+- **Repository Pattern**: Abstract data access for historical data (Redis Streams, CSV files).
+- **Context Injection (AI)**: Backend builds `TradingContext` (candles, indicators, regimes) and injects into xAI requests with optional chart screenshots.
+- **AI Prefix Caching**: `conversation_id` maps to `x-grok-conv-id`. Prompt is tiered:
+  1. Static System Instructions (Cached)
+  2. Semi-static Tool Definitions (Cached)
+  3. Dynamic Market Context (User Message)
+- **Profile-Settings Sync**: `profileStore.js` subscribes to `settingsStore.settings` changes and auto-saves to the active profile (debounced 800ms). Immediate flush available via `updateProfile()`.
 
 ## Data Flow
-1. **Ingest**: Collector intercepts WebSocket frame -> Normalizes to `Tick`.
+1. **Ingest**: Collector intercepts WebSocket frame → Normalizes to `Tick`.
 2. **Publish**: Collector publishes `Tick` to Redis Stream.
-3. **Process**: Strategy Engine reads `Tick` -> Updates Indicators -> Publishes `IndicatorUpdate` / signals.
-4. **Serve**: Gateway receives `Tick` & `IndicatorUpdate` -> Emits via Socket.IO / REST.
-5. **Visualize**: Frontend Store receives update -> Mutates State -> Chart components re-render (price, overlays, planned oscillators).
-6. (Planned) **Advise**: AI Gateway builds `TradingContext` from Strategy data + optional chart image -> Calls xAI -> Returns advisory output to Gateway -> Exposed to UI via `/api/v1/ai/ask` and voice.
+3. **Process**: Strategy Engine reads `Tick` → Updates Indicators → Publishes `IndicatorUpdate` / signals.
+4. **Serve**: Gateway receives `Tick` & `IndicatorUpdate` → Emits via Socket.IO / REST.
+5. **Visualize**: Frontend Store receives update → Mutates State → Chart re-renders (price, overlays, oscillators).
+6. **Advise**: AI Gateway builds `TradingContext` from strategy data + optional chart image → Calls xAI → Returns advisory to UI via `/api/v1/ai/ask` and voice.
+7. **Trade**: Frontend → `POST /api/v1/trading/connect` → Gateway proxy → SSID Service → PocketOption WS.
+
+## SSID Persistence Pattern
+- SSID Service stores in-memory: `app.state.ssid_demo`, `app.state.ssid_real`.
+- Persists to `.env` via `_persist_ssid()` on each successful connect.
+- Gateway `ConnectRequest.ssid` allows empty string (validator is no-op for `""`). Empty → SSID service uses `.env` fallback.
+- Frontend queries `GET /api/v1/trading/ssid-status` → `{hasDemoSsid, hasRealSsid}` booleans on mount.
+- `tradingStore.fetchSsidStatus()` is called from `SettingsPanel` and `LiveTradingPanel` on mount, and after a successful connect.
+- UI displays "✓ SSID saved" badge in SettingsPanel and "✓ Saved SSID ready" in LiveTradingPanel when flags are true.
+
+## Profile System Pattern
+- Profiles are flat JSON files in `data/profiles/<profileId>.json`.
+- `data/profiles/active_profile.json` tracks the active profile ID.
+- API: `GET/POST /api/v1/profiles`, `GET/PUT/DELETE /api/v1/profiles/{id}`, `GET/POST /api/v1/profiles/active`.
+- Auto-creates a `default` profile (copying current settings) if none exist.
+- `profileStore.js` subscribes to `settingsStore` and saves any change to the active profile (debounced).
+- Profile names are slugified to create safe file IDs (e.g., "My Profile" → `my-profile`).
 
 ## History API Contract Patterns
-
-- **Bootstrap is explicit (no silent failures)**
-  - `POST /api/v1/history/bootstrap-history` returns non-200 HTTP status codes on failure.
-  - Error body uses a structured shape (`HistoryErrorResponse`) so the frontend can display actionable messages.
-
-- **History response shape is unified**
-  - `GET /api/v1/history/{asset}` returns `candles` (and keeps legacy `data` for compatibility).
-  - Frontend should prefer `candles` and only fall back to `data` during the transition.
+- **Bootstrap is explicit**: `POST /api/v1/history/bootstrap-history` returns non-200 on failure with `HistoryErrorResponse`.
+- **Response shape is unified**: `GET /api/v1/history/{asset}` returns `candles` (legacy `data` kept for compatibility). Frontend prefers `candles`.
 
 ## Local Ops Controls (Chrome + Stream)
+- Endpoints: `POST /api/v1/ops/chrome/start`, `POST /api/v1/ops/stream/start`, `POST /api/v1/ops/stream/pause`, `GET /api/v1/ops/stream/status`.
+- Disabled by default; requires `QFLX_ENABLE_OPS=1`. Local-only enforcement (`127.0.0.1` / `::1`). Optional token gate via `QFLX_OPS_TOKEN`.
 
-- **Problem**: The browser UI cannot start OS processes directly.
-- **Solution**: Gateway exposes local-only, dev-gated endpoints to start Chrome and start/pause the Collector.
-- **Endpoints**:
-  - `POST /api/v1/ops/chrome/start`
-  - `POST /api/v1/ops/stream/start`
-  - `POST /api/v1/ops/stream/pause`
-  - `GET /api/v1/ops/stream/status`
-- **Guards**:
-  - Disabled by default; requires `QFLX_ENABLE_OPS=1`.
-  - Local-only client enforcement (`127.0.0.1` / `::1`).
-  - Optional token gate via `QFLX_OPS_TOKEN` and `X-QFLX-OPS-TOKEN` header.
-- **Semantics**:
-  - Start endpoints are idempotent (`already_running`).
-  - Pause is implemented as stopping the Collector process (terminate → kill fallback).
+## OTC Asset Normalization
+- Asset IDs from PocketOption use format `EURUSD_otc`.
+- Displayed to user as `EURUSDOTC` (remove underscore, uppercase).
+- OTC categories now include: Currencies, Cryptocurrencies, Commodities, Stocks, Indices.
+- Asset payout dropdown is sorted by payout percentage descending.
+- Asset selection is synchronized between `LiveTradingPanel` and `SettingsPanel`.
 
 ## Sidebar & Layout Patterns
-- Sidebar tabs follow the set: `Dashboard`, `Analysis`, `AI Insights`, `Live Trading`, `Risk Manager`, `Strategy Lab`, `Calendar & Journal`, `Settings`.
-- `Calendar & Journal` and `Settings` are the final two tabs, with `Settings` pinned last.
-- All tabs except `Calendar & Journal` and `Settings` are expected to keep the main chart visible on the right while swapping contextual panels on the left; `Calendar & Journal` and `Settings` may use layouts without the chart when appropriate.
+- **Sidebar tabs**: `Dashboard`, `Analysis`, `AI Insights`, `Live Trading`, `Risk Manager`, `Strategy Lab`, `Calendar & Journal`, `Settings`.
+- `Calendar & Journal` and `Settings` are the final two tabs; `Settings` is pinned last.
+- `activeTab` in `marketStore` drives `ContextPanelRouter.jsx`.
+- **Supplementary menu routes** (via ProfileMenu dropdown): `Alert Dispatch Logs`, `Statement Analysis`, `Collector`, `Dev Logs`, `Voice Particle`, `Knowledge Base`.
 
-## Significant Technical Decisions
-- **Redis as Backbone**: Chosen for low latency (<1ms) and decoupling capabilities.
-- **FastAPI for Gateway**: High performance, async support, and easy WebSocket integration.
-- **Zustand for Frontend State**: Simpler and more performant than Redux for high-frequency updates.
-- **Lightweight Charts**: Optimized for financial time-series data and supports clean separation between overlays and oscillator panes.
-- **AI Gateway Isolation**: All interactions with xAI are funneled through a single backend module to:
-  - Centralize authentication and error handling.
-  - Prevent scattering of external API calls.
-  - Make it easy to mock and test AI integrations.
- - **Versioned Settings Architecture**: A dedicated, versioned settings object (Global/User/AI + per-tab sections) is persisted in `data/settings/settings.json` via the Gateway, exposed through `GET/PUT /api/v1/settings`, and mirrored by a separate `useSettingsStore` in the Dashboard so configuration is clearly separated from live market state.
+## Strategy Lab Pattern
+- Users upload CSV files (OHLC format) via `StrategyLabPanel`.
+- Backend parses and registers the file (keyed by UUID) in an in-memory map on the strategy route.
+- `marketStore.selectedStrategyFileId` tracks the active strategy file.
+- `ChartWorkspace` checks `selectedStrategyFileId` and fetches data from `GET /api/v1/strategy/data/{fileId}` when set, displaying it on the main chart instead of live data.
+- `ChartHeader` shows a CSV source dropdown when strategy files are present.
 
-## Capability & Status Patterns (QuFLX v2)
+## Ticker-Linked Background Monitoring
+- Background services (Alert Dispatcher) follow the frontend "Ticker Tape" whitelist.
+- Pattern: Frontend `MarketStore` → SocketIO `update_active_ticker` → Gateway → Redis `ticker:active` → Dispatcher `TickerSubscriber`.
+- Ensures cost-efficient AI monitoring limited to assets currently visible to the trader.
 
-- **Capability runner output**
-  - Runners may print human-readable status lines (e.g. `✅ Attached to Chrome session: ...`) before JSON.
-  - Backend must never assume `stdout` is pure JSON; always extract JSON via a helper (e.g. `_parse_script_json`) that finds the last `{…}` or `[…]` block.
-  - Any new Gateway endpoint that shells out to `runner.py` should reuse this pattern to avoid "Invalid script output" / 500 errors.
-
-- **FavoriteStarSelect / refresh-assets contract**
-  - `FavoriteStarSelect` is the single source of truth for 92% payout starring; do not reimplement that logic elsewhere.
-  - `max_assets <= 0` means "no limit" (process all eligible assets), not "star nothing".
-  - Empty `target_assets` (`[]`) means "no filtering"; non-empty lists are matched after normalizing symbols (remove spaces/slashes, uppercase).
-  - `/api/v1/refresh-assets` must return `{ "assets": string[], "metadata": { ... } }`, where `assets` are derived from `selected_now` and `already_favorited` only.
-
-- **Stream health & indicators**
-  - Backend `streamStatus` currently reflects collector service status, not raw tick flow.
-  - UI stream health (Live Feed, Stream badge) should prefer tick-driven logic from `lastTickTimestamp`:
-    - Recent ticks → `streaming` (green / pulse).
-    - Older ticks → `slow` / `stale`.
-    - No ticks → `idle` / `offline`.
-  - Chrome badge in the UI should reflect `chromeDebuggingAvailable` (debug port health) rather than generic collector state.
-  - Stream control toggles should use tick-driven health for pause/restart correctness.
-
-- **Status polling & effects**
-  - `useEffect` hooks that call store setters or network functions must always:
-    - Have explicit dependency arrays.
-    - Depend on stable values (e.g. `socket`, simple booleans), not large, frequently changing objects.
-  - Treat React "Maximum update depth exceeded" warnings as a signal to inspect dependencies for hidden render → effect → update loops.
-
-- **Ticker-Linked Background Monitoring**:
-  - Background services (Alert Dispatcher) follow the frontend "Ticker Tape" whitelist.
-  - Pattern: Frontend `MarketStore` -> SocketIO `update_active_ticker` -> Gateway -> Redis `ticker:active` -> Dispatcher `TickerSubscriber`.
-  - Enables cost-efficient AI monitoring by limiting calls to only the assets currently visible to the trader.
-
-- **Verification discipline**
-  - After changing any Gateway–Capability integration:
-    - Run the capability directly (e.g. `python capabilities_v2/runner.py refresh_assets`) and confirm its stdout format.
-    - Hit the corresponding REST endpoint and verify the JSON shape matches what the Dashboard expects.
-  - PowerShell note: avoid chaining commands with `&&`; run commands as separate invocations.
+## Capability & Runner Pattern
+- Selenium automation centralized in `capabilities_v2/`.
+- `capabilities_v2/runner.py` is the CLI entry point. Gateway calls `runner.py` — never imports Selenium code directly.
+- stdout is semi-structured: status lines + trailing JSON. Backend extracts JSON via `_parse_script_json()`.
+- `FavoriteStarSelect` is the single source of truth for 92% payout starring.
 
 ## AI & Voice Integration Patterns
+- For all xAI calls: backend constructs a concise `TradingContext` from strategy data.
+- Chart screenshots captured in Dashboard, sent as base64 to backend, attached to xAI vision requests.
+- Voice Assistant WS Bridge: Browser ↔ Backend (local WS for PCM audio) ↔ `wss://api.x.ai/v1/realtime`.
+- Ask AI Modal: quick assist entry point, voice dictation, optional TTS read-back.
+- AI Insights Panel: long-form conversation workspace.
 
-- **Context Injection**
-  - For all xAI calls (text, vision, voice), the backend constructs a concise `TradingContext` from strategy data rather than relying on the frontend for truth.
-  - Chart screenshots are captured in the Dashboard and sent as base64 images to the backend, which attaches them to xAI vision requests.
+## Significant Technical Decisions
+- **Redis as Backbone**: Low latency (<1ms) and decoupling capabilities.
+- **FastAPI for Gateway + SSID Service**: High performance, async, easy WebSocket integration.
+- **Zustand multi-store**: Each concern has its own store (`market`, `settings`, `trading`, `profile`, `user`). Prevents `useMarketStore` becoming a God object.
+- **Lightweight Charts**: Optimized for financial time-series; clean overlay/oscillator pane separation.
+- **SSID Security**: Raw SSID values never returned from the API. Only boolean status indicators are exposed. SSIDs persist only in server-side `.env`.
+- **Versioned Settings**: Persisted in `data/settings/settings.json`; exposed via `GET/PUT /api/v1/settings`; mirrored in `useSettingsStore`.
 
-- **Modal vs Panel UX Split (Frontend)**
-  - Ask AI modal is the default entry point for quick questions and single-response analysis.
-  - AI Insights tab is the long-form conversation workspace and should not subsume domain tabs (Risk Manager, Strategy Lab).
-  - Screenshot editor can hand off an annotated image directly into Ask AI.
-
-- **Image Source Selection (Frontend)**
-  - Image source is selectable: None / Live Snapshot / Latest Annotated Screenshot.
-  - Latest annotated screenshot is persisted across refresh to support repeatable "Annotated" requests.
-
-- **Tool/Function Calling**
-  - Trading-related actions exposed to xAI are modeled as explicit tools (e.g. `get_market_snapshot`, `simulate_entry`) with clear JSON schemas and server-side validation.
-  - xAI may request tool calls; the backend executes them via existing strategy/market modules and feeds the results back into the conversation.
-
-- **Voice Agent Bridge**
-  - The voice assistant uses a WebSocket bridge:
-    - Browser ↔ Backend (local WebSocket for PCM audio).
-    - Backend ↔ xAI Voice Agent API (`wss://api.x.ai/v1/realtime`).
-  - The backend voice gateway is stateless per session and integrates with the same `TradingContext` builder and tool layer used by the text assistant.
-
-- **Market Condition Scanning & Confidence (Dispatcher)**
-  - The Alert Dispatcher uses a `MarketScanner` to evaluate technical confluences.
-  - Pattern: Scan candles -> Calculate Indicators (ADX, RSI, EMA, BB, Pivots) -> Weighted Score (Confluence %) -> Optional AI Verification.
-  - This ensures only high-probability setups are dispatched to external notification channels.
-
-- **Resilient API Communication (Frontend)**
-  - All critical settings and market APIs use absolute URLs (`http://localhost:8000`) instead of relative paths.
-  - This pattern prevents the browser from incorrectly hitting the Vite dev server (returning HTML) when the proxy is misconfigured or the backend is slow to respond.
-
-
-## PocketOption Topdown v2 Capability Pattern
-- Selenium automation for PocketOption is now centralized in `capabilities_v2/` rather than in ad-hoc scripts.
-- Low-level UI controls (`session_foundations`, `favorites_bar`, `timeframe_menu`) are composed into higher-level orchestrators (`topdown_select_test_2`, `collect_history_loop`) and a robust control primitive (`timeframe_select_sync`).
-- Data collection follows a layered pattern:
-  1. Selenium selects asset + timeframe.
-  2. Backend WebSocket interceptor (`HistoryCollector`) extracts history and ticks.
-  3. Aggregated candles are saved to CSV for offline analysis.
-- The Gateway should invoke these capabilities via `capabilities_v2/runner.py` and treat stdout as semi-structured (status lines + trailing JSON), rather than importing Selenium code directly.
+## Verification Discipline
+- After changing any Gateway–Capability integration: run capability directly, confirm stdout format, then hit REST endpoint and verify JSON shape.
+- After SSID changes: restart Gateway + SSID Service so new routes are registered before testing.
+- PowerShell: avoid `&&`; run commands as separate invocations or use `;`.

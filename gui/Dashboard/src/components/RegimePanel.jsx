@@ -1,5 +1,6 @@
 import useMarketStore from '../store/marketStore';
 import { TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
+import CollapsiblePanel from './CollapsiblePanel';
 
 const RegimePanel = () => {
   const { currentRegime, selectedAsset } = useMarketStore();
@@ -28,47 +29,56 @@ const RegimePanel = () => {
   };
 
   return (
-    <div className="absolute top-16 left-2 z-20 flex flex-col gap-1.5 p-2 rounded-lg backdrop-blur-md bg-black/60 border border-white/10 shadow-lg pointer-events-none select-none min-w-[160px]">
-      <div className={`flex items-center justify-between px-2 py-1 rounded border ${getRegimeColor()}`}>
-        <div className="flex items-center gap-1.5">
-            <Activity size={14} />
-            <span className="text-xs font-bold uppercase tracking-wider">{regime}</span>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1 px-1">
-        <div className="flex flex-col">
-             <span className="text-[9px] text-gray-500 uppercase tracking-wide">Trend</span>
-             <div className="flex items-center gap-1">
-                <span className={`text-[10px] font-bold uppercase ${trend === 'bullish' ? 'text-green-400' : trend === 'bearish' ? 'text-red-400' : 'text-gray-400'}`}>
-                    {trend}
-                </span>
-                {getTrendIcon()}
-             </div>
-        </div>
-
-        <div className="flex flex-col items-end">
-             <span className="text-[9px] text-gray-500 uppercase tracking-wide">Strength</span>
-             <span className="text-[10px] font-mono font-bold text-white">
-                {(strength * 100).toFixed(0)}%
-             </span>
+    <div className="absolute top-16 left-2 z-20 pointer-events-none select-none min-w-[160px]">
+      <CollapsiblePanel
+        id="market-regime"
+        title="Market Regime"
+        className="backdrop-blur-md bg-black/60 border border-white/10 shadow-lg pointer-events-auto"
+        headerClassName="px-2 py-1 h-8"
+        bodyClassName="p-2 flex flex-col gap-1.5"
+        defaultOpen={true}
+      >
+        <div className={`flex items-center justify-between px-2 py-1 rounded border ${getRegimeColor()}`}>
+          <div className="flex items-center gap-1.5">
+              <Activity size={14} />
+              <span className="text-xs font-bold uppercase tracking-wider">{regime}</span>
+          </div>
         </div>
         
-         <div className="flex flex-col">
-             <span className="text-[9px] text-gray-500 uppercase tracking-wide">Volatility</span>
-             <span className="text-[10px] font-bold text-gray-300 uppercase">
-                {volatility}
-             </span>
-        </div>
-      </div>
-      
-      {description && (
-          <div className="mt-1 pt-2 border-t border-white/10 px-1">
-              <p className="text-[9px] text-gray-400 leading-tight italic">
-                  {description}
-              </p>
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1 px-1">
+          <div className="flex flex-col">
+               <span className="text-[9px] text-gray-500 uppercase tracking-wide">Trend</span>
+               <div className="flex items-center gap-1">
+                  <span className={`text-[10px] font-bold uppercase ${trend === 'bullish' ? 'text-green-400' : trend === 'bearish' ? 'text-red-400' : 'text-gray-400'}`}>
+                      {trend}
+                  </span>
+                  {getTrendIcon()}
+               </div>
           </div>
-      )}
+
+          <div className="flex flex-col items-end">
+               <span className="text-[9px] text-gray-500 uppercase tracking-wide">Strength</span>
+               <span className="text-[10px] font-mono font-bold text-white">
+                  {(strength * 100).toFixed(0)}%
+               </span>
+          </div>
+          
+           <div className="flex flex-col">
+               <span className="text-[9px] text-gray-500 uppercase tracking-wide">Volatility</span>
+               <span className="text-[10px] font-bold text-gray-300 uppercase">
+                  {volatility}
+               </span>
+          </div>
+        </div>
+        
+        {description && (
+            <div className="mt-1 pt-2 border-t border-white/10 px-1">
+                <p className="text-[9px] text-gray-400 leading-tight italic">
+                    {description}
+                </p>
+            </div>
+        )}
+      </CollapsiblePanel>
     </div>
   );
 };

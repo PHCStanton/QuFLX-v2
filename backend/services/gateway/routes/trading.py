@@ -37,13 +37,17 @@ def _get_client() -> httpx.AsyncClient:
 # ---------------------------------------------------------------------------
 
 class ConnectRequest(BaseModel):
-    ssid: str = Field(..., min_length=50, description="Pocket Option SSID cookie value")
+    ssid: str = Field(default="", description="Pocket Option SSID cookie value. Empty string allowed — ssid_service will use .env fallback.")
     demo: bool = Field(True, description="True = demo account (default), False = real")
 
     @validator("ssid")
     @classmethod
     def validate_ssid(cls, v: str) -> str:
         value = (v or "").strip()
+        # Fix 1: Allow empty SSID — ssid_service has fallback from .env (QFLX_SSID_DEMO/REAL).
+        # Only validate format when the caller explicitly provides an SSID.
+        if not value:
+            return value
         if not value.startswith('42["auth"'):
             raise ValueError('ssid must start with 42["auth"')
         # Keep validation lightweight at gateway; deep validation happens in ssid_service.
@@ -192,6 +196,11 @@ async def get_trade_result(order_id: str) -> Dict[str, Any]:
 async def switch_trading_mode(req: SwitchModeRequest) -> Dict[str, Any]:
     """Proxy mode switch to SSID Service."""
     return await _proxy_request("POST", "/switch-mode", req.model_dump())
+
+@router.get("/ssid-status")
+async def get_ssid_status() -> Dict[str, Any]:
+    """Proxy SSID status check to SSID Service (Fix 3). Returns hasDemoSsid/hasRealSsid booleans."""
+    return await _proxy_request("GET", "/ssid-status")
 
 @router.get("/assets")
 async def list_trading_assets() -> Dict[str, Any]:

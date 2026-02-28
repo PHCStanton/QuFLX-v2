@@ -2,7 +2,11 @@
 # --------------------------
 system_LOGS/
 
-# Assets GUII Folder
+# Reports
+reports/
+Research/
+
+# Assets GUI Folder
 gui\Dashboard\src\assets
 
 # Redis Integration Package
@@ -335,6 +339,11 @@ selenium/chromedriver.log
 # Test outputs
 tests/__pycache__/
 tests/*.pyc
+
+# tests files
+tests/
+backend/tests/
+gui/Dashboard/tests
 
 # Development notes
 *.md.bak
