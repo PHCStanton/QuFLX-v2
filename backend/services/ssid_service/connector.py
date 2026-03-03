@@ -30,7 +30,7 @@ class AsyncPocketOptionWrapper:
     async def _init_instance(self):
         self.instance = PocketOptionInstance(self.ssid, self.demo)
 
-    def connect(self, timeout=20) -> bool:
+    def connect(self, timeout=90) -> bool:
         future = asyncio.run_coroutine_threadsafe(self.instance.connect(), self.loop)
         try:
             return future.result(timeout=timeout)

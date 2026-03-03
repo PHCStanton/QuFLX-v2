@@ -22,9 +22,11 @@
 }
 
 /* Default Theme Tiling Background Pattern */
+/* --quflx-dashboard-bg is set via React inline style when the user uploads a custom background;
+   it overrides the default texture without fighting !important specificity */
 :root:not(.theme-dark):not(.theme-orange-dark):not(.theme-ironman):not(.theme-black-white) .bg-dashboard-bg {
   background-color: transparent !important;
-  background-image: url('./assets/textures/PANEL_Desktop_Tech-ICONS_BG4.jpg') !important;
+  background-image: var(--quflx-dashboard-bg, url('./assets/textures/METAL_GRID_SILVER_BG.jpg')) !important;
   background-repeat: repeat !important;
   background-size: auto !important;
 }

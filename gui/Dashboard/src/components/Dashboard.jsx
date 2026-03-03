@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import useMarketStore from '../store/marketStore';
+import useSettingsStore from '../store/settingsStore';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import ChartWorkspace from './ChartWorkspace';
@@ -11,6 +12,8 @@ import StrategyLabChartWorkspace from './StrategyLab/StrategyLabChartWorkspace';
 
 const Dashboard = () => {
   const { connectSocket, disconnectSocket, activeTab, selectedStrategyFileId } = useMarketStore();
+  const { settings } = useSettingsStore();
+  const dashboardBgDataUrl = settings?.global?.dashboardBgDataUrl || null;
 
   const containerRef = useRef(null);
   const isDraggingRef = useRef(false);
@@ -66,12 +69,12 @@ const Dashboard = () => {
   const handleResizeStart = (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    
+
     isDraggingRef.current = true;
     setIsResizing(true);
     dragStartXRef.current = event.clientX;
     dragStartWidthRef.current = rightPanelWidthPx;
-    
+
     // Immediate feedback
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
@@ -84,7 +87,7 @@ const Dashboard = () => {
       if (!isDraggingRef.current) return;
       const delta = e.clientX - dragStartXRef.current;
       const nextWidth = dragStartWidthRef.current - delta;
-      
+
       // Update state directly for immediate visual feedback
       const clampedWidth = clampRightPanelWidthPx(nextWidth, maxWidth);
       setRightPanelWidthPx(clampedWidth);
@@ -121,12 +124,17 @@ const Dashboard = () => {
   }, [connectSocket, disconnectSocket]);
 
   return (
-    <div className="flex h-screen bg-dashboard-bg text-text-primary overflow-hidden font-sans">
+    <div
+      className="flex h-screen bg-dashboard-bg text-text-primary overflow-hidden font-sans"
+      style={dashboardBgDataUrl ? {
+        '--quflx-dashboard-bg': `url("${dashboardBgDataUrl}")`,
+      } : undefined}
+    >
       {/* Drag Overlay to prevent iframe interference */}
       {isResizing && (
         <div className="fixed inset-0 z-[9999] cursor-col-resize select-none" />
       )}
-      
+
       {/* 1. Collapsible Sidebar */}
       <Sidebar />
 
@@ -172,8 +180,8 @@ const Dashboard = () => {
 
                 {/* Left/Right arrow hints on hover */}
                 <div className={`absolute flex gap-4 transition-all duration-300 opacity-0 group-hover:opacity-40 ${isResizing ? 'scale-125' : 'scale-100'}`}>
-                   <div className="w-1 h-1 rounded-full bg-accent-green" />
-                   <div className="w-1 h-1 rounded-full bg-accent-green" />
+                  <div className="w-1 h-1 rounded-full bg-accent-green" />
+                  <div className="w-1 h-1 rounded-full bg-accent-green" />
                 </div>
               </div>
               <div className="h-full min-h-0 pl-2 quflx-right-panel">

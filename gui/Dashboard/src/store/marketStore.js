@@ -974,6 +974,7 @@ const createConnectionSlice = (set, get) => ({
         return;
       }
 
+      // Poll until service reports running (up to 3 seconds)
       let running = false;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         await sleep(500);
@@ -987,6 +988,51 @@ const createConnectionSlice = (set, get) => ({
           lastError: 'SSID service did not report running state after start. Check service logs and retry.'
         });
         return;
+      }
+
+      // ── Auto-connect using persisted .env SSIDs ──────────────────────────
+      // Dynamically import tradingStore to avoid circular dependency.
+      // connect('') passes an empty SSID — the ssid_service falls back to the
+      // in-memory .env values (QFLX_SSID_DEMO / QFLX_SSID_REAL).
+      try {
+        const { default: useTradingStore } = await import('./tradingStore');
+        const tradingStore = useTradingStore.getState();
+
+        // Refresh SSID status badges first so we know what's available
+        await tradingStore.fetchSsidStatus();
+        const { hasDemoSsid, hasRealSsid, isDemoMode } = useTradingStore.getState();
+
+        const hasSsidForCurrentMode = isDemoMode ? hasDemoSsid : hasRealSsid;
+
+        if (hasSsidForCurrentMode) {
+          console.log(`[startSsidService] Auto-connecting with saved ${isDemoMode ? 'Demo' : 'Real'} SSID from .env`);
+          const ok = await tradingStore.connect('', isDemoMode);
+          if (ok) {
+            set({ ssidStatus: 'connected' });
+          } else {
+            // Try the other mode's SSID if available
+            const otherMode = !isDemoMode;
+            const hasOtherSsid = otherMode ? hasDemoSsid : hasRealSsid;
+            if (hasOtherSsid) {
+              console.log(`[startSsidService] Primary mode failed, trying ${otherMode ? 'Demo' : 'Real'} SSID`);
+              const ok2 = await tradingStore.connect('', otherMode);
+              if (ok2) set({ ssidStatus: 'connected' });
+            }
+          }
+        } else if (hasDemoSsid || hasRealSsid) {
+          // Current mode has no SSID but the other mode does — use what we have
+          const fallbackDemo = hasDemoSsid;
+          console.log(`[startSsidService] Auto-connecting with ${fallbackDemo ? 'Demo' : 'Real'} SSID (only option)`);
+          const ok = await tradingStore.connect('', fallbackDemo);
+          if (ok) set({ ssidStatus: 'connected' });
+        } else {
+          // No .env SSIDs saved — service is running, user needs to connect manually
+          console.log('[startSsidService] Service running but no saved SSIDs in .env. User must connect manually.');
+          set({ ssidStatus: 'connected' }); // service is up, just not authenticated
+        }
+      } catch (tradingErr) {
+        console.warn('[startSsidService] Auto-connect attempt failed:', tradingErr.message);
+        // Service is still running — don't mark as error
       }
 
       get().checkBackendStatus();

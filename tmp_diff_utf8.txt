@@ -1,0 +1,722 @@
+﻿diff --git a/gui/Dashboard/src/components/LiveTradingPanel.jsx b/gui/Dashboard/src/components/LiveTradingPanel.jsx
+index 04a117e..6b9f80f 100644
+--- a/gui/Dashboard/src/components/LiveTradingPanel.jsx
++++ b/gui/Dashboard/src/components/LiveTradingPanel.jsx
+@@ -18,6 +18,7 @@ import useMarketStore from '../store/marketStore';
+ import useSettingsStore from '../store/settingsStore';
+ import { useShallow } from 'zustand/react/shallow';
+ import AssetPayoutPanel from './AssetPayoutPanel';
++import CollapsiblePanel from './CollapsiblePanel';
+ import { normalizeSpecificAsset } from '../utils/assetUtils';
+ import clickSound from '../assets/Sounds/UIClick-Camera_snapshot.mp3';
+ 
+@@ -242,7 +243,7 @@ class LiveTradingErrorBoundary extends React.Component {
+         <div className="p-4 m-2 rounded-lg bg-[#ff4757]/10 border border-[#ff4757]/40 text-[#ff4757] text-xs">
+           <p className="font-bold mb-2">ΓÜá∩╕Å Trading Panel Error</p>
+           <p className="font-mono text-[10px] opacity-80">{this.state.error?.message}</p>
+-          <button 
++          <button
+             onClick={() => this.setState({ hasError: false })}
+             className="mt-3 px-3 py-1 bg-[#ff4757]/20 rounded hover:bg-[#ff4757]/30 transition-colors"
+           >
+@@ -273,7 +274,6 @@ const LiveTradingPanel = () => {
+   const {
+     isConnected, isConnecting, isSwitchingMode, isDemoMode,
+     balance, lastBalanceUpdate,
+-    ssidInput, setSsidInput,
+     selectedAsset, setSelectedAsset,
+     selectedDirection, setSelectedDirection,
+     tradeAmount, setTradeAmount,
+@@ -284,11 +284,11 @@ const LiveTradingPanel = () => {
+     error, connectError,
+     connect, disconnect, switchMode, setDemoMode,
+     executeTrade, checkResult, fetchAssets,
++    hasDemoSsid, hasRealSsid, fetchSsidStatus,
+     clearError,
+   } = useTradingStore(useShallow((s) => ({
+     isConnected: s.isConnected, isConnecting: s.isConnecting, isSwitchingMode: s.isSwitchingMode, isDemoMode: s.isDemoMode,
+     balance: s.balance, lastBalanceUpdate: s.lastBalanceUpdate,
+-    ssidInput: s.ssidInput, setSsidInput: s.setSsidInput,
+     selectedAsset: s.selectedAsset, setSelectedAsset: s.setSelectedAsset,
+     selectedDirection: s.selectedDirection, setSelectedDirection: s.setSelectedDirection,
+     tradeAmount: s.tradeAmount, setTradeAmount: s.setTradeAmount,
+@@ -299,6 +299,7 @@ const LiveTradingPanel = () => {
+     error: s.error, connectError: s.connectError,
+     connect: s.connect, disconnect: s.disconnect, switchMode: s.switchMode, setDemoMode: s.setDemoMode,
+     executeTrade: s.executeTrade, checkResult: s.checkResult, fetchAssets: s.fetchAssets,
++    hasDemoSsid: s.hasDemoSsid, hasRealSsid: s.hasRealSsid, fetchSsidStatus: s.fetchSsidStatus,
+     clearError: s.clearError,
+   })));
+ 
+@@ -306,7 +307,6 @@ const LiveTradingPanel = () => {
+   const lt = settings.liveTrading || {};
+ 
+   // ΓöÇΓöÇ Local UI state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-  const [assetsOpen, setAssetsOpen] = useState(false);
+   const [pendingTrade, setPendingTrade] = useState(null); // for confirm modal
+   const ssidRef = useRef(null);
+   const pollTimer = useRef(null);
+@@ -321,6 +321,11 @@ const LiveTradingPanel = () => {
+     }
+   }, [lt.defaultAmount, lt.defaultExpiration, setTradeAmount, setTradeExpiration]); // Run once on mount
+ 
++  // Fix 5b: Fetch SSID badge status on mount so the Connection Bar shows "Saved SSID ready"
++  useEffect(() => {
++    fetchSsidStatus();
++  }, [fetchSsidStatus]);
++
+   // ΓöÇΓöÇ Balance polling ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   useEffect(() => {
+     if (isConnected) {
+@@ -367,18 +372,6 @@ const LiveTradingPanel = () => {
+     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+   }, [setSelectedAsset]);
+ 
+-  const handleConnect = useCallback(async () => {
+-    if (!ssidInput.trim()) {
+-      ssidRef.current?.focus();
+-      return;
+-    }
+-    const ok = await connect(ssidInput.trim(), isDemoMode);
+-    if (!ok) {
+-      // Focus the SSID input on error for quick entry
+-      ssidRef.current?.focus();
+-    }
+-  }, [ssidInput, isDemoMode, connect]);
+-
+   const handleModeToggle = useCallback(async (nextDemo) => {
+     // nextDemo is always passed by TradingModeSwitch (true = demo, false = real)
+     if (nextDemo === isDemoMode) return;
+@@ -391,8 +384,6 @@ const LiveTradingPanel = () => {
+         // The error message is already displayed via connectError from the store.
+         await disconnect();
+         setDemoMode(nextDemo);
+-        // Focus the SSID input for immediate entry
+-        setTimeout(() => ssidRef.current?.focus(), 150);
+       }
+     } else {
+       setDemoMode(nextDemo);
+@@ -452,7 +443,7 @@ const LiveTradingPanel = () => {
+ 
+   // ΓöÇΓöÇ Render ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   return (
+-    <div ref={containerRef} className="flex flex-col h-full min-h-0 gap-2 p-2 overflow-y-auto custom-scrollbar">
++    <div ref={containerRef} className="col-span-3 flex flex-col gap-3 h-full min-h-0 bg-dashboard-bg p-2 custom-scrollbar overflow-y-auto">
+ 
+       {/* Confirmation modal */}
+       {pendingTrade && (
+@@ -463,301 +454,353 @@ const LiveTradingPanel = () => {
+         />
+       )}
+ 
+-      {/* ΓöÇΓöÇ 1. Real-mode banner ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+-      {isConnected && !isDemoMode && (
+-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#ff4757]/10 border border-[#ff4757]/40 text-[#ff4757] text-[10px] font-bold uppercase tracking-wider">
+-          <span className="w-1.5 h-1.5 rounded-full bg-[#ff4757] animate-pulse inline-block" />
+-          ΓÜá Real-Money Mode ΓÇö Trades use real USD
++      {/* ΓöÇΓöÇ 1. Real-mode safety banner ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
++      {!isDemoMode && isConnected && (
++        <div className="p-3 mb-1 rounded-xl bg-[#ff4757]/10 border border-[#ff4757]/30 shadow-[0_0_15px_rgba(255,71,87,0.1)] flex items-start gap-3 animate-pulse-slow">
++          <span className="text-lg leading-none mt-0.5">ΓÜá∩╕Å</span>
++          <div className="flex-1">
++            <p className="text-[10px] font-black text-[#ff4757] uppercase tracking-wider mb-0.5">Real Mode Active</p>
++            <p className="text-[9px] text-text-primary/80 font-medium leading-tight">Trades will be executed on your real account. Trade responsibly.</p>
++          </div>
+         </div>
+       )}
+ 
+-      {/* ΓöÇΓöÇ 2. Connection Bar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+-      <div className="rounded-lg border border-border-primary bg-section-bg p-3 flex flex-col gap-3">
+-        <div className="flex items-center justify-between">
+-          <span className="text-[10px] font-bold uppercase tracking-wider text-text-secondary flex items-center gap-1.5">
+-            <span className={isConnecting ? 'text-yellow-400' : isConnected ? 'text-accent-green' : 'text-text-secondary'}>ΓùÅ</span> Connection Control
+-          </span>
+-          {/* Status dot */}
+-          <span className={`flex items-center gap-1.5 text-[10px] font-bold uppercase
+-            ${isConnecting ? 'text-yellow-400' : isConnected ? 'text-[#00c97a]' : 'text-text-secondary'}`}>
+-            <span className={`w-1.5 h-1.5 rounded-full inline-block
+-              ${isConnecting ? 'bg-yellow-400 animate-pulse' : isConnected ? 'bg-[#00c97a]' : 'bg-text-secondary'}`} />
+-            {isConnecting ? 'ConnectingΓÇª' : isConnected ? 'Connected' : 'Disconnected'}
+-          </span>
+-        </div>
+-
+-        {/* Demo / Real toggle row (Neomorphic) */}
+-        <div className="flex items-center justify-center py-2 px-1 rounded-lg bg-[#0e1421]/30 border border-border-primary/30">
+-          <TradingModeSwitch
+-            isDemo={isDemoMode}
+-            isConnecting={isConnecting || isSwitchingMode}
+-            onChange={handleModeToggle}
+-          />
+-        </div>
++      {/* ΓöÇΓöÇ 2. Connection Bar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
++      <CollapsiblePanel
++        id="lt-connection-bar"
++        title="Connection Status"
++        expandable={true}
++        className="bg-section-bg"
++      >
++        <div className="flex flex-col gap-4 p-4">
++          <div className="flex items-center justify-between gap-4">
++            <TradingModeSwitch
++              isDemo={isDemoMode}
++              onChange={handleModeToggle}
++              isConnecting={isConnecting || isSwitchingMode}
++            />
+ 
+-        {/* SSID input row */}
+-        {!isConnected && (
+-          <div className="flex gap-2">
+-            <div className="relative flex-1">
+-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-secondary text-[10px]">≡ƒöÆ</span>
+-              <input
+-                id="ssid-input"
+-                ref={ssidRef}
+-                type="password"
+-                value={ssidInput}
+-                onChange={(e) => setSsidInput(e.target.value)}
+-                onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+-                placeholder={isDemoMode ? "Paste DEMO SSIDΓÇª" : "Paste REAL SSIDΓÇª"}
+-                autoComplete="off"
+-                className="w-full bg-card-bg border border-border-primary rounded-lg pl-8 pr-2 py-2 text-[10px] text-text-primary placeholder-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-green"
+-              />
++            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/40 border border-border-primary/50 shadow-inner">
++              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-accent-green shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/20'}`} />
++              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">
++                {isConnecting ? 'CONNECTING...' : isConnected ? 'ONLINE' : 'OFFLINE'}
++              </span>
+             </div>
+-            <button
+-              id="connect-btn"
+-              disabled={isConnecting || !ssidInput.trim()}
+-              onClick={handleConnect}
+-              className="px-4 py-2 rounded-lg bg-accent-green hover:opacity-90 text-[#0a0f1c] text-[10px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed transition-opacity whitespace-nowrap"
+-            >
+-              {isConnecting ? 'ΓÇª' : 'Connect'}
+-            </button>
+-          </div>
+-        )}
+-
+-        {/* Connected footer: Disconnect button */}
+-        {isConnected && (
+-          <div className="flex justify-end">
+-            <button
+-              id="disconnect-btn"
+-              onClick={disconnect}
+-              className="px-4 py-1.5 rounded-lg bg-card-bg hover:bg-[#ff4757]/10 hover:text-[#ff4757] hover:border-[#ff4757]/30 text-text-secondary text-[10px] font-medium border border-border-primary transition-all uppercase tracking-wider"
+-            >
+-              Disconnect
+-            </button>
+           </div>
+-        )}
+-
+-        {connectError && (
+-          <div className="p-2 rounded bg-[#ff4757]/10 border border-[#ff4757]/20">
+-            <p className="text-[9px] text-[#ff4757] leading-tight font-medium">ΓÜá∩╕Å {connectError}</p>
+-          </div>
+-        )}
+-      </div>
+ 
+-      {/* ΓöÇΓöÇ 3. Account Status ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+-      {isConnected && (
+-        <div className="rounded-lg border border-border-primary bg-card-bg p-3 flex items-center justify-between">
+-          <div>
+-            <p className="text-[9px] text-text-secondary uppercase tracking-wider mb-0.5">Balance</p>
+-            <p className={`text-xl font-bold font-mono ${isDemoMode ? 'text-[#3b82f6]' : 'text-[#00c97a]'}`}>
+-              {fmt.bal(balance)}
+-            </p>
+-            {lastBalanceUpdate && (
+-              <p className="text-[8px] text-text-secondary mt-0.5">Updated {fmt.time(lastBalanceUpdate)}</p>
++          <div className="flex flex-col gap-2.5">
++            {!isConnected ? (
++              <div className="flex flex-col gap-2">
++                <button
++                  id="lt-connect-btn"
++                  onClick={() => connect('', isDemoMode)}
++                  disabled={isConnecting}
++                  className={`w-full py-3 rounded-xl font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] shadow-xl
++                    ${isConnecting
++                      ? 'bg-white/5 border border-border-primary text-text-secondary/20 cursor-not-allowed'
++                      : 'bg-accent-blue text-white hover:opacity-95 hover:shadow-[0_8px_25px_rgba(59,130,246,0.4)]'}`}
++                >
++                  {isConnecting ? 'Connecting...' : 'Connect Session'}
++                </button>
++                {/* Fix 5b: Show contextual saved-SSID indicator */}
++                {(isDemoMode ? hasDemoSsid : hasRealSsid) ? (
++                  <p className="text-[9px] text-accent-green font-bold text-center">
++                    Γ£ô Saved {isDemoMode ? 'Demo' : 'Real'} SSID ready ΓÇö click to connect
++                  </p>
++                ) : (
++                  <p className="text-[9px] text-text-secondary text-center opacity-50">
++                    SSID configuration is now in Settings Panel
++                  </p>
++                )}
++              </div>
++            ) : (
++              <button
++                id="lt-disconnect-btn"
++                onClick={disconnect}
++                className="w-full py-3 rounded-xl bg-white/5 border border-border-primary text-text-secondary hover:text-[#ff4757] hover:border-[#ff4757]/60 hover:bg-[#ff4757]/10 font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] shadow-lg"
++              >
++                Disconnect Session
++              </button>
+             )}
+-          </div>
+-          <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest
+-            ${isDemoMode ? 'bg-[#3b82f6]/15 text-[#3b82f6] border border-[#3b82f6]/30'
+-              : 'bg-[#ff4757]/15 text-[#ff4757] border border-[#ff4757]/30'}`}>
+-            {isDemoMode ? 'DEMO' : 'REAL'}
+-          </span>
+-        </div>
+-      )}
+-
+-      {/* ΓöÇΓöÇ 4. Trade Execution Form ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+-      <div className={`rounded-lg border bg-section-bg p-3 flex flex-col gap-2.5 transition-opacity
+-        ${isConnected ? 'border-border-primary opacity-100' : 'border-border-primary/40 opacity-50 pointer-events-none'}`}>
+-
+-        <p className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">Trade</p>
+ 
+-        {/* Asset selector */}
+-        <div className="flex flex-col gap-1.5">
+-          <label className="text-[10px] font-medium text-text-secondary pl-1">Trading Asset</label>
+-          <select
+-            id="asset-select"
+-            value={selectedAsset}
+-            onChange={(e) => setSelectedAsset(e.target.value)}
+-            className="bg-card-bg border border-border-primary rounded-lg px-3 py-2 text-[11px] font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green w-full appearance-none dropdown-chevron"
+-          >
+-            {!assetsLoaded && <option value="">Loading assetsΓÇª</option>}
+-            {assetsLoaded && assets.length === 0 && <option value="">No assets available</option>}
+-            {assetsLoaded && assets.length > 0 && <option value="" disabled>Select an assetΓÇª</option>}
+-            {assets.map((a) => (
+-              <option key={a.id} value={a.id}>
+-                {fmt.asset(a.id)} {a.payout ? `(${a.payout}%)` : ''}
+-              </option>
+-            ))}
+-            {selectedAsset && !assets.find(a => a.id === selectedAsset) && (
+-              <option key={selectedAsset} value={selectedAsset}>
+-                {fmt.asset(selectedAsset)}
+-              </option>
++            {(connectError || error) && (
++              <div className="p-4 rounded-xl bg-[#ff4757]/10 border border-[#ff4757]/30 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-500 shadow-lg">
++                <span className="text-base">ΓÜá∩╕Å</span>
++                <span className="text-[10px] font-black text-[#ff4757] uppercase tracking-widest leading-relaxed">
++                  {connectError || error}
++                </span>
++                <button
++                  onClick={clearError}
++                  className="ml-auto p-1.5 text-[#ff4757] hover:bg-[#ff4757]/20 rounded-full transition-colors"
++                >
++                  Γ£ò
++                </button>
++              </div>
+             )}
+-          </select>
++          </div>
+         </div>
+-
+-        {/* Direction */}
+-        <div className="flex flex-col gap-1">
+-          <label className="text-[9px] text-text-secondary">Direction</label>
+-          <DirectionButtons
+-            value={selectedDirection}
+-            onChange={setSelectedDirection}
+-            disabled={!isConnected}
+-          />
++      </CollapsiblePanel>
++
++      {/* ΓöÇΓöÇ 3. Account Status ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
++      <CollapsiblePanel
++        id="lt-account-status"
++        title="Account Portfolio"
++        expandable={true}
++        className="bg-section-bg"
++      >
++        <div className="p-5 flex flex-col gap-6">
++          <div className="flex items-center justify-between">
++            <div className="flex flex-col">
++              <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.25em] mb-2 opacity-60">Available Balance</span>
++              <div className="flex items-baseline gap-2.5">
++                <span className="text-3xl font-black text-text-primary tracking-tighter drop-shadow-sm">
++                  {fmt.bal(balance)}
++                </span>
++                <span className="text-[11px] font-black text-text-secondary/40 uppercase tracking-[0.2em]">USD</span>
++              </div>
++            </div>
++            <div className="flex flex-col items-end gap-3">
++              <div className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg border backdrop-blur-md transition-all
++                ${isDemoMode
++                  ? 'bg-accent-blue/10 border-accent-blue/40 text-accent-blue shadow-accent-blue/5'
++                  : 'bg-[#ff4757]/10 border-[#ff4757]/40 text-[#ff4757] shadow-[#ff4757]/5'}`}
++              >
++                {isDemoMode ? 'Demo Account' : 'Real Account'}
++              </div>
++              <div className="flex items-center gap-2 text-[9px] font-black text-text-secondary/20 uppercase tracking-widest">
++                <div className="w-1.5 h-1.5 rounded-full bg-current opacity-30" />
++                <span>Synced: {fmt.time(lastBalanceUpdate)}</span>
++              </div>
++            </div>
++          </div>
+         </div>
++      </CollapsiblePanel>
++
++      {/* ΓöÇΓöÇ 4. Trade Form ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
++      <CollapsiblePanel
++        id="lt-trade-form"
++        title="Execution Terminal"
++        expandable={true}
++        className="bg-section-bg"
++      >
++        <div className="p-5 flex flex-col gap-6">
++          {/* Asset Selection */}
++          <div className="flex flex-col gap-2.5">
++            <div className="flex items-center justify-between px-1">
++              <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] opacity-60">Selected Asset</span>
++              {selectedAsset && (
++                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent-green/10 border border-accent-green/20">
++                  <div className="w-1 h-1 rounded-full bg-accent-green animate-pulse" />
++                  <span className="text-[9px] font-black text-accent-green uppercase tracking-widest">LIVE FEED</span>
++                </div>
++              )}
++            </div>
++            <div className="p-4 rounded-xl bg-card-bg/80 border border-border-primary flex items-center justify-between group hover:border-border-primary/80 hover:bg-card-bg transition-all shadow-inner">
++              <div className="flex items-center gap-4">
++                <div className="w-10 h-10 rounded-xl bg-black/40 flex items-center justify-center border border-border-primary/40 shadow-xl group-hover:scale-105 transition-transform">
++                  <span className="text-xl">≡ƒÆ▒</span>
++                </div>
++                <div className="flex flex-col gap-0.5">
++                  <span className="text-sm font-black text-text-primary tracking-tight">
++                    {selectedAsset ? fmt.asset(selectedAsset) : 'No Asset Selected'}
++                  </span>
++                  <span className="text-[9px] font-bold text-text-secondary/30 uppercase tracking-[0.15em]">
++                    {selectedAsset ? 'Binary Option OTC' : 'Select from Asset List below'}
++                  </span>
++                </div>
++              </div>
++              <button
++                onClick={() => setSelectedAsset(null)}
++                className="p-2 rounded-xl hover:bg-[#ff4757]/10 text-text-secondary/20 hover:text-[#ff4757] transition-all"
++              >
++                Γ£ò
++              </button>
++            </div>
++          </div>
+ 
+-        {/* Amount */}
+-        <div className="flex flex-col gap-1">
+-          <label className="text-[9px] text-text-secondary">Amount (USD)</label>
+-          <div className="flex items-center gap-1">
+-            <button
+-              onClick={() => handleAmountStep(-5)}
+-              className="px-2 py-1.5 rounded bg-card-bg border border-border-primary text-text-secondary text-[10px] hover:text-text-primary transition-colors select-none"
+-            >-5</button>
+-            <button
+-              onClick={() => handleAmountStep(-1)}
+-              className="px-2 py-1.5 rounded bg-card-bg border border-border-primary text-text-secondary text-[10px] hover:text-text-primary transition-colors select-none"
+-            >-1</button>
+-            <input
+-              id="trade-amount-input"
+-              type="number"
+-              value={tradeAmount}
+-              min={lt.minAmount ?? 1}
+-              max={lt.maxAmount ?? 1000}
+-              step={1}
+-              onChange={(e) => {
+-                const val = e.target.value;
+-                if (val === '') {
+-                  setTradeAmount(0);
+-                  return;
+-                }
+-                const v = parseFloat(val);
+-                if (!isNaN(v)) setTradeAmount(Math.max(lt.minAmount ?? 1, Math.min(lt.maxAmount ?? 1000, v)));
+-              }}
+-              className="flex-1 bg-card-bg border border-border-primary rounded px-2 py-1.5 text-[10px] text-text-primary text-center focus:outline-none focus:ring-1 focus:ring-accent-green min-w-0"
++          {/* Direction */}
++          <div className="flex flex-col gap-2.5">
++            <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] opacity-60 px-1">Order Direction</span>
++            <DirectionButtons
++              value={selectedDirection}
++              onChange={setSelectedDirection}
++              disabled={!isConnected || isExecuting}
+             />
+-            <button
+-              onClick={() => handleAmountStep(1)}
+-              className="px-2 py-1.5 rounded bg-card-bg border border-border-primary text-text-secondary text-[10px] hover:text-text-primary transition-colors select-none"
+-            >+1</button>
+-            <button
+-              onClick={() => handleAmountStep(5)}
+-              className="px-2 py-1.5 rounded bg-card-bg border border-border-primary text-text-secondary text-[10px] hover:text-text-primary transition-colors select-none"
+-            >+5</button>
+           </div>
+-        </div>
+ 
+-        {/* Expiry chips */}
+-        <div className="flex flex-col gap-1">
+-          <label className="text-[9px] text-text-secondary">Expiry</label>
+-          <div className="flex flex-wrap gap-1">
++          {/* Amount & Expiry */}
++          <div className="grid grid-cols-2 gap-5">
++            <div className="flex flex-col gap-2.5">
++              <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] opacity-60 px-1">Amount</span>
++              <div className="relative group">
++                <input
++                  type="number"
++                  value={tradeAmount}
++                  onChange={(e) => setTradeAmount(Number(e.target.value))}
++                  disabled={!isConnected || isExecuting}
++                  className="w-full bg-card-bg/80 border border-border-primary rounded-xl pl-10 pr-4 py-4 text-xs font-black text-text-primary focus:outline-none focus:border-accent-blue/60 focus:ring-2 focus:ring-accent-blue/10 transition-all shadow-inner"
++                />
++                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary/30 text-[11px] font-black">$</span>
++                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
++                  <button onClick={() => handleAmountStep(10)} className="hover:text-accent-blue text-[9px] transition-colors">Γû▓</button>
++                  <button onClick={() => handleAmountStep(-10)} className="hover:text-[#ff4757] text-[9px] transition-colors">Γû╝</button>
++                </div>
++              </div>
++            </div>
++
++            <div className="flex flex-col gap-2.5">
++              <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] opacity-60 px-1">Duration</span>
++              <div className="relative group">
++                <div className="w-full bg-card-bg/80 border border-border-primary rounded-xl px-4 py-4 text-xs font-black text-text-primary flex items-center justify-between shadow-inner">
++                  <span className="tracking-tight">{fmt.expiry(tradeExpiration)}</span>
++                  <span className="text-[9px] font-bold text-text-secondary/20 uppercase tracking-[0.2em]">EXPIRY</span>
++                </div>
++              </div>
++            </div>
++          </div>
++
++          {/* Expiry Presets Grid */}
++          <div className="grid grid-cols-4 gap-2">
+             {EXPIRY_PRESETS.map((p) => (
+               <button
+                 key={p.value}
+                 id={`expiry-${p.label}`}
+                 onClick={() => setTradeExpiration(p.value)}
+-                className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all border
++                disabled={!isConnected || isExecuting}
++                className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border
+                   ${tradeExpiration === p.value
+-                    ? 'bg-accent-green/20 border-accent-green text-accent-green'
+-                    : 'bg-card-bg border-border-primary text-text-secondary hover:border-accent-green/40'}`}
++                    ? 'bg-accent-green/10 border-accent-green text-accent-green shadow-[0_0_15px_rgba(34,197,94,0.15)] scale-[1.02]'
++                    : 'bg-card-bg border-border-primary text-text-secondary/40 hover:border-border-primary/80 hover:text-text-primary hover:bg-card-bg/90'}
++                  disabled:opacity-20 disabled:grayscale disabled:cursor-not-allowed`}
+               >
+                 {p.label}
+               </button>
+             ))}
+           </div>
+-        </div>
+ 
+-        {/* Execute button */}
+-        <button
+-          id="execute-trade-btn"
+-          disabled={!canExecute}
+-          onClick={handleExecute}
+-          className={`w-full py-2.5 rounded-lg font-bold text-[11px] uppercase tracking-wider transition-all border
+-            ${canExecute
+-              ? 'bg-yellow-500/20 border-yellow-500/60 text-yellow-400 hover:bg-yellow-500/30 hover:shadow-[0_0_12px_rgba(234,179,8,0.2)]'
+-              : 'bg-card-bg border-border-primary/40 text-text-secondary/40 cursor-not-allowed'}
+-            ${isExecuting ? 'animate-pulse' : ''}`}
+-        >
+-          {isExecuting
+-            ? 'ΓÅ│ Placing TradeΓÇª'
+-            : cooldownLeft > 0
+-              ? `ΓÅ▒ Cooldown ${cooldownLeft}s`
+-              : !isConnected
+-                ? '≡ƒöî Connect First'
+-                : !selectedDirection
+-                  ? 'ΓåæΓåô Select Direction'
+-                  : `ΓÜí ${isDemoMode ? 'Demo' : 'Real'} Trade ΓÇö ${fmt.bal(tradeAmount)}`}
+-        </button>
+-
+-        {error && (
+-          <div className="flex items-start gap-1.5 p-2 rounded bg-[#ff4757]/10 border border-[#ff4757]/30">
+-            <span className="text-[#ff4757] text-[10px] flex-1">{error}</span>
+-            <button onClick={clearError} className="text-text-secondary hover:text-text-primary text-[10px]">Γ£ò</button>
+-          </div>
+-        )}
+-      </div>
++          {/* Execute Button */}
++          <button
++            id="execute-trade-btn"
++            disabled={!canExecute}
++            onClick={handleExecute}
++            className={`w-full py-5 rounded-xl font-black text-[13px] uppercase tracking-[0.25em] transition-all shadow-2xl active:scale-[0.97]
++              ${canExecute
++                ? 'bg-accent-green text-black hover:opacity-95 hover:shadow-[0_12px_35px_rgba(34,197,94,0.3)] border-none'
++                : 'bg-white/5 border border-border-primary text-text-secondary/20 cursor-not-allowed shadow-none'}
++              ${isExecuting ? 'animate-pulse' : ''}`}
++          >
++            {isExecuting ? (
++              <div className="flex items-center justify-center gap-4">
++                <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
++                <span className="animate-pulse">EXECUTING ORDER</span>
++              </div>
++            ) : cooldownLeft > 0 ? (
++              <div className="flex items-center justify-center gap-3">
++                <span className="opacity-40">COOLDOWN</span>
++                <span className="text-sm tracking-widest">{cooldownLeft}s</span>
++              </div>
++            ) : !isConnected ? (
++              'SYSTEM OFFLINE'
++            ) : !selectedDirection ? (
++              'AWAITING DIRECTION'
++            ) : (
++              <div className="flex items-center justify-center gap-3">
++                <span>PLACE {isDemoMode ? 'DEMO' : 'REAL'} TRADE</span>
++                <span className="opacity-20">|</span>
++                <span className="drop-shadow-sm">{fmt.bal(tradeAmount)}</span>
++              </div>
++            )}
++          </button>
++        </div>
++      </CollapsiblePanel>
++
++      {/* ΓöÇΓöÇ 5. Recent Trades ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
++      <CollapsiblePanel
++        id="lt-recent-trades"
++        title="Recent Trades"
++        expandable={true}
++        className="bg-section-bg"
++      >
++        <div className="p-5 flex flex-col gap-4 overflow-y-auto custom-scrollbar max-h-[350px] pr-1">
++          {activeTrade && (
++            <div className="p-4 rounded-xl bg-accent-blue/10 border border-accent-blue/30 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 shadow-lg shadow-accent-blue/5">
++              <div className="flex items-center justify-between">
++                <div className="flex items-center gap-2.5">
++                  <div className="w-2 h-2 rounded-full bg-accent-blue animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
++                  <span className="text-[10px] font-black text-accent-blue uppercase tracking-[0.2em]">Active Order</span>
++                </div>
++                <TradeCountdown expiresAt={activeTrade.expiresAt} />
++              </div>
++              <div className="flex items-center justify-between">
++                <div className="flex flex-col gap-0.5">
++                  <span className="text-sm font-black text-text-primary tracking-tight">{fmt.asset(activeTrade.asset)}</span>
++                  <span className="text-[10px] font-bold text-text-secondary/40 uppercase tracking-widest">{activeTrade.direction} @ {fmt.bal(activeTrade.amount)}</span>
++                </div>
++                <div className="px-2 py-1 rounded-lg bg-black/40 border border-border-primary/50">
++                  <span className="text-[9px] font-black text-text-secondary/40 uppercase tracking-[0.15em]">PENDING</span>
++                </div>
++              </div>
++            </div>
++          )}
+ 
+-      {/* ΓöÇΓöÇ 5. Recent Trades ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+-      {trades.length > 0 && (
+-        <div className="rounded-lg border border-border-primary bg-card-bg p-3">
+-          <p className="text-[9px] font-bold uppercase tracking-wider text-text-secondary mb-2">Recent Trades</p>
+-          <div className="flex flex-col gap-1">
+-            {trades.slice(0, 8).map((t) => (
+-              <div key={t.id} className="flex items-center gap-1.5 py-1 border-b border-border-primary/30 last:border-0">
+-                {/* Direction arrow */}
+-                <span className={`text-[10px] font-bold ${t.direction === 'call' ? 'text-[#00c97a]' : 'text-[#ff4757]'}`}>
+-                  {t.direction === 'call' ? 'Γû▓' : 'Γû╝'}
+-                </span>
+-                {/* Asset */}
+-                <span className="text-[9px] text-text-primary font-mono flex-1 truncate">{fmt.asset(t.asset)}</span>
+-                {/* Amount */}
+-                <span className="text-[9px] text-text-secondary font-mono">{fmt.bal(t.amount)}</span>
+-                {/* Timer or result */}
+-                {t.status === 'pending' ? (
+-                  <TradeCountdown expiresAt={t.expiresAt} />
+-                ) : (
+-                  t.profit !== null ? (
+-                    <span className={`text-[9px] font-mono ${t.profit >= 0 ? 'text-[#00c97a]' : 'text-[#ff4757]'}`}>
+-                      {t.profit >= 0 ? '+' : ''}{fmt.bal(t.profit)}
+-                    </span>
+-                  ) : (
+-                    <span className="text-[9px] font-mono text-text-secondary">ΓÇö</span>
+-                  )
+-                )}
+-                <ResultBadge status={t.status} />
++          <div className="flex flex-col gap-2.5">
++            {trades.length === 0 ? (
++              <div className="py-12 flex flex-col items-center justify-center gap-4 opacity-10">
++                <span className="text-4xl grayscale">≡ƒôè</span>
++                <span className="text-[11px] font-black uppercase tracking-[0.3em]">No Recent Activity</span>
+               </div>
+-            ))}
++            ) : (
++              trades.slice(0, 10).map((t) => (
++                <div key={t.id} className="p-4 rounded-xl bg-card-bg/60 border border-border-primary/40 flex items-center justify-between hover:bg-card-bg hover:border-border-primary/80 transition-all group shadow-sm hover:shadow-md">
++                  <div className="flex items-center gap-4">
++                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all shadow-inner group-hover:scale-105
++                      ${t.status === 'win' ? 'bg-[#00c97a]/10 border-[#00c97a]/40 text-[#00c97a]' :
++                        t.status === 'loss' ? 'bg-[#ff4757]/10 border-[#ff4757]/40 text-[#ff4757]' :
++                          'bg-black/30 border-border-primary/50 text-text-secondary/30'}`}
++                    >
++                      <span className="text-[11px] font-black">{t.direction === 'call' ? 'Γû▓' : 'Γû╝'}</span>
++                    </div>
++                    <div className="flex flex-col gap-0.5">
++                      <span className="text-sm font-black text-text-primary tracking-tight group-hover:text-accent-blue transition-colors">
++                        {fmt.asset(t.asset)}
++                      </span>
++                      <span className="text-[10px] font-bold text-text-secondary/30 uppercase tracking-widest">
++                        {fmt.time(t.timestamp)} ΓÇó {fmt.bal(t.amount)}
++                      </span>
++                    </div>
++                  </div>
++                  <div className="flex flex-col items-end gap-1.5">
++                    <ResultBadge status={t.status} />
++                    {t.profit !== undefined && (
++                      <span className={`text-[10px] font-black tracking-tighter drop-shadow-sm ${t.profit >= 0 ? 'text-[#00c97a]' : 'text-[#ff4757]'}`}>
++                        {t.profit >= 0 ? '+' : ''}{fmt.bal(t.profit)}
++                      </span>
++                    )}
++                  </div>
++                </div>
++              ))
++            )}
+           </div>
+         </div>
+-      )}
++      </CollapsiblePanel>
+ 
+       {/* ΓöÇΓöÇ 6. 92% Assets (collapsible) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
+-      <div className="rounded-lg border border-border-primary bg-section-bg overflow-hidden">
+-        <button
+-          id="assets-collapse-btn"
+-          onClick={() => {
+-            const next = !assetsOpen;
+-            setAssetsOpen(next);
+-            if (next && !assetsLoaded) fetchAssets();
+-          }}
+-          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-card-bg/50 transition-colors"
+-        >
+-          <span className="text-[9px] font-bold uppercase tracking-wider text-text-secondary">
+-            92% Payout Assets
+-          </span>
+-          <span className={`text-text-secondary text-[10px] transition-transform ${assetsOpen ? 'rotate-180' : ''}`}>Γû╝</span>
+-        </button>
+-
+-        {assetsOpen && (
+-          <div className="border-t border-border-primary/30">
+-            <AssetPayoutPanel
+-              showControls={false}
+-              defaultIsTopCollapsed={false}
+-              defaultIsBottomCollapsed={true}
+-              onUseForTrade={handleUseForTrade}
+-              className="max-h-64"
+-            />
+-          </div>
+-        )}
+-      </div>
++      <CollapsiblePanel
++        id="live-trading-assets"
++        title="High Payout Markets"
++        expandable={true}
++        onToggle={(isOpen) => {
++          if (isOpen && !assetsLoaded) fetchAssets();
++        }}
++        className="bg-section-bg"
++      >
++        <AssetPayoutPanel
++          showControls={false}
++          defaultIsTopCollapsed={false}
++          defaultIsBottomCollapsed={true}
++          onUseForTrade={handleUseForTrade}
++        />
++      </CollapsiblePanel>
+ 
+     </div>
+   );

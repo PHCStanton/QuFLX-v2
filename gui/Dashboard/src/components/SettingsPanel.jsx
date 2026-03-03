@@ -48,6 +48,8 @@ const SettingsPanel = () => {
   const { user, updateUser } = useUserStore();
   const sidebarSkinFileInputRef = useRef(null);
   const [sidebarSkinError, setSidebarSkinError] = useState('');
+  const dashboardBgFileInputRef = useRef(null);
+  const [dashboardBgError, setDashboardBgError] = useState('');
 
   const { supported: ttsSupported, voices: ttsVoices } = useTextToSpeech();
 
@@ -252,6 +254,37 @@ const SettingsPanel = () => {
     }
   };
 
+  const handleDashboardBgUpload = (file) => {
+    if (!file) return;
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(file.type)) {
+      setDashboardBgError('Please upload a JPG, PNG, or WebP image.');
+      return;
+    }
+    const maxBytes = 4 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setDashboardBgError('Image is too large. Please use an image under 4MB.');
+      return;
+    }
+    setDashboardBgError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) { setDashboardBgError('Could not read that image.'); return; }
+      updateSection('global', { dashboardBgDataUrl: result });
+    };
+    reader.onerror = () => setDashboardBgError('Could not read that image.');
+    reader.readAsDataURL(file);
+  };
+
+  const handleDashboardBgClear = () => {
+    updateSection('global', { dashboardBgDataUrl: null });
+    setDashboardBgError('');
+    if (dashboardBgFileInputRef.current) {
+      dashboardBgFileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-dashboard-bg overflow-y-auto custom-scrollbar p-6">
       <div className="max-w-4xl mx-auto w-full space-y-6">
@@ -282,16 +315,47 @@ const SettingsPanel = () => {
           </div>
         </div>
 
-        {/* Connection Settings */}
+        {/* User Account — includes SSID management (moved from Exchange Connection panel) */}
         <CollapsiblePanel
-          id="settings-connection"
-          title="Exchange Connection"
-          defaultOpen={!isConnected}
-          bodyClassName="flex flex-col gap-4 p-4"
+          id="settings-user-account"
+          title="User Account"
+          defaultOpen={false}
+          bodyClassName="flex flex-col gap-6 p-4"
         >
+          {/* Identity fields — 2-col grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <SettingRow label="Display Name" description="How you appear in the platform">
+              <input
+                type="text"
+                value={user?.name || ''}
+                onChange={(e) => updateUser({ name: e.target.value })}
+                className="bg-section-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+              />
+            </SettingRow>
+            <SettingRow label="Email Address" description="Primary contact and login email">
+              <input
+                type="email"
+                value={user?.email || ''}
+                onChange={(e) => updateUser({ email: e.target.value })}
+                className="bg-section-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
+              />
+            </SettingRow>
+            <SettingRow label="Account Tier" description="Your current subscription level">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-accent-blue/20 text-accent-blue text-[10px] font-bold uppercase tracking-wider">
+                  {user?.tier || 'Standard'}
+                </span>
+              </div>
+            </SettingRow>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-border-primary/50" />
+
+          {/* SSID Management */}
           <div className="p-3 rounded bg-accent-blue/10 border border-accent-blue/30 text-xs text-text-secondary">
-            <p className="mb-2 font-bold text-accent-blue">SSID Management</p>
-            <p>Enter your Pocket Option SSID below. Clicking "Connect & Save" will verify the SSID and save it to your local environment file if valid.</p>
+            <p className="mb-1 font-bold text-accent-blue">Pocket Option SSID Management</p>
+            <p>Paste your SSID cookie below. "Connect &amp; Save" will verify it and persist it to your local environment file.</p>
           </div>
 
           <SettingRow
@@ -299,7 +363,6 @@ const SettingsPanel = () => {
             description="Pocket Option SSID for Demo trading"
           >
             <div className="flex flex-col gap-2 w-full">
-              {/* Fix 5a: Show saved badge — survives tab switches (reads from store, not local state) */}
               {hasDemoSsid && (
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-accent-green/10 border border-accent-green/30 w-fit">
                   <span className="text-[10px] font-black text-accent-green">✓ Demo SSID saved</span>
@@ -331,7 +394,6 @@ const SettingsPanel = () => {
             description="Pocket Option SSID for Real trading"
           >
             <div className="flex flex-col gap-2 w-full">
-              {/* Fix 5a: Show saved badge for real SSID */}
               {hasRealSsid && (
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#ff4757]/10 border border-[#ff4757]/30 w-fit">
                   <span className="text-[10px] font-black text-[#ff4757]">✓ Real SSID saved</span>
@@ -365,46 +427,6 @@ const SettingsPanel = () => {
           )}
         </CollapsiblePanel>
 
-        {/* User Account */}
-        <CollapsiblePanel
-          id="settings-user-account"
-          title="User Account"
-          defaultOpen={false}
-          bodyClassName="grid grid-cols-1 md:grid-cols-2 gap-6 p-4"
-        >
-          <SettingRow label="Display Name" description="How you appear in the platform">
-            <input
-              type="text"
-              value={user?.name || ''}
-              onChange={(e) => updateUser({ name: e.target.value })}
-              className="bg-section-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
-            />
-          </SettingRow>
-          <SettingRow label="Email Address" description="Primary contact and login email">
-            <input
-              type="email"
-              value={user?.email || ''}
-              onChange={(e) => updateUser({ email: e.target.value })}
-              className="bg-section-bg border border-border-primary rounded px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"
-            />
-          </SettingRow>
-          <SettingRow label="Account Tier" description="Your current subscription level">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-accent-blue/20 text-accent-blue text-[10px] font-bold uppercase tracking-wider">
-                {user?.tier || 'Standard'}
-              </span>
-            </div>
-          </SettingRow>
-          <SettingRow label="API Access Key" description="Authenticated key for programmatic access">
-            <input
-              type="password"
-              value={user?.apiKey || ''}
-              readOnly
-              className="bg-section-bg/50 border border-border-primary rounded px-3 py-1.5 text-xs text-text-secondary cursor-not-allowed w-48"
-            />
-          </SettingRow>
-        </CollapsiblePanel>
-
         {/* Global Settings */}
         <CollapsiblePanel
           id="settings-global"
@@ -425,7 +447,7 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('global', { theme: val })}
             />
           </SettingRow>
-          <SettingRow label="Add Skin" description="Upload a 16:9 image for the sidebar background">
+          <SettingRow label="Add Sidebar Image" description="Upload a 16:9 image for the sidebar background">
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
                 <input
@@ -451,11 +473,47 @@ const SettingsPanel = () => {
                 <div className="flex items-center gap-3">
                   <img
                     src={sidebarSkinPreviewUrl}
-                    alt="Sidebar skin preview"
+                    alt="Sidebar image preview"
                     className="w-28 h-16 rounded border border-border-primary object-cover"
                   />
                   <div className="text-xs text-text-secondary">
                     Applied to the left sidebar background.
+                  </div>
+                </div>
+              )}
+            </div>
+          </SettingRow>
+          <SettingRow label="Add Background" description="Upload a tiling image for the main dashboard background">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <input
+                  ref={dashboardBgFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => handleDashboardBgUpload(e.target.files?.[0] || null)}
+                  className="text-xs text-text-secondary"
+                />
+                <button
+                  type="button"
+                  onClick={handleDashboardBgClear}
+                  disabled={!settings.global.dashboardBgDataUrl}
+                  className="px-3 py-2 rounded bg-section-bg hover:bg-section-bg/80 text-text-primary text-xs font-medium border border-border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Remove
+                </button>
+              </div>
+              {dashboardBgError && (
+                <div className="text-xs text-red-400">{dashboardBgError}</div>
+              )}
+              {settings.global.dashboardBgDataUrl && (
+                <div className="flex items-center gap-3">
+                  <img
+                    src={settings.global.dashboardBgDataUrl}
+                    alt="Dashboard background preview"
+                    className="w-28 h-16 rounded border border-border-primary object-cover"
+                  />
+                  <div className="text-xs text-text-secondary">
+                    Custom background active — overrides the default texture.
                   </div>
                 </div>
               )}

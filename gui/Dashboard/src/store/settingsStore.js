@@ -97,6 +97,7 @@ const defaultSettings = {
     autoStartGateway: true,
     debugLevel: 'info',
     sidebarSkinDataUrl: null,
+    dashboardBgDataUrl: null,
     fontSize: 13,
   },
   automation: {
@@ -180,6 +181,7 @@ const sanitizeSettingsForBackend = (settings) => {
   if (next.global) {
     next.global = { ...next.global };
     delete next.global.sidebarSkinDataUrl;
+    delete next.global.dashboardBgDataUrl;
   }
   return next;
 };
@@ -278,6 +280,7 @@ const normalizeSettings = (settings) => {
 
 const mergeSettings = (current, incoming) => {
   const localSidebarSkinDataUrl = current.global?.sidebarSkinDataUrl ?? null;
+  const localDashboardBgDataUrl = current.global?.dashboardBgDataUrl ?? null;
   const merged = {
     ...current,
     ...(incoming || {}),
@@ -285,6 +288,7 @@ const mergeSettings = (current, incoming) => {
       ...(current.global || {}),
       ...(incoming?.global || {}),
       sidebarSkinDataUrl: localSidebarSkinDataUrl,
+      dashboardBgDataUrl: localDashboardBgDataUrl,
     },
     automation: {
       ...(current.automation || {}),

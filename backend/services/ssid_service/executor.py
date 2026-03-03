@@ -1,26 +1,35 @@
 
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from .connector import AsyncPocketOptionWrapper
 
 logger = logging.getLogger("ssid_service.executor")
 
-# Verified OTC Assets from Pocket Option
-OTC_ASSETS = [
-    {"id": "EURUSD_otc", "name": "EUR/USD (OTC)"},
-    {"id": "GBPUSD_otc", "name": "GBP/USD (OTC)"},
-    {"id": "USDJPY_otc", "name": "USD/JPY (OTC)"},
-    {"id": "AUDUSD_otc", "name": "AUD/USD (OTC)"},
-    {"id": "USDCAD_otc", "name": "USD/CAD (OTC)"},
-    {"id": "USDCHF_otc", "name": "USD/CHF (OTC)"},
-    {"id": "NZDUSD_otc", "name": "NZD/USD (OTC)"},
-    {"id": "EURJPY_otc", "name": "EUR/JPY (OTC)"},
-    {"id": "EURGBP_otc", "name": "EUR/GBP (OTC)"},
-    {"id": "EURAUD_otc", "name": "EUR/AUD (OTC)"},
-    {"id": "EURCAD_otc", "name": "EUR/CAD (OTC)"},
-    {"id": "AUDNZD_otc", "name": "AUD/NZD (OTC)"},
-    {"id": "AUDJPY_otc", "name": "AUD/JPY (OTC)"},
-]
+
+def _normalize_asset_symbol(asset: str) -> str:
+    """
+    Normalize any asset format to the PocketOption API symbol (e.g. 'GBPAUD_otc').
+
+    PocketOption expects UPPERCASE base + lowercase '_otc' suffix.
+    Examples (all produce the same output):
+      - 'AUD/CHF OTC'   → 'AUDCHF_otc'
+      - 'AUDCHFOTC'     → 'AUDCHF_otc'  (QuFLX normalized display format)
+      - 'AUDCHF_otc'    → 'AUDCHF_otc'  (already correct)
+      - 'audchf_otc'    → 'AUDCHF_otc'  (wrong case variant)
+      - '#AAPL_otc'     → '#AAPL_otc'   (stock with # prefix)
+    """
+    if not asset:
+        return ""
+    # Preserve leading '#' for stock symbols (e.g. '#AAPL_otc')
+    prefix = "#" if asset.startswith("#") else ""
+    # Strip everything except alphanumeric chars (and the leading # already saved)
+    stripped = re.sub(r"[^A-Za-z0-9]", "", asset)
+    # Remove trailing 'OTC'/'otc' case-insensitively (we'll re-add with underscore)
+    if stripped.lower().endswith("otc"):
+        stripped = stripped[:-3]
+    # PocketOption format: UPPERCASE base + lowercase '_otc'
+    return f"{prefix}{stripped.upper()}_otc"
 
 class OTCExecutor:
     """
@@ -32,18 +41,16 @@ class OTCExecutor:
     def execute_trade(self, asset: str, direction: str, amount: float, expiration: int) -> Dict[str, Any]:
         """
         Execute a trade and return the result.
+        Asset validation is handled by the PocketOption WebSocket API itself.
         """
         if not self.wrapper.is_connected():
             return {"success": False, "error": "Not connected to Pocket Option"}
 
-        # Validate asset
-        valid_ids = [a["id"] for a in OTC_ASSETS]
-        if asset not in valid_ids:
-            # Try to find if it needs _otc suffix
-            if f"{asset}_otc" in valid_ids:
-                asset = f"{asset}_otc"
-            else:
-                return {"success": False, "error": f"Invalid OTC asset: {asset}"}
+        # Normalize to PocketOption API format: 'audchf_otc'
+        # Handles all inputs: 'AUD/CHF OTC', 'AUDCHFOTC', 'AUDCHF_otc'
+        asset = _normalize_asset_symbol(asset)
+        if not asset:
+            return {"success": False, "error": "Asset name is required"}
 
         success, order_id = self.wrapper.buy(
             amount=amount,

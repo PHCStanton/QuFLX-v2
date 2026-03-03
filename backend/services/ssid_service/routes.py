@@ -22,7 +22,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 from typing import Dict, Any, Optional, Tuple
-from .executor import OTCExecutor, OTC_ASSETS
+from .executor import OTCExecutor
 
 router = APIRouter()
 logger = logging.getLogger("ssid_service.routes")
@@ -300,7 +300,8 @@ async def ssid_status(request: Request):
 
 @router.get("/assets")
 async def list_assets():
-    return {"success": True, "assets": OTC_ASSETS, "count": len(OTC_ASSETS)}
+    """Assets should be sourced from the collector/payout panel, not the SSID service."""
+    return {"success": True, "assets": [], "count": 0, "message": "Use collector payout assets for the full dynamic asset list"}
 
 
 @router.post("/switch-mode")
