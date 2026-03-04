@@ -111,12 +111,8 @@ class AsyncPocketOptionWrapper:
                 extracted = self._extract_order_id(nested)
                 if extracted is not None:
                     return extracted
-
-            # Fallback recursive scan
-            for value in payload.values():
-                extracted = self._extract_order_id(value)
-                if extracted is not None:
-                    return extracted
+                    
+            # Avoid blind scanning of all dictionary values which might extract unrelated IDs (e.g. from payout arrays)
 
         if isinstance(payload, list):
             for item in payload:

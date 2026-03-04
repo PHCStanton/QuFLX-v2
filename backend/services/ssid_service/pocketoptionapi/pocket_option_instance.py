@@ -139,6 +139,9 @@ class PocketOptionInstance:
         except Exception as e:
             self.logger.error(f"Listener error: {e}")
             self.is_connected = False
+            # Fire a state change/event when the listener dies so the frontend polling detects it immediately
+            if getattr(self, "on_error", None):
+                self.on_error(f"WebSocket listener dropped: {e}")
 
     async def _resolve_pending_trade(self, event: str, payload) -> None:
         """
@@ -242,7 +245,12 @@ class PocketOptionInstance:
 
                 elif event == "updateClosedDeals":
                     # Closed deal data follows — handled by the binary/JSON branch
-                    self.logger.debug("updateClosedDeals received via 451")
+                    self.logger.debug("updateClosedDeals received via 451. Requesting deal data.")
+                    # Trigger the actual deal data to be sent (mirroring reference implementation)
+                    # We just need to trigger a changeSymbol or similar to force the follow-up binary message
+                    if self.websocket:
+                        # Use a default generic asset just to trigger the update without breaking state
+                        await self.websocket.send('42["changeSymbol",{"asset":"AUDNZD_otc","period":60}]')
 
             except (IndexError, json.JSONDecodeError, Exception) as e:
                 self.logger.error(f"451 message processing error: {e} | raw: {message[:120]}")
@@ -268,9 +276,11 @@ class PocketOptionInstance:
                     await self._resolve_pending_trade(event, payload)
 
                 elif event == "updateBalance":
-                    self.balance = payload
-                    if self.on_balance_update:
-                        self.on_balance_update(self.balance)
+                    if isinstance(payload, dict) and "balance" in payload:
+                        self.balance = float(payload["balance"])
+                        self.is_demo_account = bool(payload.get("isDemo"))
+                        if self.on_balance_update:
+                            self.on_balance_update(self.balance)
 
                 elif "NotAuthorized" in str(payload):
                     self.logger.error("Authorization Failed: Invalid SSID")
@@ -396,11 +406,16 @@ class PocketOptionInstance:
     async def check_win(self, trade_id: str) -> Optional[Tuple[float, str]]:
         """
         Check if a trade has finished and return result.
+        Actively waits for up to 5 seconds for the deal data to arrive via WebSocket.
         """
-        for deal in self.closed_deals:
-            if str(deal.get("id")) == str(trade_id):
-                profit = float(deal.get("profit", 0))
-                status = "win" if profit > 0 else "loss"
-                return (profit, status)
+        for _ in range(10): # Loop 10 times, 0.5s sleep = 5s total wait
+            for deal in self.closed_deals:
+                if str(deal.get("id")) == str(trade_id):
+                    profit = float(deal.get("profit", 0))
+                    status = "win" if profit > 0 else "loss"
+                    return (profit, status)
+            
+            # Not found yet, wait and check again
+            await asyncio.sleep(0.5)
                 
         return None

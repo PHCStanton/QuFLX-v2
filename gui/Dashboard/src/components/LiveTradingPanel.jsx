@@ -337,12 +337,54 @@ const LiveTradingPanel = () => {
   // ── Auto-check active trade result when it expires ───────────────────
   useEffect(() => {
     if (!activeTrade) return;
-    const delay = activeTrade.expiresAt - Date.now() + 3000; // 3s buffer
+
+    // We start polling when the trade expires
+    const msUntilExpiry = activeTrade.expiresAt - Date.now();
     const tradeId = activeTrade.id;
-    const id = setTimeout(() => {
-      if (tradeId) checkResult(tradeId);
-    }, Math.max(delay, 1000));
-    return () => clearTimeout(id);
+
+    // If trade hasn't expired yet, wait until it does, then start polling
+    const initialDelay = Math.max(msUntilExpiry, 1000);
+
+    let pollInterval;
+    let timeoutId;
+    let attempts = 0;
+    const maxAttempts = 15; // 15 attempts * 2s = 30 seconds max polling
+
+    const startPolling = () => {
+      // First check immediately when expiry hits
+      doCheck();
+
+      // Then set up an interval to check every 2 seconds
+      pollInterval = setInterval(doCheck, 2000);
+    };
+
+    const doCheck = async () => {
+      attempts++;
+      if (!tradeId) return;
+
+      const result = await checkResult(tradeId);
+
+      // If result is settled (win, loss, error), or we hit max attempts, stop polling
+      if ((result && result.settled) || attempts >= maxAttempts) {
+        clearInterval(pollInterval);
+
+        // If we hit max attempts and it's still not settled, mark as timeout/error
+        if (attempts >= maxAttempts && (!result || !result.settled)) {
+          console.warn(`[LiveTradingPanel] Check result timeout for trade ${tradeId}`);
+          // The store expects an error to be handled if it doesn't get a result,
+          // but we can just let it stay pending or we could explicitly update it.
+          // Since checkResult returns null on network error, we don't force a state change here
+          // to avoid overwriting a late arrival if the websocket reconnects.
+        }
+      }
+    };
+
+    timeoutId = setTimeout(startPolling, initialDelay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, [activeTrade, checkResult]);
 
   // ── Cooldown state ───────────────────────────────────────────────────

@@ -20,7 +20,7 @@ import os
 import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Dict, Any, Optional, Tuple
 from .executor import OTCExecutor
 
@@ -113,8 +113,9 @@ class ConnectRequest(BaseModel):
     ssid: str
     demo: bool = True
 
-    @validator("ssid")
-    def normalize_ssid(cls, v):
+    @field_validator("ssid")
+    @classmethod
+    def normalize_ssid(cls, v: str) -> str:
         return (v or "").strip()
 
 
@@ -124,15 +125,17 @@ class TradeRequest(BaseModel):
     amount: float = Field(..., gt=0)
     expiration: int = Field(..., gt=0)
 
-    @validator("direction")
-    def validate_direction(cls, v):
+    @field_validator("direction")
+    @classmethod
+    def validate_direction(cls, v: str) -> str:
         v = v.lower()
         if v not in ("call", "put"):
             raise ValueError("Direction must be 'call' or 'put'")
         return v
 
-    @validator("asset")
-    def validate_asset(cls, v):
+    @field_validator("asset")
+    @classmethod
+    def validate_asset(cls, v: str) -> str:
         value = (v or "").strip()
         if not value:
             raise ValueError("Asset is required")
@@ -243,23 +246,20 @@ async def execute_trade(req: TradeRequest, request: Request):
     app = request.app
     lock = _get_lock(app)
 
-    # Capture session reference inside lock, then release before blocking trade call.
-    # Fix: prevents race condition where two concurrent requests both pass is_connected()
-    # but then interfere during execution.
     async with lock:
         _, session = _resolve_session(app)
 
-    if not session or not session.is_connected():
-        raise _http_error(409, "Not connected to Pocket Option")
+        if not session or not session.is_connected():
+            raise _http_error(409, "Not connected to Pocket Option")
 
-    executor = OTCExecutor(session)
-    result = await asyncio.to_thread(
-        executor.execute_trade,
-        asset=req.asset,
-        direction=req.direction,
-        amount=req.amount,
-        expiration=req.expiration,
-    )
+        executor = OTCExecutor(session)
+        result = await asyncio.to_thread(
+            executor.execute_trade,
+            asset=req.asset,
+            direction=req.direction,
+            amount=req.amount,
+            expiration=req.expiration,
+        )
 
     if not result.get("success"):
         raise _http_error(400, result.get("error", "Trade failed"))

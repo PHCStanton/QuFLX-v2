@@ -176,6 +176,8 @@ async def lifespan(app: FastAPI):
     await ai_service.close()
     if redis_client:
         await redis_client.close()
+    if trading._shared_client and not trading._shared_client.is_closed:
+        await trading._shared_client.aclose()
 
 # FastAPI Setup
 app = FastAPI(title="QuFLX v2 API Gateway", lifespan=lifespan)

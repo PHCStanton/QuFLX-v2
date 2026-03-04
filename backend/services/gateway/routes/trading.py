@@ -11,7 +11,7 @@ import httpx
 import re
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger("gateway.trading.proxy")
 router = APIRouter()
@@ -40,7 +40,7 @@ class ConnectRequest(BaseModel):
     ssid: str = Field(default="", description="Pocket Option SSID cookie value. Empty string allowed — ssid_service will use .env fallback.")
     demo: bool = Field(True, description="True = demo account (default), False = real")
 
-    @validator("ssid")
+    @field_validator("ssid")
     @classmethod
     def validate_ssid(cls, v: str) -> str:
         value = (v or "").strip()
@@ -62,7 +62,7 @@ class ExecuteTradeRequest(BaseModel):
     amount: float = Field(..., gt=0, description="Trade amount in USD")
     expiration: int = Field(300, gt=0, description="Expiry in seconds (default 300s = 5m)")
 
-    @validator("direction")
+    @field_validator("direction")
     @classmethod
     def validate_direction(cls, v: str) -> str:
         normalized = v.lower().strip()
@@ -70,7 +70,7 @@ class ExecuteTradeRequest(BaseModel):
             raise ValueError("direction must be 'call' or 'put'")
         return normalized
 
-    @validator("asset")
+    @field_validator("asset")
     @classmethod
     def validate_asset_format(cls, v: str) -> str:
         v = v.strip()

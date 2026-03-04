@@ -1,7 +1,7 @@
 
 import logging
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from .connector import AsyncPocketOptionWrapper
 
 logger = logging.getLogger("ssid_service.executor")
