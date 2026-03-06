@@ -94,6 +94,19 @@ const ChartWorkspace = () => {
   const [askAiForceImageDataUrl, setAskAiForceImageDataUrl] = useState(null);
   const [settingsIndicator, setSettingsIndicator] = useState(null);
 
+  // REF button: bump this to force all indicator series to re-render unconditionally
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleForceRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  // Suspend / resume a single indicator without removing it
+  const handleIndicatorSuspend = useCallback((id) => {
+    const ind = activeIndicators.find((i) => i.id === id);
+    if (!ind) return;
+    updateIndicator(id, { suspended: !ind.suspended });
+  }, [activeIndicators, updateIndicator]);
+
   useEffect(() => {
     setCaptureChartImage(captureCompositeChart);
     return () => setCaptureChartImage(null);
@@ -260,6 +273,7 @@ const ChartWorkspace = () => {
     indicatorSeries,
     selectedAsset,
     selectedTimeframe,
+    refreshKey,
     onError: setError
   });
 
@@ -270,6 +284,7 @@ const ChartWorkspace = () => {
     activeIndicators,
     loadIndicators,
     appendCandle,
+    refreshKey,
   });
 
   useChartMarkers({
@@ -377,6 +392,8 @@ const ChartWorkspace = () => {
         isAsking={isAsking}
         isCapturing={isCapturing}
         onIndicatorClick={handleIndicatorClick}
+        onIndicatorSuspend={handleIndicatorSuspend}
+        onForceRefresh={handleForceRefresh}
         onSyncTimeframe={handleSyncTimeframe}
         isSyncingTimeframe={isSyncingTimeframe}
         isTimeframeSyncLinked={Boolean(settings?.automation?.linkTimeframeSync)}

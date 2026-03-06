@@ -9,18 +9,14 @@ technical indicators. No side effects, no Redis, no file I/O.
 """
 
 import pandas as pd
+import numpy as np
 import logging
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from enum import Enum
 
-# Technical Analysis imports
-try:
-    from ta.trend import ADXIndicator, EMAIndicator, MACD, CCIIndicator
-    from ta.volatility import BollingerBands, AverageTrueRange
-    from ta.momentum import RSIIndicator, StochasticOscillator
-except ImportError:
-    raise ImportError("'ta' library required. Install with: pip install ta")
+# Note: this module uses TechnicalIndicatorsPipeline from indicators.py (pandas_ta / manual fallback).
+# The 'ta' library is NOT used here — imports were removed to eliminate a dead dependency (BUG-2).
 
 logger = logging.getLogger(__name__)
 
@@ -188,60 +184,17 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     # Import unified pipeline
     from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
-    
-    # Initialize and run pipeline ONLY if core indicators are missing
+
+    # Run pipeline ONLY if core indicators are missing
     if 'adx' not in df.columns or 'ema_16' not in df.columns:
         pipeline = TechnicalIndicatorsPipeline()
         result_df = pipeline.calculate_indicators(df)
     else:
         result_df = df.copy()
-    
-    # Map Pipeline B column names to regime detector's expected names
-    # Pipeline B uses underscored names (ema_16), regime detector uses non-underscored (ema16)
-    if 'ema_16' in result_df.columns:
-        result_df['ema16'] = result_df['ema_16']
-    if 'ema_89' in result_df.columns:
-        result_df['ema89'] = result_df['ema_89']
-    if 'macd_histogram' in result_df.columns:
-        result_df['macd_hist'] = result_df['macd_histogram']
-    if 'bb_upper' in result_df.columns:
-        result_df['bb_high'] = result_df['bb_upper']
-    if 'bb_lower' in result_df.columns:
-        result_df['bb_low'] = result_df['bb_lower']
-    if 'bb_width' in result_df.columns:
-        result_df['bb_wband'] = result_df['bb_width']
-    if 'atr_14' in result_df.columns:
-        result_df['atr'] = result_df['atr_14']
-    if 'rsi_14' in result_df.columns:
-        result_df['rsi'] = result_df['rsi_14']
-    
-    # Add regime-specific columns not calculated by the unified pipeline
-    # These are specific to regime detection logic
-    
-    # Candle Body Analysis (Volume Proxy)
-    result_df['body_size'] = (result_df['close'] - result_df['open']).abs()
-    result_df['total_range'] = (result_df['high'] - result_df['low']).abs()
-    result_df['body_ratio'] = result_df['body_size'] / result_df['total_range'].replace(0, 0.0001)
-    
-    # Large body flag (Body Ratio > 0.7 AND ATR expansion)
-    if 'atr' in result_df.columns:
-        atr_median = result_df['atr'].rolling(window=14).median()
-        result_df['large_body'] = (result_df['body_ratio'] > 0.7) & (result_df['atr'] > atr_median * 1.1)
-    else:
-        result_df['large_body'] = result_df['body_ratio'] > 0.7
 
-    # Volatility baselines for dynamic thresholds
-    if 'atr' in result_df.columns:
-        result_df['atr_baseline'] = result_df['atr'].rolling(window=20).median()
-    if 'bb_wband' in result_df.columns:
-        result_df['bb_width_baseline'] = result_df['bb_wband'].rolling(window=20).median()
-    
-    if 'resistance_level' in result_df.columns:
-        result_df['pivot_h'] = result_df['resistance_level']
-    if 'support_level' in result_df.columns:
-        result_df['pivot_l'] = result_df['support_level']
-    
-    return result_df
+    # MIN-2: Delegate ALL column mapping and derived-column logic to the single
+    # canonical source of truth (_ensure_regime_columns). Eliminates duplication.
+    return _ensure_regime_columns(result_df)
 
 
 def calculate_weighted_score(signals: Dict[str, bool], weights: Dict[str, float]) -> float:
@@ -279,6 +232,15 @@ def _ensure_regime_columns(df: pd.DataFrame) -> pd.DataFrame:
         'bb_upper': 'bb_high', 'bb_lower': 'bb_low', 'bb_width': 'bb_wband',
         'atr_14': 'atr', 'rsi_14': 'rsi',
         'resistance_level': 'pivot_h', 'support_level': 'pivot_l',
+        # Phase 1–5 S/R enhancement passthrough
+        'dist_to_resistance': 'dist_to_resistance',
+        'dist_to_support': 'dist_to_support',
+        'resistance_touch_count': 'resistance_touch_count',
+        'support_touch_count': 'support_touch_count',
+        'resistance_freshness': 'resistance_freshness',
+        'support_freshness': 'support_freshness',
+        'sr_flip': 'sr_flip',
+        'sr_flip_price': 'sr_flip_price',
     }
     for src, dst in COLUMN_MAP.items():
         if src in result_df.columns and dst not in result_df.columns:
@@ -333,17 +295,37 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
     current = df.iloc[-1]
     prev = df.iloc[-2]
     
-    # Extract S/R levels — guard against missing pivot columns (Principle 4: Zero Assumptions)
-    current_resistance = None
-    current_support = None
-    if 'pivot_h' in df.columns:
-        pivot_h_matches = df[df['high'] == df['pivot_h']]
-        if not pivot_h_matches.empty:
-            current_resistance = pivot_h_matches['high'].iloc[-1]
-    if 'pivot_l' in df.columns:
-        pivot_l_matches = df[df['low'] == df['pivot_l']]
-        if not pivot_l_matches.empty:
-            current_support = pivot_l_matches['low'].iloc[-1]
+    # Extract S/R levels and enhancement metrics from the current bar
+    # Guard against missing pivot columns (Principle 4: Zero Assumptions)
+    current_resistance = current.get('pivot_h', None) or None
+    current_support    = current.get('pivot_l', None) or None
+
+    # Phase 1: Dynamic proximity threshold — use pre-computed % distance if available,
+    # otherwise fall back to the hardcoded 0.1% threshold used originally.
+    dist_to_res_pct = float(current.get('dist_to_resistance', np.nan) or np.nan)
+    dist_to_sup_pct = float(current.get('dist_to_support', np.nan) or np.nan)
+    # "Near" means within 0.15% or ATR-normalised distance (whichever is tighter)
+    SR_PROXIMITY_PCT = 0.15
+    near_resistance = (
+        current_resistance is not None and
+        (not np.isnan(dist_to_res_pct) and 0 <= dist_to_res_pct <= SR_PROXIMITY_PCT)
+    )
+    near_support = (
+        current_support is not None and
+        (not np.isnan(dist_to_sup_pct) and 0 <= dist_to_sup_pct <= SR_PROXIMITY_PCT)
+    )
+
+    # Phase 2: Touch count — extract from current row
+    res_touch_count = int(current.get('resistance_touch_count', 0) or 0)
+    sup_touch_count = int(current.get('support_touch_count', 0) or 0)
+
+    # Phase 5: Freshness — extract from current row
+    res_freshness   = str(current.get('resistance_freshness', 'fresh') or 'fresh')
+    sup_freshness   = str(current.get('support_freshness', 'fresh') or 'fresh')
+
+    # Phase 3: S/R Flip — flag and price
+    sr_flip_active  = bool(current.get('sr_flip', False) or False)
+    sr_flip_price   = current.get('sr_flip_price', None)
     
     # Extract key values
     price = float(current['close'])
@@ -586,45 +568,78 @@ def detect_regime(df: pd.DataFrame, lab_mode: bool = False) -> Optional[RegimeRe
                 status = "DEVELOPING"
 
     # 5. TREND REVERSAL (Lowest priority/highest risk)
+    # Phase 1+2+5: Use pre-computed proximity flags + touch count boost + freshness downgrade
     if condition == MarketCondition.NEUTRAL:
-        # Bullish Reversal
-        if rsi_val < 30 and macd_hist > prev_macd_hist:
-            if current_support and abs(close - current_support) / current_support < 0.001:
-                condition = MarketCondition.REVERSAL_BULLISH
-                confluence_score = 55
-                direction = "CALL"
-                suggested_expiry = "5m"
-        # Bearish Reversal
-        elif rsi_val > 70 and macd_hist < prev_macd_hist:
-            if current_resistance and abs(close - current_resistance) / current_resistance < 0.001:
-                condition = MarketCondition.REVERSAL_BEARISH
-                confluence_score = 55
-                direction = "PUT"
-                suggested_expiry = "5m"
+        # Bullish Reversal — price near support + RSI extreme + MACD turning
+        if rsi_val < 30 and macd_hist > prev_macd_hist and near_support:
+            base_score = 55
+            # Phase 2: Boost for tested and well-confirmed levels
+            touch_boost = min(sup_touch_count * 5, 15)  # up to +15 pts for 3+ touches
+            # Phase 5: Downgrade confidence for stale levels (likely to break)
+            freshness_penalty = -10 if sup_freshness == 'stale' else 0
+            condition = MarketCondition.REVERSAL_BULLISH
+            confluence_score = base_score + touch_boost + freshness_penalty
+            direction = "CALL"
+            suggested_expiry = "5m"
+        # Bearish Reversal — price near resistance + RSI extreme + MACD turning
+        elif rsi_val > 70 and macd_hist < prev_macd_hist and near_resistance:
+            base_score = 55
+            touch_boost     = min(res_touch_count * 5, 15)
+            freshness_penalty = -10 if res_freshness == 'stale' else 0
+            condition = MarketCondition.REVERSAL_BEARISH
+            confluence_score = base_score + touch_boost + freshness_penalty
+            direction = "PUT"
+            suggested_expiry = "5m"
 
     if condition == MarketCondition.NEUTRAL:
         return None
 
     # Build technicals dict
+    def _r(v, d=4):
+        """Round float safely, return None if not numeric."""
+        try:
+            return round(float(v), d) if v is not None and not (isinstance(v, float) and np.isnan(v)) else None
+        except (TypeError, ValueError):
+            return None
+
+    # Determine which S/R the price is currently near (Phase 1)
+    sr_proximity_label = (
+        "Support" if near_support else
+        "Resistance" if near_resistance else
+        "None"
+    )
+
     technicals = {
         "price": price,
-        "adx": round(float(adx_val), 2),
-        "rsi": round(float(rsi_val), 2),
-        "bb_width": round(float(current['bb_wband']), 4),
-        "macd_hist": round(float(macd_hist), 4),
-        "stoch_k": round(float(stoch_k), 2),
-        "cci": round(float(current['cci']), 2),
-        "ema16": round(float(ema16), 2),
-        "ema89": round(float(ema89), 2),
-        "supertrend": round(float(st_val), 2),
-        "atr": round(float(atr_val), 4),
-        "atr_percent": round(float(volatility_state.relative_atr_pct), 4),
-        "atr_ratio": round(float(volatility_state.atr_ratio), 2),
+        "adx": _r(adx_val, 2),
+        "rsi": _r(rsi_val, 2),
+        "bb_width": _r(current['bb_wband'], 4),
+        "macd_hist": _r(macd_hist, 4),
+        "stoch_k": _r(stoch_k, 2),
+        "cci": _r(current.get('cci'), 2),
+        "ema16": _r(ema16, 2),
+        "ema89": _r(ema89, 2),
+        "supertrend": _r(st_val, 2),
+        "atr": _r(atr_val, 4),
+        "atr_percent": _r(volatility_state.relative_atr_pct, 4),
+        "atr_ratio": _r(volatility_state.atr_ratio, 2),
         "volatility_zone": volatility_state.zone,
-        "bb_width_ratio": round(float(volatility_state.bb_width_ratio), 2),
-        "body_ratio": round(float(current['body_ratio']), 2),
+        "bb_width_ratio": _r(volatility_state.bb_width_ratio, 2),
+        "body_ratio": _r(current['body_ratio'], 2),
         "large_body": bool(current['large_body']),
-        "near_sr": "Support" if current_support and abs(close - current_support)/close < 0.001 else "Resistance" if current_resistance and abs(close - current_resistance)/close < 0.001 else "None",
+        # Phase 1: S/R proximity (dynamic threshold)
+        "near_sr": sr_proximity_label,
+        "dist_to_resistance": _r(dist_to_res_pct, 4),
+        "dist_to_support": _r(dist_to_sup_pct, 4),
+        # Phase 2: Touch count strength
+        "resistance_touch_count": res_touch_count,
+        "support_touch_count": sup_touch_count,
+        # Phase 5: Level freshness
+        "resistance_freshness": res_freshness,
+        "support_freshness": sup_freshness,
+        # Phase 3: S/R flip
+        "sr_flip": sr_flip_active,
+        "sr_flip_price": _r(sr_flip_price, 5),
         "confluence_score": confluence_score
     }
     

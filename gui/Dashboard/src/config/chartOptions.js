@@ -198,9 +198,12 @@ export const indicatorOptions = [
     kind: 'overlay',
     displayValue: '5',
     source: 'backend',
-    params: { period: 5 },
+    params: { period: 5, showZones: true, showFreshness: true, showFlip: true },
     paramConfig: [
       { name: 'period', label: 'Pivot Period (L/R)', type: 'number', min: 1, max: 50, default: 5 },
+      { name: 'showZones', label: 'Show Zone Bands', type: 'boolean', default: true },
+      { name: 'showFreshness', label: 'Freshness Line Styling', type: 'boolean', default: true },
+      { name: 'showFlip', label: 'Highlight S/R Flip Levels', type: 'boolean', default: true },
     ],
   },
   {

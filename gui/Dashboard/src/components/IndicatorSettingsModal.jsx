@@ -37,6 +37,8 @@ const IndicatorSettingsModal = ({ isOpen, indicator, onClose, onSave }) => {
         const parsed = Number(rawValue);
         nextValue = Number.isNaN(parsed) ? '' : parsed;
       }
+    } else if (type === 'boolean') {
+      nextValue = Boolean(rawValue);
     }
     setLocalParams((prev) => ({
       ...prev,
@@ -96,6 +98,37 @@ const IndicatorSettingsModal = ({ isOpen, indicator, onClose, onSave }) => {
           {config.length > 0 ? (
             <>
               {config.map((cfg) => {
+                if (cfg.type === 'boolean') {
+                  const checked =
+                    localParams[cfg.name] !== undefined && localParams[cfg.name] !== null
+                      ? Boolean(localParams[cfg.name])
+                      : cfg.default !== false;
+                  return (
+                    <div key={cfg.name} className="flex items-center justify-between py-1">
+                      <span className="text-xs text-gray-300">{cfg.label}</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={checked}
+                        onClick={() => handleParamChange(cfg.name, !checked, 'boolean')}
+                        className={[
+                          'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                          'transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-accent-green',
+                          checked ? 'bg-accent-green' : 'bg-gray-600'
+                        ].join(' ')}
+                      >
+                        <span
+                          className={[
+                            'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0',
+                            'transition duration-200 ease-in-out',
+                            checked ? 'translate-x-4' : 'translate-x-0'
+                          ].join(' ')}
+                        />
+                      </button>
+                    </div>
+                  );
+                }
+
                 const value =
                   localParams[cfg.name] !== undefined && localParams[cfg.name] !== null
                     ? String(localParams[cfg.name])

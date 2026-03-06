@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText } from 'lucide-react';
+import { X, Layers, Clock, FileText, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import ChartActions from './ChartActions';
 import NeoSyncButton from './NeoSyncButton';
 import syncClickSound from '../assets/Sounds/Click_TF_Sync_Button1.mp3';
@@ -22,6 +22,8 @@ const ChartHeader = ({
   isAsking,
   isCapturing,
   onIndicatorClick,
+  onIndicatorSuspend,
+  onForceRefresh,
   onSyncTimeframe,
   isSyncingTimeframe,
   isTimeframeSyncLinked
@@ -125,14 +127,14 @@ const ChartHeader = ({
           />
         </div>
 
-        {/* Placeholder for future Refresh Feature */}
+        {/* Force-refresh all active indicators */}
         <button
           type="button"
-          className="quflx-neo-icon-btn quflx-neo-icon-btn--sm relative opacity-50 cursor-not-allowed"
-          disabled
-          title="Refresh Feature (Coming Soon)"
+          className="quflx-neo-icon-btn quflx-neo-icon-btn--sm relative hover:text-accent-green transition-colors"
+          onClick={onForceRefresh}
+          title="Refresh Indicators"
         >
-          <span className="text-xs font-bold text-gray-400">REF</span>
+          <RefreshCw size={13} />
         </button>
       </div>
 
@@ -143,8 +145,10 @@ const ChartHeader = ({
               key={ind.id}
               name={ind.name}
               value={ind.value}
+              suspended={!!ind.suspended}
               onClick={() => onIndicatorClick && onIndicatorClick(ind)}
               onRemove={() => removeIndicator(ind.id)}
+              onSuspend={() => onIndicatorSuspend && onIndicatorSuspend(ind.id)}
             />
           ))}
         </div>
@@ -159,22 +163,54 @@ const ChartHeader = ({
   );
 };
 
-const IndicatorBadge = ({ name, value, onClick, onRemove }) => (
-  <div
-    className="flex items-center gap-1.5 px-2 py-0.5 bg-section-bg/80 rounded border border-border-primary text-[10px] whitespace-nowrap shadow-sm cursor-pointer hover:border-accent-green/70"
-    onClick={onClick}
-  >
-    <span className="text-accent-green font-bold">{name}</span>
-    <span className="text-gray-400">{value}</span>
-    <X
-      size={10}
-      className="cursor-pointer hover:text-red-400"
-      onClick={(e) => {
-        e.stopPropagation();
-        onRemove();
-      }}
-    />
-  </div>
-);
+const IndicatorBadge = ({ name, value, suspended, onClick, onRemove, onSuspend }) => {
+  // Distinguish single-click (open settings) from double-click (suspend/resume)
+  const clickTimer = useRef(null);
+
+  const handleClick = () => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      onSuspend?.(); // double-click → suspend/resume
+    } else {
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null;
+        onClick?.(); // single-click → open settings
+      }, 280);
+    }
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-2.5 py-1 rounded border text-[10px] whitespace-nowrap shadow-sm cursor-pointer transition-all
+        ${suspended
+          ? 'bg-section-bg/40 border-border-primary/40 opacity-50'
+          : 'bg-section-bg/80 border-border-primary hover:border-accent-green/70'
+        }`}
+      onClick={handleClick}
+      title={suspended ? 'Hidden — double-click or click 👁 to restore' : 'Click to configure · Double-click to hide'}
+    >
+      <span className={`font-bold ${suspended ? 'text-gray-500' : 'text-accent-green'}`}>{name}</span>
+      {!suspended && <span className="text-gray-400">{value}</span>}
+
+      {/* Visibility icon — Eye = visible, EyeOff = hidden */}
+      <button
+        type="button"
+        className={`p-0.5 bg-transparent border-none cursor-pointer transition-colors ${suspended ? 'text-yellow-400 hover:text-accent-green' : 'text-gray-500 hover:text-yellow-400'
+          }`}
+        onClick={(e) => { e.stopPropagation(); onSuspend?.(); }}
+        title={suspended ? 'Show indicator' : 'Hide indicator'}
+      >
+        {suspended ? <Eye size={11} /> : <EyeOff size={11} />}
+      </button>
+
+      <X
+        size={11}
+        className="cursor-pointer text-gray-500 hover:text-red-400"
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+      />
+    </div>
+  );
+};
 
 export default ChartHeader;

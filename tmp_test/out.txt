@@ -1,0 +1,51 @@
+﻿conda.exe : C:\QuFLX\v2\backend\services\strategy
+\indicators.py:195: FutureWarning: Series.view 
+is deprecated and will be removed in a future 
+version. Use ``astype`` as an alternative to 
+change the dtype.
+At C:\Users\piete\anaconda3\shell\condabin\Conda.
+psm1:153 char:17
++ ...             & $Env:CONDA_EXE $Env:_CE_M 
+$Env:_CE_CONDA $Command @Othe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\ 
+   QuFLX\v2\bac...ange the dtype.:String) [], R  
+  emoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  df_final[time_col] = 
+df_final[time_col].view('int64') // 10**9
+C:\QuFLX\v2\backend\services\strategy\indicators.
+py:195: FutureWarning: Series.view is deprecated 
+and will be removed in a future version. Use 
+``astype`` as an alternative to change the dtype.
+  df_final[time_col] = 
+df_final[time_col].view('int64') // 10**9
+C:\QuFLX\v2\backend\services\strategy\indicators.
+py:195: FutureWarning: Series.view is deprecated 
+and will be removed in a future version. Use 
+``astype`` as an alternative to change the dtype.
+  df_final[time_col] = 
+df_final[time_col].view('int64') // 10**9
+
+============================================================
+BUG FIX VERIFICATION
+============================================================
+Dataset: 94 rows
+
+--- Test 1: ATR guard (lab_mode) ---
+PASS: detect_regime_series -> Breakout (Bearish) (PUT) score=50.0
+      Timeline entries: 26 (was 0 when blocked)
+PASS: Live detect_regime (lab_mode=False) -> Breakout (Bearish) (guard still active)
+
+--- Test 2: ema165 KeyError fix ---
+PASS: No ema165 variable assignments in MomentumStrategy
+PASS: ema89 correctly used as macro trend filter
+PASS: identify_entries ran without KeyError (found 0 entries)
+PASS: validate_entry ran without KeyError (result=False)
+
+============================================================
+ALL BUG FIX TESTS PASSED
+============================================================
+
