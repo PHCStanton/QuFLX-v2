@@ -646,6 +646,24 @@ const SettingsPanel = () => {
               onChange={() => updateSection('analysis', { autoLoadIndicators: !settings.analysis.autoLoadIndicators })}
             />
           </SettingRow>
+          <SettingRow label="Show Indicator Price Labels" description="Show or hide price tags on the ruler for all indicators">
+            <NeomorphicSwitch
+              checked={settings.analysis.showIndicatorPriceLabels !== false}
+              onChange={() => updateSection('analysis', { showIndicatorPriceLabels: settings.analysis.showIndicatorPriceLabels === false })}
+            />
+          </SettingRow>
+          <SettingRow label="Show Chart Tooltip" description="Show or hide the OHLC tooltip when hovering over the chart">
+            <NeomorphicSwitch
+              checked={settings.analysis.showChartTooltip !== false}
+              onChange={() => updateSection('analysis', { showChartTooltip: settings.analysis.showChartTooltip === false })}
+            />
+          </SettingRow>
+          <SettingRow label="Chart Watermark" description="Display the active asset name as a faint watermark on the chart">
+            <NeomorphicSwitch
+              checked={settings.analysis.showChartWatermark !== false}
+              onChange={() => updateSection('analysis', { showChartWatermark: settings.analysis.showChartWatermark === false })}
+            />
+          </SettingRow>
         </CollapsiblePanel>
 
         {/* AI Assistant */}

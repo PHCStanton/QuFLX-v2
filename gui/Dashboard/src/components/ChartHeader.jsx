@@ -131,7 +131,10 @@ const ChartHeader = ({
         <button
           type="button"
           className="quflx-neo-icon-btn quflx-neo-icon-btn--sm relative hover:text-accent-green transition-colors"
-          onClick={onForceRefresh}
+          onClick={() => {
+            new Audio(syncClickSound).play().catch(() => { });
+            onForceRefresh?.();
+          }}
           title="Refresh Indicators"
         >
           <RefreshCw size={13} />

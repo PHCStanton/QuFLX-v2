@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 import { getApiBaseUrl } from '../api/apiBase';
 
-const SETTINGS_VERSION = 5;
+const SETTINGS_VERSION = 6;
 
 const normalizeTheme = (value) => {
   if (value === 'black-white') return 'black-white';
@@ -112,6 +112,9 @@ const defaultSettings = {
     autoLoadIndicators: false,
     indicatorPresetId: 'custom',
     dataSourceMode: 'history_and_streaming',
+    showIndicatorPriceLabels: true,
+    showChartTooltip: true,
+    showChartWatermark: true,
   },
   ai: {
     responseVerbosity: 'balanced',

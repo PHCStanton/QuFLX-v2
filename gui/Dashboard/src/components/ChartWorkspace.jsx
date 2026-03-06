@@ -20,10 +20,12 @@ import OscillatorPanel from './OscillatorPanel';
 import RegimePanel from './RegimePanel';
 import IndicatorSettingsModal from './IndicatorSettingsModal';
 import ErrorBoundary from './ErrorBoundary';
-import ChartTooltip from './ChartTooltip'; // Import Tooltip
-import useChartMarkers from '../hooks/useChartMarkers'; // Import Markers Hook
-import useChartPriceLines from '../hooks/useChartPriceLines'; // Import Price Lines Hook
-import { HistogramSeries } from 'lightweight-charts'; // Import Series Type
+import ChartTooltip from './ChartTooltip';
+import useChartMarkers from '../hooks/useChartMarkers';
+import useChartPriceLines from '../hooks/useChartPriceLines';
+import ChartContextMenu from './ChartContextMenu';
+import { ZonePrimitive } from '../utils/zonePrimitive';
+import { HistogramSeries } from 'lightweight-charts';
 import { timeframeOptions, csvOptions, indicatorOptions } from '../config/chartOptions';
 
 const ChartWorkspace = () => {
@@ -55,6 +57,8 @@ const ChartWorkspace = () => {
   const health = useStreamHealth();
   const dataSourceMode = settings?.analysis?.dataSourceMode || 'history_and_streaming';
   const enableStreaming = dataSourceMode !== 'history_only';
+  const showChartWatermark = settings?.analysis?.showChartWatermark !== false;
+  const showChartTooltip = settings?.analysis?.showChartTooltip !== false;
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
   const chartWrapperRef = useRef(null); // Ref for tooltip positioning bounds
@@ -106,6 +110,29 @@ const ChartWorkspace = () => {
     if (!ind) return;
     updateIndicator(id, { suspended: !ind.suspended });
   }, [activeIndicators, updateIndicator]);
+
+  // ── Right-click context menu ────────────────────────────────────────────────
+  const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0, price: null });
+  const closeContextMenu = useCallback(() => setContextMenu((m) => ({ ...m, visible: false })), []);
+
+  // ── Zone primitive management ──────────────────────────────────────────────
+  // Each zone: { id, upper, lower, color, type, primitive }
+  const zonesRef = useRef([]);
+  const [, forceZoneRender] = useState(0); // trigger re-render for clear-all
+
+  // Attach/detach zone primitives whenever candleSeries changes
+  useEffect(() => {
+    if (!candleSeries) return;
+    // Re-attach all existing zones when series becomes available
+    zonesRef.current.forEach((z) => {
+      try { candleSeries.attachPrimitive(z.primitive); } catch (_) { }
+    });
+    return () => {
+      zonesRef.current.forEach((z) => {
+        try { candleSeries.detachPrimitive(z.primitive); } catch (_) { }
+      });
+    };
+  }, [candleSeries]);
 
   useEffect(() => {
     setCaptureChartImage(captureCompositeChart);
@@ -318,6 +345,182 @@ const ChartWorkspace = () => {
     enableStreaming
   });
 
+  // Right-click handler — builds context menu items based on active indicators
+  const handleChartContextMenu = useCallback((e) => {
+    e.preventDefault();
+    if (!candleSeries || !chartWrapperRef.current) return;
+
+    const rect = chartWrapperRef.current.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const clickPrice = candleSeries.coordinateToPrice(relY);
+
+    // Check if S/R indicator is active and not suspended
+    const srIndicator = activeIndicators.find(
+      (ind) => (ind.type === 'support_resistance' || ind.value === 'support_resistance') && !ind.suspended
+    );
+    const srActive = Boolean(srIndicator);
+
+    // Get latest S/R values from series data
+    const key = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
+    const seriesForKey = key && indicatorSeries ? indicatorSeries[key] : null;
+    const lastResistance = seriesForKey?.['resistance_level']?.slice(-1)?.[0]?.value ?? null;
+    const lastSupport = seriesForKey?.['support_level']?.slice(-1)?.[0]?.value ?? null;
+    const resZoneUpper = seriesForKey?.['resistance_zone_upper']?.slice(-1)?.[0]?.value ?? lastResistance;
+    const resZoneLower = seriesForKey?.['resistance_zone_lower']?.slice(-1)?.[0]?.value ?? lastResistance;
+    const supZoneUpper = seriesForKey?.['support_zone_upper']?.slice(-1)?.[0]?.value ?? lastSupport;
+    const supZoneLower = seriesForKey?.['support_zone_lower']?.slice(-1)?.[0]?.value ?? lastSupport;
+
+    const copyValue = async (value) => {
+      if (value === null) return;
+      try {
+        await navigator.clipboard.writeText(String(value.toFixed(5)));
+        setCopyFeedback({ x: e.clientX - rect.left, y: relY, value: value.toFixed(5) });
+        setTimeout(() => setCopyFeedback(null), 800);
+      } catch (_) { }
+    };
+
+    const addZone = (type) => {
+      if (!candleSeries) return;
+      const isBuy = type === 'buy';
+      const upper = isBuy ? supZoneUpper : resZoneUpper;
+      const lower = isBuy ? supZoneLower : resZoneLower;
+      if (upper === null || lower === null || upper === lower) return;
+
+      const color = isBuy ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+      const id = `zone-${type}-${Date.now()}`;
+      const primitive = new ZonePrimitive({ id, upper, lower, color, type });
+
+      try {
+        candleSeries.attachPrimitive(primitive);
+        zonesRef.current = [...zonesRef.current, { id, upper, lower, color, type, primitive }];
+        forceZoneRender((n) => n + 1);
+      } catch (err) {
+        console.error('Failed to attach zone primitive:', err);
+      }
+    };
+
+    const clearAllZones = () => {
+      if (!candleSeries) return;
+      zonesRef.current.forEach((z) => {
+        try { candleSeries.detachPrimitive(z.primitive); } catch (_) { }
+      });
+      zonesRef.current = [];
+      forceZoneRender((n) => n + 1);
+    };
+
+    const noSrReason = 'S&R indicator not active';
+
+    // ── Context menu item definitions ─────────────────────────────────────────
+    // To add new global or indicator-specific tools later:
+    //   push another object into `items` with { id, label, icon, group, disabled, onClick }
+    const items = [
+      // Global (always available)
+      {
+        id: 'copy_crosshair',
+        label: `Copy Price at Crosshair${clickPrice ? ` — ${clickPrice.toFixed(5)}` : ''}`,
+        icon: '🎯',
+        group: 'global',
+        disabled: clickPrice === null,
+        onClick: () => copyValue(clickPrice),
+      },
+      { divider: true },
+      // S/R specific
+      {
+        id: 'copy_resistance',
+        label: `Copy Resistance${lastResistance ? ` — ${lastResistance.toFixed(5)}` : ''}`,
+        icon: '🔴',
+        group: 'sr',
+        disabled: !srActive || lastResistance === null,
+        disabledReason: !srActive ? noSrReason : undefined,
+        onClick: () => copyValue(lastResistance),
+      },
+      {
+        id: 'copy_support',
+        label: `Copy Support${lastSupport ? ` — ${lastSupport.toFixed(5)}` : ''}`,
+        icon: '🟢',
+        group: 'sr',
+        disabled: !srActive || lastSupport === null,
+        disabledReason: !srActive ? noSrReason : undefined,
+        onClick: () => copyValue(lastSupport),
+      },
+      { divider: true },
+      {
+        id: 'insert_buy_zone',
+        label: 'Insert BUY Zone',
+        icon: '🟩',
+        group: 'sr',
+        disabled: !srActive || supZoneUpper === null,
+        disabledReason: !srActive ? noSrReason : undefined,
+        onClick: () => addZone('buy'),
+      },
+      {
+        id: 'insert_sell_zone',
+        label: 'Insert SELL Zone',
+        icon: '🟥',
+        group: 'sr',
+        disabled: !srActive || resZoneUpper === null,
+        disabledReason: !srActive ? noSrReason : undefined,
+        onClick: () => addZone('sell'),
+      },
+      { divider: true },
+      {
+        id: 'show_support_area',
+        label: 'Show Support Area (Green)',
+        icon: '🟢',
+        group: 'sr',
+        disabled: !srActive || lastSupport === null,
+        disabledReason: !srActive ? noSrReason : undefined,
+        onClick: () => {
+          if (!candleSeries || lastSupport === null) return;
+          const id = `area-below-${Date.now()}`;
+          const primitive = new ZonePrimitive({
+            id, upper: lastSupport, lower: lastSupport,
+            color: 'rgba(34,197,94,0.07)', type: 'area_below', fill: 'below',
+          });
+          try {
+            candleSeries.attachPrimitive(primitive);
+            zonesRef.current = [...zonesRef.current, { id, primitive }];
+            forceZoneRender((n) => n + 1);
+          } catch (err) { console.error('area-below:', err); }
+        },
+      },
+      {
+        id: 'show_resistance_area',
+        label: 'Show Resistance Area (Red)',
+        icon: '🔴',
+        group: 'sr',
+        disabled: !srActive || lastResistance === null,
+        disabledReason: !srActive ? noSrReason : undefined,
+        onClick: () => {
+          if (!candleSeries || lastResistance === null) return;
+          const id = `area-above-${Date.now()}`;
+          const primitive = new ZonePrimitive({
+            id, upper: lastResistance, lower: lastResistance,
+            color: 'rgba(239,68,68,0.07)', type: 'area_above', fill: 'above',
+          });
+          try {
+            candleSeries.attachPrimitive(primitive);
+            zonesRef.current = [...zonesRef.current, { id, primitive }];
+            forceZoneRender((n) => n + 1);
+          } catch (err) { console.error('area-above:', err); }
+        },
+      },
+      { divider: true },
+      {
+        id: 'clear_zones',
+        label: 'Clear All Zones',
+        icon: '🗑',
+        group: 'drawing',
+        disabled: zonesRef.current.length === 0,
+        disabledReason: zonesRef.current.length === 0 ? 'No zones drawn' : undefined,
+        onClick: clearAllZones,
+      },
+    ];
+
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, price: clickPrice, items });
+  }, [candleSeries, chartWrapperRef, activeIndicators, selectedAsset, selectedTimeframe, indicatorSeries]);
+
+
   const handleIndicatorClick = useCallback((indicator) => {
     setSettingsIndicator(indicator);
   }, []);
@@ -441,6 +644,7 @@ const ChartWorkspace = () => {
           <div
             className="flex-1 min-h-[220px] relative cursor-crosshair"
             ref={chartWrapperRef}
+            onContextMenu={handleChartContextMenu}
             onDoubleClick={async (e) => {
               if (!mainChart || !candleSeries || !chartWrapperRef.current) return;
               const rect = chartWrapperRef.current.getBoundingClientRect();
@@ -462,16 +666,18 @@ const ChartWorkspace = () => {
               }
             }}
           >
-            {/* Tooltip Overlay */}
-            <ChartTooltip
-              visible={tooltipData?.visible}
-              left={tooltipData?.left}
-              top={tooltipData?.top}
-              ohlc={tooltipData?.ohlc}
-              indicators={tooltipData?.indicators}
-              containerWidth={chartWrapperRef.current?.clientWidth || 800}
-              containerHeight={chartWrapperRef.current?.clientHeight || 500}
-            />
+            {/* Tooltip Overlay — only rendered when showChartTooltip is enabled */}
+            {showChartTooltip && (
+              <ChartTooltip
+                visible={tooltipData?.visible}
+                left={tooltipData?.left}
+                top={tooltipData?.top}
+                ohlc={tooltipData?.ohlc}
+                indicators={tooltipData?.indicators}
+                containerWidth={chartWrapperRef.current?.clientWidth || 800}
+                containerHeight={chartWrapperRef.current?.clientHeight || 500}
+              />
+            )}
 
             {/* Copy Feedback Toast */}
             {copyFeedback && (
@@ -483,9 +689,23 @@ const ChartWorkspace = () => {
               </div>
             )}
 
+            {/* Right-click context menu */}
+            <ChartContextMenu
+              visible={contextMenu.visible}
+              x={contextMenu.x}
+              y={contextMenu.y}
+              items={contextMenu.items || []}
+              onClose={closeContextMenu}
+            />
+
             <div className="w-full h-full">
               <ErrorBoundary>
-                <ChartContainer onChartReady={handleChartReady} onError={setError} />
+                <ChartContainer
+                  onChartReady={handleChartReady}
+                  onError={setError}
+                  selectedAsset={selectedAsset}
+                  showWatermark={showChartWatermark}
+                />
               </ErrorBoundary>
             </div>
           </div>
