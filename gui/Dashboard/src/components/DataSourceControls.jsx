@@ -1,22 +1,18 @@
 import Card from './Card';
-import ToggleSwitch from './ToggleSwitch';
+import NeomorphicSwitch from './NeomorphicSwitch';
+import NeomorphicGlowButton from './NeomorphicGlowButton';
 import { Upload, Activity, RefreshCw, History } from 'lucide-react';
 
-const ActionButton = ({ icon, label, active, onClick, disabled, title }) => (
-  <button
+const ActionButton = ({ icon, label, active, onClick, disabled, title, accentColor }) => (
+  <NeomorphicGlowButton
+    icon={icon}
+    label={label}
     onClick={onClick}
     disabled={disabled}
+    active={active}
     title={title}
-    className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${disabled
-      ? 'bg-section-bg/20 border-border-primary text-text-secondary/50 cursor-not-allowed'
-      : active
-        ? 'bg-accent-green/20 border-accent-green text-accent-green shadow-[0_0_15px_rgba(34,197,94,0.2)]'
-        : 'bg-section-bg/80 border-border-primary hover:border-accent-green/50 hover:text-accent-green text-text-secondary'
-      }`}
-  >
-    {icon}
-    <span className="text-[10px] mt-1 font-medium">{label}</span>
-  </button>
+    accentColor={accentColor}
+  />
 );
 
 const StreamStatusIndicator = ({ streamHealth }) => {
@@ -31,22 +27,29 @@ const StreamStatusIndicator = ({ streamHealth }) => {
           ? 'Stale'
           : 'Idle';
 
-  const className =
-    health === 'streaming'
-      ? 'bg-accent-green/20 border-accent-green text-accent-green shadow-[0_0_15px_rgba(34,197,94,0.2)]'
-      : health === 'slow'
-        ? 'bg-yellow-500/15 border-yellow-500/60 text-yellow-500'
-        : health === 'stale'
-          ? 'bg-accent-red/15 border-accent-red/60 text-accent-red'
-          : 'bg-section-bg/80 border-border-primary text-text-secondary';
+  const accentColor = 
+    health === 'streaming' ? '#22c55e' : // accent-green
+    health === 'slow' ? '#eab308' :      // yellow-500
+    health === 'stale' ? '#ef4444' :     // accent-red
+    '#718096';                           // gray-400
 
   return (
     <div
       title={`Stream status: ${statusLabel}. Control streaming from the top bar.`}
-      className={`flex flex-col items-center justify-center p-2 rounded border transition-all ${className}`}
+      className="flex flex-col items-center justify-center p-3 rounded-[24px] transition-all duration-500"
+      style={{
+          background: '#111118',
+          boxShadow: `inset 6px 6px 12px #07070a, inset -6px -6px 12px #1b1b24, 0 0 10px ${accentColor}22`,
+          border: `1px solid ${accentColor}44`
+      }}
     >
-      <Activity size={14} />
-      <span className="text-[10px] mt-1 font-medium">Stream: {statusLabel}</span>
+      <Activity size={24} style={{ 
+          color: accentColor, 
+          filter: health === 'streaming' ? `drop-shadow(0 0 12px ${accentColor})` : 'none'
+      }} className={health === 'streaming' ? 'animate-pulse' : ''} />
+      <span className="text-[9px] mt-2 font-black uppercase tracking-[0.1em] text-center" style={{ color: accentColor }}>
+        Stream: {statusLabel}
+      </span>
     </div>
   );
 };
@@ -88,46 +91,57 @@ const DataSourceControls = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
             <ActionButton
-              icon={<RefreshCw size={14} className={isBusyRefreshing ? 'animate-spin' : ''} />}
+              icon={<RefreshCw className={isBusyRefreshing ? 'animate-spin' : ''} />}
               label="Refresh"
               onClick={onGetAssets}
               disabled={isBusyRefreshing}
               title="Fetch latest asset list from backend"
+              accentColor="#00d4ff" // Cyan glow for refresh
             />
             <ActionButton
-              icon={<History size={14} />}
+              icon={<History />}
               label="History"
               onClick={onCollectHistory}
               title="Collect historical data for analysis"
+              accentColor="#a855f7" // Purple glow for history
             />
             <StreamStatusIndicator streamHealth={streamHealth} />
-            <div className="flex flex-col items-center justify-center p-2 rounded border border-border-primary bg-section-bg/80">
-              <span className="text-[10px] text-text-secondary uppercase">OTC</span>
-              <ToggleSwitch checked={otcOnly} onChange={onToggleOtcOnly} />
+            <div className="relative flex items-center justify-center p-4 rounded-[24px] bg-[#111118] border border-white/5 shadow-[8px_8px_16px_#07070a,-8px_-8px_16px_#1b1b24]">
+              <div className="absolute top-2 text-[8px] font-black text-text-secondary uppercase tracking-[0.2em]">OTC</div>
+              <div className="mt-4 scale-90">
+                <NeomorphicSwitch checked={otcOnly} onChange={onToggleOtcOnly} />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border-t border-border-primary/30 pt-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-border-primary/10 pt-5 mt-2 px-1">
             <ActionButton
-              icon={<Activity size={14} />}
+              icon={<Activity />}
               label={alertsStatus?.running ? 'Stop Alerts' : 'Start Alerts'}
               active={alertsStatus?.running}
               onClick={alertsStatus?.running ? onStopAlerts : onStartAlerts}
               title="Toggle Alert Monitor"
+              accentColor={alertsStatus?.running ? '#ef4444' : '#22c55e'} // Red if running, green if not
             />
-            <div className="flex flex-col items-center justify-center p-2 rounded border border-border-primary bg-section-bg/80">
-              <span className="text-[10px] text-text-secondary uppercase">Auto</span>
-              <ToggleSwitch checked={autoRunAlertMonitor} onChange={onToggleAutoRunAlertMonitor} />
+            <div className="relative flex items-center justify-center p-4 rounded-[24px] bg-[#111118] border border-white/5 shadow-[8px_8px_16px_#07070a,-8px_-8px_16px_#1b1b24]">
+              <div className="absolute top-2 text-[8px] font-black text-text-secondary uppercase tracking-[0.2em]">Auto</div>
+              <div className="mt-4 scale-90">
+                <NeomorphicSwitch checked={autoRunAlertMonitor} onChange={onToggleAutoRunAlertMonitor} />
+              </div>
             </div>
-            <div className="flex flex-col items-center justify-center p-2 rounded border border-border-primary bg-section-bg/80">
-              <span className="text-[10px] text-text-secondary uppercase">Logs</span>
-              <ToggleSwitch checked={enableTickLogging} onChange={onToggleTickLogging} />
+            <div className="relative flex items-center justify-center p-4 rounded-[24px] bg-[#111118] border border-white/5 shadow-[8px_8px_16px_#07070a,-8px_-8px_16px_#1b1b24]">
+              <div className="absolute top-2 text-[8px] font-black text-text-secondary uppercase tracking-[0.2em]">Logs</div>
+              <div className="mt-4 scale-90">
+                <NeomorphicSwitch checked={enableTickLogging} onChange={onToggleTickLogging} />
+              </div>
             </div>
-            <div className="flex flex-col items-center justify-center p-2 rounded border border-border-primary bg-section-bg/80">
-              <span className="text-[10px] text-text-secondary uppercase">Refresh</span>
-              <ToggleSwitch checked={autoRefresh} onChange={onToggleAutoRefresh} />
+            <div className="relative flex items-center justify-center p-4 rounded-[24px] bg-[#111118] border border-white/5 shadow-[8px_8px_16px_#07070a,-8px_-8px_16px_#1b1b24]">
+              <div className="absolute top-2 text-[8px] font-black text-text-secondary uppercase tracking-[0.2em]">Refresh</div>
+              <div className="mt-4 scale-90">
+                <NeomorphicSwitch checked={autoRefresh} onChange={onToggleAutoRefresh} />
+              </div>
             </div>
           </div>
 
