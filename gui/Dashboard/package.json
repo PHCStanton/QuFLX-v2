@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/orbitron": "^5.2.8",
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.460.0",

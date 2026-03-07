@@ -15,6 +15,11 @@
   /* Green 500 #22c55e */
   --accent-glow: 42, 84, 121;
   --border-color: 255 255 255;
+
+  /* Global Fonts Architecture */
+  --font-primary: "Orbitron";
+  --font-secondary: ui-sans-serif, system-ui, sans-serif;
+  --font-tertiary: ui-sans-serif, system-ui, sans-serif;
 }
 
 .theme-dark {

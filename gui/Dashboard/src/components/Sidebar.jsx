@@ -3,6 +3,9 @@ import { Settings, ChevronDown, ChevronUp } from 'lucide-react';
 import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import AnimatedLogo from './AnimatedLogo';
+import DigitalClock from './DigitalClock';
+import '@fontsource/orbitron/500.css';
+import '@fontsource/orbitron/700.css';
 
 const Dashboard3Icon = ({ size = 20 }) => (
   <svg
@@ -453,14 +456,8 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-border-primary/50">
-        <div className="flex items-center gap-3 text-xs text-text-secondary font-medium tracking-wide uppercase">
-          <div className="relative">
-            <div className="w-2 h-2 rounded-full bg-accent-green animate-pulse"></div>
-            <div className="absolute inset-0 w-2 h-2 rounded-full bg-accent-green blur-[2px] opacity-50"></div>
-          </div>
-          {isSidebarOpen && <span className="animate-in fade-in slide-in-from-left-2 duration-500">System Online</span>}
-        </div>
+      <div className="py-4 border-t border-border-primary/50 flex justify-start w-full mb-2">
+        <DigitalClock isSidebarOpen={isSidebarOpen} />
       </div>
     </div>
   );
@@ -493,6 +490,8 @@ const SidebarItem = React.memo(({ icon, label, isOpen, active, onClick }) => (
     )}
   </div>
 ));
+
+SidebarItem.displayName = 'SidebarItem';
 
 const IconWrapper = ({ icon: Icon, active }) => (
   <Icon size={20} className={`transition-colors duration-200 ${active ? 'stroke-[2px]' : 'stroke-[1.5px]'}`} />
