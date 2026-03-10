@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Plus, BookOpen, Upload, Calendar as CalendarIcon, DollarSign } from 'lucide-react';
+import { BookOpen, Upload, Calendar as CalendarIcon, DollarSign } from 'lucide-react';
 import CalendarView from '../components/CalendarView';
 import TradeEntryForm from '../components/TradeEntryForm';
 import JournalEntryForm from '../components/JournalEntryForm';
 import TradingAnalytics from '../components/TradingAnalytics';
 import BalanceEditModal from '../components/BalanceEditModal';
 import { TradingDay, Trade, JournalEntry, formatDate } from '../lib/calendar-utils';
-import { supabase } from '../lib/supabase';
+import { storage } from '../lib/storage';
+import ProfileSelector from '../components/ProfileSelector';
 import Card from '../components/Card';
 
 export default function TradingCalendar() {
@@ -21,25 +22,14 @@ export default function TradingCalendar() {
   const [showBalanceEdit, setShowBalanceEdit] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const loadData = () => {
     try {
       setLoading(true);
+      const days = storage.getTradingDays();
+      setTradingDays(days.sort((a, b) => b.trade_date.localeCompare(a.trade_date)));
 
-      const { data: days, error: daysError } = await supabase
-        .from('trading_days')
-        .select('*')
-        .order('trade_date', { ascending: false });
-
-      if (daysError) throw daysError;
-      setTradingDays(days || []);
-
-      const { data: trades, error: tradesError } = await supabase
-        .from('trades')
-        .select('*')
-        .order('open_time', { ascending: false });
-
-      if (tradesError) throw tradesError;
-      setAllTrades(trades || []);
+      const trades = storage.getTrades();
+      setAllTrades(trades.sort((a, b) => b.open_time.localeCompare(a.open_time)));
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -47,30 +37,16 @@ export default function TradingCalendar() {
     }
   };
 
-  const loadSelectedDayData = async () => {
+  const loadSelectedDayData = () => {
     const dateStr = formatDate(selectedDate);
     const tradingDay = tradingDays.find(td => td.trade_date === dateStr);
 
     if (tradingDay) {
-      const { data: trades, error: tradesError } = await supabase
-        .from('trades')
-        .select('*')
-        .eq('trading_day_id', tradingDay.id)
-        .order('open_time', { ascending: false });
+      const trades = storage.getTrades(tradingDay.id);
+      setSelectedDayTrades(trades.sort((a, b) => b.open_time.localeCompare(a.open_time)));
 
-      if (!tradesError) {
-        setSelectedDayTrades(trades || []);
-      }
-
-      const { data: journals, error: journalsError } = await supabase
-        .from('journal_entries')
-        .select('*')
-        .eq('trading_day_id', tradingDay.id)
-        .order('created_at', { ascending: false });
-
-      if (!journalsError) {
-        setSelectedDayJournals(journals || []);
-      }
+      const journals = storage.getJournals(tradingDay.id);
+      setSelectedDayJournals(journals.sort((a, b) => b.created_at.localeCompare(a.created_at)));
     } else {
       setSelectedDayTrades([]);
       setSelectedDayJournals([]);
@@ -104,42 +80,41 @@ export default function TradingCalendar() {
   return (
     <div className="min-h-screen bg-[#0f1419]">
       <div className="border-b border-gray-800 bg-[#1a1f2e]">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center">
-                <CalendarIcon className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Trading Calendar</h1>
-                <p className="text-gray-400 text-sm">Track your trades and journal your trading journey</p>
-              </div>
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <CalendarIcon className="w-6 h-6 text-white" />
             </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Trading Calendar</h1>
+              <p className="text-gray-400 text-sm">Track your trades and journal your trading journey</p>
+            </div>
+          </div>
 
-            <div className="flex items-center gap-3">
-              <div className="inline-flex bg-[#0f1419] border border-gray-800 rounded-xl p-1">
-                <button
-                  onClick={() => setViewMode('month')}
-                  className={`px-4 py-2 rounded-lg font-semibold transition-all text-sm ${
-                    viewMode === 'month'
-                      ? 'bg-blue-500 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Month
-                </button>
-                <button
-                  onClick={() => setViewMode('week')}
-                  className={`px-4 py-2 rounded-lg font-semibold transition-all text-sm ${
-                    viewMode === 'week'
-                      ? 'bg-blue-500 text-white'
-                      : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  Week
-                </button>
-              </div>
+          <div className="flex items-center gap-4 self-start md:self-center">
+            <div className="inline-flex bg-[#0f1419] border border-gray-800 rounded-xl p-1">
+              <button
+                onClick={() => setViewMode('month')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all text-sm ${
+                  viewMode === 'month'
+                    ? 'bg-blue-500 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Month
+              </button>
+              <button
+                onClick={() => setViewMode('week')}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all text-sm ${
+                  viewMode === 'week'
+                    ? 'bg-blue-500 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                Week
+              </button>
             </div>
+            <ProfileSelector onProfileChanged={loadData} />
           </div>
         </div>
       </div>
@@ -203,9 +178,13 @@ export default function TradingCalendar() {
                           <span className="text-white font-bold">{selectedTradingDay.total_trades}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-400">Win/Loss</span>
+                          <span className="text-gray-400">Win / Loss / Tie</span>
                           <span className="text-white font-bold">
-                            {selectedTradingDay.win_count}/{selectedTradingDay.loss_count}
+                            <span className="text-emerald-400">{selectedTradingDay.win_count}</span>
+                            <span className="text-gray-500 mx-1">/</span>
+                            <span className="text-red-400">{selectedTradingDay.loss_count}</span>
+                            <span className="text-gray-500 mx-1">/</span>
+                            <span className="text-yellow-400">{selectedTradingDay.tie_count || 0}</span>
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -264,10 +243,10 @@ export default function TradingCalendar() {
                               </span>
                             </div>
                             {Math.abs((selectedTradingDay.ending_balance - selectedTradingDay.starting_balance) - selectedTradingDay.total_profit_loss) > 0.01 && (
-                              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-2">
+                              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 mt-2">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-yellow-400 text-xs">Discrepancy</span>
-                                  <span className="text-yellow-400 text-xs font-mono">
+                                  <span className="text-blue-400 text-xs font-semibold">Balance Discrepancy (Payout offsets)</span>
+                                  <span className="text-blue-400 text-xs font-mono font-bold">
                                     ${Math.abs((selectedTradingDay.ending_balance - selectedTradingDay.starting_balance) - selectedTradingDay.total_profit_loss).toFixed(2)}
                                   </span>
                                 </div>
@@ -295,21 +274,39 @@ export default function TradingCalendar() {
                         <div key={trade.id} className="bg-[#0f1419] border border-gray-800 rounded-lg p-3">
                           <div className="flex justify-between items-start mb-2">
                             <div>
-                              <div className="text-white font-semibold">{trade.asset}</div>
-                              <div className="text-xs text-gray-400">
-                                {new Date(trade.open_time).toLocaleTimeString()}
+                              <div className="text-white font-semibold text-base">{trade.asset}</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                  trade.trade_type === 'CALL' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                                }`}>
+                                  {trade.trade_type}
+                                </span>
+                                <span className="text-xs text-gray-400 font-mono">
+                                  {new Date(trade.open_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
                               </div>
                             </div>
-                            <div className={`text-right font-bold ${
-                              trade.result === 'WIN' ? 'text-emerald-400' :
-                              trade.result === 'LOSS' ? 'text-red-400' : 'text-yellow-400'
-                            }`}>
-                              ${trade.profit_loss > 0 ? '+' : ''}{trade.profit_loss.toFixed(2)}
+                            <div className="text-right">
+                              <div className={`font-black ${
+                                trade.result === 'WIN' ? 'text-emerald-400' :
+                                trade.result === 'LOSS' ? 'text-red-400' : 'text-yellow-400'
+                              }`}>
+                                ${trade.profit_loss > 0 ? '+' : ''}{trade.profit_loss.toFixed(2)}
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-mono mt-1">
+                                Vol: ${trade.investment_amount?.toFixed(2) || '0.00'}
+                              </div>
                             </div>
                           </div>
-                          <div className="flex justify-between text-xs text-gray-500">
-                            <span>{trade.trade_type}</span>
-                            <span>${trade.investment_amount.toFixed(2)}</span>
+                          <div className="mt-2 pt-2 border-t border-gray-800/50 flex justify-between text-[11px] text-gray-400 font-mono">
+                            <div className="flex flex-col">
+                              <span className="text-gray-500">Entry / Close</span>
+                              <span>{trade.open_price || '0.000'} / {trade.close_price || '0.000'}</span>
+                            </div>
+                            <div className="flex flex-col text-right">
+                              <span className="text-gray-500">Expiry</span>
+                              <span>{trade.expiration || "N/A"}</span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -325,7 +322,16 @@ export default function TradingCalendar() {
                         <div key={journal.id} className="bg-[#0f1419] border border-gray-800 rounded-lg p-3">
                           <div className="text-xs text-gray-400 mb-2">{journal.entry_type}</div>
                           <div className="text-white text-sm mb-2">{journal.content}</div>
-                          {journal.emotion_tags.length > 0 && (
+                          
+                          {journal.market_conditions && (
+                            <div className="mb-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-400 px-2 py-1 rounded">
+                                {journal.market_conditions}
+                              </span>
+                            </div>
+                          )}
+
+                          {journal.emotion_tags && journal.emotion_tags.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {journal.emotion_tags.map(emotion => (
                                 <span key={emotion} className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">

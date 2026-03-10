@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Download, TrendingUp, X, CheckCircle } from 'lucide-react';
+import { Plus, Download, CheckCircle } from 'lucide-react';
 import { RiskCalculator, SessionData } from '../lib/risk-calculations';
 import { exportToCSV } from '../lib/export-utils';
 
@@ -44,6 +44,15 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
 
   const calculator = new RiskCalculator();
   const riskPerTrade = calculator.calculateRiskPerTrade(balance, riskPercent);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
   useEffect(() => {
     if (onStateChange) {
@@ -136,7 +145,12 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
   };
 
   const handleBalanceBlur = () => {
-    if (initialBalance > 0) {
+    const numValue = parseFloat(normalizeDecimalInput(balanceInput));
+    if (!isNaN(numValue) && numValue > 0) {
+      setInitialBalance(numValue);
+      setBalance(numValue);
+      setBalanceInput(numValue.toFixed(2));
+    } else {
       setBalanceInput(initialBalance.toFixed(2));
     }
   };
@@ -216,10 +230,10 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
                   key={percent}
                   onClick={() => {
                     setRiskPercent(percent);
-                    setCustomRiskPercent('');
+                    setCustomRiskPercent(percent.toString());
                   }}
                   className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                    riskPercent === percent && customRiskPercent === ''
+                    riskPercent === percent
                       ? 'bg-emerald-500 text-white'
                       : 'bg-[#0f1419] text-gray-400 border border-gray-800 hover:border-gray-700'
                   }`}
@@ -234,6 +248,7 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
                 inputMode="decimal"
                 value={customRiskPercent}
                 onChange={(e) => handleCustomRiskChange(normalizeDecimalInput(e.target.value))}
+                onBlur={() => setCustomRiskPercent(riskPercent.toString())}
                 placeholder="Custom % (e.g., 2.50)"
                 className="w-full px-4 py-3 bg-[#0f1419] border border-gray-800 rounded-xl text-white placeholder:text-gray-600 focus:border-emerald-500 focus:outline-none"
               />
@@ -272,11 +287,11 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="p-4 bg-[#0f1419] rounded-xl border border-gray-800">
             <div className="text-gray-400 text-sm mb-1">Risk per Trade</div>
-            <div className="text-white font-bold text-xl">${riskPerTrade.toFixed(2)}</div>
+            <div className="text-white font-bold text-xl">{formatCurrency(riskPerTrade)}</div>
           </div>
           <div className="p-4 bg-[#0f1419] rounded-xl border border-gray-800">
             <div className="text-gray-400 text-sm mb-1">Win Profit</div>
-            <div className="text-emerald-400 font-bold text-xl">+${(riskPerTrade * 0.92).toFixed(2)}</div>
+            <div className="text-emerald-400 font-bold text-xl">+{formatCurrency(riskPerTrade * 0.92)}</div>
           </div>
         </div>
 
@@ -360,7 +375,7 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
                 <div className="bg-[#0f1419] rounded-xl p-4 border border-gray-800">
                   <div className="text-gray-400 text-sm mb-1">Total Profit</div>
                   <div className={`text-2xl font-bold ${balance - initialBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {balance - initialBalance >= 0 ? '+' : ''}${(balance - initialBalance).toFixed(2)}
+                    {balance - initialBalance >= 0 ? '+' : ''}{formatCurrency(Math.abs(balance - initialBalance))}
                   </div>
                 </div>
                 <div className="bg-[#0f1419] rounded-xl p-4 border border-gray-800">
@@ -407,9 +422,9 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
                       </div>
                       <div className="flex items-center gap-6">
                         <div className={`font-semibold ${session.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {session.profit >= 0 ? '+' : ''}${session.profit.toFixed(2)}
+                          {session.profit >= 0 ? '+' : ''}{formatCurrency(Math.abs(session.profit))}
                         </div>
-                        <div className="text-white font-semibold">${session.balance.toFixed(2)}</div>
+                        <div className="text-white font-semibold">{formatCurrency(session.balance)}</div>
                       </div>
                     </div>
                   </div>
@@ -441,12 +456,12 @@ export default function CustomScenarioCalculator({ onStateChange }: CustomScenar
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div>
                   <div className="text-gray-400 text-sm mb-1">Final Balance</div>
-                  <div className="text-white text-xl font-bold">${balance.toFixed(2)}</div>
+                  <div className="text-white text-xl font-bold">{formatCurrency(balance)}</div>
                 </div>
                 <div>
                   <div className="text-gray-400 text-sm mb-1">Total Profit</div>
                   <div className={`text-xl font-bold ${balance - initialBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {balance - initialBalance >= 0 ? '+' : ''}${(balance - initialBalance).toFixed(2)}
+                    {balance - initialBalance >= 0 ? '+' : ''}{formatCurrency(Math.abs(balance - initialBalance))}
                   </div>
                 </div>
               </div>

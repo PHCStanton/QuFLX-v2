@@ -7,6 +7,7 @@ import ChartWorkspace from './ChartWorkspace';
 import SettingsPanel from './SettingsPanel';
 import ErrorBoundary from './ErrorBoundary';
 import ContextPanelRouter from './ContextPanelRouter';
+import GlobalControls from './GlobalControls';
 import ErrorToast from './ErrorToast';
 import StrategyLabChartWorkspace from './StrategyLab/StrategyLabChartWorkspace';
 
@@ -184,8 +185,37 @@ const Dashboard = () => {
                   <div className="w-1 h-1 rounded-full bg-accent-green" />
                 </div>
               </div>
-              <div className="h-full min-h-0 pl-2 quflx-right-panel">
-                <ContextPanelRouter />
+              <div className="h-full min-h-0 pl-2 quflx-right-panel flex flex-col gap-2">
+                <GlobalControls
+                  backendReady={Boolean(useMarketStore.getState().backendStatus && useMarketStore.getState().backendStatus.readyForAssets)}
+                  autoRefresh={useMarketStore.getState().autoRefresh}
+                  onToggleAutoRefresh={useMarketStore.getState().toggleAutoRefresh}
+                  otcOnly={useMarketStore.getState().assetFilterState?.filterMode === 'otc'}
+                  onToggleOtcOnly={() => useMarketStore.getState().setAssetFilterState({
+                    ...(useMarketStore.getState().assetFilterState || {}),
+                    filterMode: useMarketStore.getState().assetFilterState?.filterMode === 'otc' ? null : 'otc'
+                  })}
+                  onGetAssets={() => {
+                    const state = useMarketStore.getState();
+                    const options = {
+                      min_pct: state.assetFilterState?.minPayout || 92,
+                      max_assets: state.assetFilterState?.maxAssets || 5,
+                      include_assets: (state.assetFilterState?.includeAssets || '').split(',').map(a => a.trim()).filter(Boolean),
+                      ignore_assets: (state.assetFilterState?.ignoreAssets || '').split(',').map(a => a.trim()).filter(Boolean),
+                      filter_mode: state.assetFilterState?.filterMode
+                    };
+                    state.refreshAssets(options);
+                  }}
+                  isBusyRefreshing={useMarketStore.getState().autoRefresh}
+                  alertsStatus={useMarketStore.getState().alertsStatus}
+                  onStartAlerts={() => useMarketStore.getState().startAlerts(useMarketStore.getState().payoutAssets)}
+                  onStopAlerts={useMarketStore.getState().stopAlerts}
+                  enableTickLogging={useMarketStore.getState().enableTickLogging}
+                  onToggleTickLogging={useMarketStore.getState().toggleTickLogging}
+                />
+                <div className="flex-1 min-h-0">
+                  <ContextPanelRouter />
+                </div>
               </div>
             </div>
           )}

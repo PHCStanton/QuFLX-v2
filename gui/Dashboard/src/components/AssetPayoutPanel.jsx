@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react';
 import useMarketStore from '../store/marketStore';
 import { useStreamHealth } from '../hooks/useStreamHealth';
-import DataSourceControls from './DataSourceControls';
+import { CollapsibleCard } from './Card';
 import AssetFilterGroup from './AssetFilterGroup';
 import AssetListView from './AssetListView';
 import { normalizeSpecificAsset, parseSpecificAssets } from '../utils/assetUtils';
@@ -231,30 +231,17 @@ const AssetPayoutPanel = ({
     return (
         <div ref={containerRef} className={`flex flex-col gap-2 h-full min-h-0 justify-between ${className}`}>
             {showControls && (
-                <DataSourceControls
-                    height={topHeight}
-                    backendReady={backendReady}
-                    autoRefresh={autoRefresh}
-                    onToggleAutoRefresh={toggleAutoRefresh}
-                    otcOnly={otcOnly}
-                    onToggleOtcOnly={() =>
-                        setAssetFilterState({
-                            ...(assetFilterState || {}),
-                            filterMode: otcOnly ? null : 'otc'
-                        })
+                <CollapsibleCard
+                    id="asset-selection"
+                    headerLeft={
+                        <h3 className="text-[10px] font-black text-text-secondary uppercase tracking-[0.25em] opacity-80">
+                            Asset Selection
+                        </h3>
                     }
-                    onGetAssets={handleGetAssets}
-                    onCollectHistory={collectHistory}
-                    isBusyRefreshing={autoRefresh}
-                    streamHealth={streamHealth}
-                    // Alerts Props
-                    autoRunAlertMonitor={autoRunAlertMonitor}
-                    onToggleAutoRunAlertMonitor={toggleAutoRunAlertMonitor}
-                    alertsStatus={alertsStatus}
-                    onStartAlerts={() => startAlerts(payoutAssets)}
-                    onStopAlerts={stopAlerts}
-                    enableTickLogging={enableTickLogging}
-                    onToggleTickLogging={toggleTickLogging}
+                    className="p-4 rounded-[20px] quflx-section-light flex flex-col bg-[#0d0d12] overflow-hidden shrink-0"
+                    headerClassName="mb-2"
+                    bodyClassName="flex-1 overflow-y-auto custom-scrollbar"
+                    style={{ height: `${topHeight}px` }}
                 >
                     <AssetFilterGroup
                         maxAssetsToStar={maxAssetsToStar}
@@ -280,7 +267,7 @@ const AssetPayoutPanel = ({
                         ignoreAssetList={Array.from(ignoreAssetSet)}
                         onRemoveIgnoreAsset={removeFromIgnoreAssets}
                     />
-                </DataSourceControls>
+                </CollapsibleCard>
             )}
 
             {showControls && (

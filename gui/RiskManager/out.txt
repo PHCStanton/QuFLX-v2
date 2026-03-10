@@ -1,0 +1,19 @@
+
+> vite-react-typescript-starter@0.0.0 typecheck
+> tsc --noEmit -p tsconfig.app.json
+
+src/components/AllSessionsCompleteModal.tsx(1,33): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/components/CustomScenarioCalculator.tsx(2,26): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/components/CustomScenarioCalculator.tsx(2,38): error TS6133: 'X' is declared but its value is never read.
+src/components/SessionCompletionModal.tsx(1,23): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/components/TradeSessionsManager.tsx(1,20): error TS6133: 'CheckCircle' is declared but its value is never read.
+src/components/TradingMetricsChart.tsx(62,9): error TS6133: 'rewardPercentage' is declared but its value is never read.
+src/components/UnifiedRiskControls.tsx(54,3): error TS6133: 'isLinked' is declared but its value is never read.
+src/components/UnifiedRiskControls.tsx(61,9): error TS6133: 'maxDrawdownLimit' is declared but its value is never read.
+src/components/VerticalRiskChart.tsx(61,11): error TS6133: 'gradientColor' is declared but its value is never read.
+src/lib/csv-parser.ts(88,7): error TS2353: Object literal may only specify known properties, and 'order_id' does not exist in type 'Omit<Trade, "id" | "trading_day_id">'.
+src/lib/csv-parser.ts(101,9): error TS2353: Object literal may only specify known properties, and 'total_investment' does not exist in type 'Omit<TradingDay, "id">'.
+src/lib/csv-parser.ts(107,13): error TS2339: Property 'total_investment' does not exist on type 'Omit<TradingDay, "id">'.
+src/lib/csv-parser.ts(112,10): error TS18048: 'dayData.tie_count' is possibly 'undefined'.
+src/lib/risk-calculations.ts(38,5): error TS6133: 'balance' is declared but its value is never read.
+src/pages/RiskManager.tsx(147,72): error TS6133: 'index' is declared but its value is never read.

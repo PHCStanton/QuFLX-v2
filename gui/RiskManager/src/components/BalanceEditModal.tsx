@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, DollarSign } from 'lucide-react';
 import { TradingDay } from '../lib/calendar-utils';
-import { supabase } from '../lib/supabase';
+import { storage } from '../lib/storage';
 
 interface BalanceEditModalProps {
   tradingDay: TradingDay;
@@ -26,38 +26,13 @@ export default function BalanceEditModal({ tradingDay, onBalanceUpdated, onClose
   const handleSave = async () => {
     setLoading(true);
     try {
-      const updateData: any = {};
+      const updatedDay: TradingDay = {
+        ...tradingDay,
+        starting_balance: startingBalance ? parseFloat(startingBalance) : null,
+        ending_balance: endingBalance ? parseFloat(endingBalance) : null
+      };
 
-      if (startingBalance) {
-        const startingVal = parseFloat(startingBalance);
-        if (isNaN(startingVal) || startingVal < 0) {
-          alert('Please enter a valid starting balance');
-          setLoading(false);
-          return;
-        }
-        updateData.starting_balance = startingVal;
-      } else {
-        updateData.starting_balance = null;
-      }
-
-      if (endingBalance) {
-        const endingVal = parseFloat(endingBalance);
-        if (isNaN(endingVal) || endingVal < 0) {
-          alert('Please enter a valid ending balance');
-          setLoading(false);
-          return;
-        }
-        updateData.ending_balance = endingVal;
-      } else {
-        updateData.ending_balance = null;
-      }
-
-      const { error } = await supabase
-        .from('trading_days')
-        .update(updateData)
-        .eq('id', tradingDay.id);
-
-      if (error) throw error;
+      storage.saveTradingDay(updatedDay);
 
       onBalanceUpdated();
       onClose();
@@ -67,6 +42,15 @@ export default function BalanceEditModal({ tradingDay, onBalanceUpdated, onClose
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
   };
 
   const calculatedEndingBalance = tradingDay.starting_balance
@@ -111,8 +95,8 @@ export default function BalanceEditModal({ tradingDay, onBalanceUpdated, onClose
                 tradingDay.total_profit_loss > 0 ? 'text-emerald-400' :
                 tradingDay.total_profit_loss < 0 ? 'text-red-400' : 'text-yellow-400'
               }`}>
-                ${tradingDay.total_profit_loss > 0 ? '+' : ''}
-                {tradingDay.total_profit_loss.toFixed(2)}
+                {tradingDay.total_profit_loss >= 0 ? '+' : ''}
+                {formatCurrency(tradingDay.total_profit_loss)}
               </span>
             </div>
           </div>
@@ -154,11 +138,11 @@ export default function BalanceEditModal({ tradingDay, onBalanceUpdated, onClose
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-400">Calculated</span>
-                <span className="text-white font-mono">${calculatedEndingBalance.toFixed(2)}</span>
+                <span className="text-white font-mono">{formatCurrency(calculatedEndingBalance)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Actual (Pocket Option)</span>
-                <span className="text-white font-mono">${parseFloat(endingBalance).toFixed(2)}</span>
+                <span className="text-white font-mono">{formatCurrency(parseFloat(endingBalance) || 0)}</span>
               </div>
               {actualVsCalculated !== null && (
                 <div className="flex justify-between pt-2 border-t border-gray-700">
@@ -167,7 +151,7 @@ export default function BalanceEditModal({ tradingDay, onBalanceUpdated, onClose
                     actualVsCalculated > 0 ? 'text-emerald-400' :
                     actualVsCalculated < 0 ? 'text-red-400' : 'text-yellow-400'
                   }`}>
-                    ${actualVsCalculated > 0 ? '+' : ''}{actualVsCalculated.toFixed(2)}
+                    {actualVsCalculated >= 0 ? '+' : ''}{formatCurrency(actualVsCalculated)}
                   </span>
                 </div>
               )}

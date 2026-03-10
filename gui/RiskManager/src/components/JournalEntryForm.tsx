@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { X, BookOpen } from 'lucide-react';
-import { EMOTION_OPTIONS, MARKET_CONDITIONS } from '../lib/calendar-utils';
-import { supabase } from '../lib/supabase';
+import { X, BookOpen, Star } from 'lucide-react';
+import { EMOTION_OPTIONS, MARKET_CONDITIONS, JournalEntry } from '../lib/calendar-utils';
+import { storage } from '../lib/storage';
 
 interface JournalEntryFormProps {
   selectedDate: Date;
@@ -18,6 +18,7 @@ export default function JournalEntryForm({ selectedDate, tradingDayId, onEntrySa
     emotion_tags: [] as string[],
     market_conditions: '',
     lessons_learned: '',
+    session_quality: 5,
   });
 
   const toggleEmotion = (emotion: string) => {
@@ -46,34 +47,44 @@ export default function JournalEntryForm({ selectedDate, tradingDayId, onEntrySa
 
       if (!dayId) {
         const dateStr = selectedDate.toISOString().split('T')[0];
-        const { data: tradingDay, error: dayError } = await supabase
-          .from('trading_days')
-          .upsert({
+        let tradingDay = storage.getTradingDayByDate(dateStr);
+        
+        if (!tradingDay) {
+          tradingDay = {
+            id: Math.random().toString(36).substr(2, 9),
             trade_date: dateStr,
             is_trading_day: false,
             total_profit_loss: 0,
             win_count: 0,
             loss_count: 0,
             total_trades: 0,
-          }, {
-            onConflict: 'trade_date',
-          })
-          .select()
-          .maybeSingle();
-
-        if (dayError) throw dayError;
-        if (!tradingDay) throw new Error('Failed to create trading day');
+            notes: ''
+          };
+          storage.saveTradingDay(tradingDay);
+        }
         dayId = tradingDay.id;
       }
 
-      const { error } = await supabase
-        .from('journal_entries')
-        .insert({
-          trading_day_id: dayId,
-          ...formData,
-        });
+      const journalEntry: JournalEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        trading_day_id: dayId!,
+        ...formData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      if (error) throw error;
+      storage.saveJournal(journalEntry);
+
+      // Also update the trading day with this quality rating
+      if (formData.session_quality) {
+        const tradingDay = storage.getTradingDay(dayId!);
+        if (tradingDay) {
+          storage.saveTradingDay({
+            ...tradingDay,
+            session_quality: formData.session_quality
+          });
+        }
+      }
 
       onEntrySaved();
       onClose();
@@ -154,7 +165,28 @@ export default function JournalEntryForm({ selectedDate, tradingDayId, onEntrySa
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-400 mb-2">Market Conditions</label>
+            <label className="block text-sm font-semibold text-gray-400 mb-2">Session Quality</label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setFormData({ ...formData, session_quality: star })}
+                  className="transition-all hover:scale-110"
+                >
+                  <Star
+                    className={`w-8 h-8 ${
+                      star <= formData.session_quality
+                        ? 'text-yellow-400 fill-yellow-400'
+                        : 'text-gray-700'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-400 mb-2">Market Condition</label>
             <select
               value={formData.market_conditions}
               onChange={(e) => setFormData({ ...formData, market_conditions: e.target.value })}

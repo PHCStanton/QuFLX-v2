@@ -599,6 +599,16 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('automation', { retryDelay: val })}
             />
           </SettingRow>
+          <SettingRow label="Auto Refresh Interval" description="Minutes between automatic asset list refreshes">
+            <SliderInput
+              value={settings.automation.autoRefreshInterval || 5}
+              min={1}
+              max={60}
+              step={1}
+              unit="min"
+              onChange={(val) => updateSection('automation', { autoRefreshInterval: val })}
+            />
+          </SettingRow>
         </CollapsiblePanel>
 
         {/* Analysis & Charting */}

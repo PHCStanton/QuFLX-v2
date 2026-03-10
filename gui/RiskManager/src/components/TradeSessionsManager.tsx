@@ -1,4 +1,4 @@
-import { Download, CheckCircle, BarChart3 } from 'lucide-react';
+import { Download, BarChart3, Plus } from 'lucide-react';
 import { RiskCalculator, SessionData } from '../lib/risk-calculations';
 import { exportToCSV } from '../lib/export-utils';
 import Tooltip from './Tooltip';
@@ -27,6 +27,8 @@ interface TradeSessionsManagerProps {
   canEditSettings: boolean;
   currentSessionNumber: number;
   completedSessions: CustomSession[];
+  onAddSession: () => void;
+  onAddTrade: () => void;
 }
 
 export default function TradeSessionsManager({
@@ -40,7 +42,9 @@ export default function TradeSessionsManager({
   onMaxSessionsChange,
   canEditSettings,
   currentSessionNumber,
-  completedSessions
+  completedSessions,
+  onAddSession,
+  onAddTrade
 }: TradeSessionsManagerProps) {
   const allTrades = [...completedSessions.flatMap(s => s.trades), ...trades];
   const wins = allTrades.filter(t => t.result === 'win').length;
@@ -90,7 +94,7 @@ export default function TradeSessionsManager({
           </div>
         </div>
 
-        {trades.length > 0 && (
+        { trades.length > 0 && (
           <button
             onClick={exportTrades}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors text-sm font-medium"
@@ -255,6 +259,23 @@ export default function TradeSessionsManager({
             <p className="text-gray-600 text-xs">Use the controls above to add wins or losses</p>
           </div>
         )}
+      </div>
+
+      <div className="pt-4 mt-4 border-t border-gray-800/50 flex gap-3">
+        <button
+          onClick={onAddSession}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0f1419] hover:bg-gray-800 border border-gray-700 text-blue-400 rounded-xl transition-colors text-xs font-bold"
+        >
+          <Plus className="w-4 h-4" />
+          Add Session
+        </button>
+        <button
+          onClick={onAddTrade}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#0f1419] hover:bg-gray-800 border border-gray-700 text-emerald-400 rounded-xl transition-colors text-xs font-bold"
+        >
+          <Plus className="w-4 h-4" />
+          Add Trade
+        </button>
       </div>
     </div>
   );

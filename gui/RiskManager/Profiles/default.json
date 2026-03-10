@@ -1,0 +1,10 @@
+{
+  "id": "default",
+  "name": "Default Profile",
+  "initial_balance": 1000,
+  "payout_percentage": 92,
+  "risk_per_trade": 1,
+  "use_fixed_amount": false,
+  "fixed_risk_amount": 25,
+  "created_at": "2026-03-09T12:00:00Z"
+}

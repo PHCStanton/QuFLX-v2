@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Upload, Plus, X } from 'lucide-react';
-import { Trade } from '../lib/calendar-utils';
-import { supabase } from '../lib/supabase';
-import { parsePocketOptionCSV } from '../lib/csv-parser';
+import { Trade, TradingDay } from '../lib/calendar-utils';
+import { storage } from '../lib/storage';
+import { parsePocketOptionExcel, parseUploadedCSV } from '../lib/excel-parser';
 
 interface TradeEntryFormProps {
   selectedDate: Date;
@@ -36,34 +36,36 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const csvContent = event.target?.result as string;
-
-      try {
-        const csvTrades = parsePocketOptionCSV(csvContent);
-        const parsedTrades: Partial<Trade>[] = csvTrades.map(csvTrade => ({
-          asset: csvTrade.asset,
-          trade_type: csvTrade.direction.toUpperCase() as 'CALL' | 'PUT',
-          expiration: csvTrade.expiration,
-          open_time: csvTrade.openTime.toISOString(),
-          close_time: csvTrade.closeTime.toISOString(),
-          open_price: csvTrade.openPrice,
-          close_price: csvTrade.closePrice,
-          investment_amount: csvTrade.tradeAmount,
-          profit_loss: csvTrade.profit,
-          result: csvTrade.profit > 0 ? 'WIN' : csvTrade.profit < 0 ? 'LOSS' : 'TIE',
-          order_id: csvTrade.order
-        }));
-
-        setTrades(parsedTrades);
-      } catch (error) {
-        console.error('Error parsing CSV:', error);
-        alert('Failed to parse CSV file. Please ensure it\'s in Pocket Option format.');
+    setLoading(true);
+    try {
+      let csvTrades = [];
+      if (file.name.endsWith('.xlsx')) {
+        csvTrades = await parsePocketOptionExcel(file);
+      } else {
+        csvTrades = await parseUploadedCSV(file);
       }
-    };
 
-    reader.readAsText(file);
+      const parsedTrades: Partial<Trade>[] = csvTrades.map(csvTrade => ({
+        asset: csvTrade.asset,
+        trade_type: csvTrade.direction.toUpperCase() as 'CALL' | 'PUT',
+        expiration: csvTrade.expiration,
+        open_time: csvTrade.openTime.toISOString(),
+        close_time: csvTrade.closeTime.toISOString(),
+        open_price: csvTrade.openPrice,
+        close_price: csvTrade.closePrice,
+        investment_amount: csvTrade.tradeAmount,
+        profit_loss: csvTrade.profit,
+        result: csvTrade.profit > 0 ? 'WIN' : csvTrade.profit < 0 ? 'LOSS' : 'TIE',
+        order_id: csvTrade.order
+      }));
+
+      setTrades(parsedTrades);
+    } catch (error) {
+      console.error('Error parsing file:', error);
+      alert('Failed to parse file. Please ensure it\'s in Pocket Option format (.csv or .xlsx).');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddManualTrade = () => {
@@ -110,56 +112,43 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
       const totalInvestment = trades.reduce((sum, t) => sum + (t.investment_amount || 0), 0);
       const tieCount = trades.filter(t => t.result === 'TIE').length;
 
-      const dayData: any = {
+      // Find or create trading day
+      let tradingDay = storage.getTradingDayByDate(dateStr);
+      
+      const dayData: TradingDay = {
+        id: tradingDay?.id || Math.random().toString(36).substr(2, 9),
         trade_date: dateStr,
-        total_trades: trades.length,
-        win_count: winCount,
-        loss_count: lossCount,
-        tie_count: tieCount,
-        total_profit_loss: totalPL,
-        total_investment: totalInvestment
+        is_trading_day: true,
+        total_trades: (tradingDay?.total_trades || 0) + trades.length,
+        win_count: (tradingDay?.win_count || 0) + winCount,
+        loss_count: (tradingDay?.loss_count || 0) + lossCount,
+        tie_count: (tradingDay?.tie_count || 0) + tieCount,
+        total_profit_loss: (tradingDay?.total_profit_loss || 0) + totalPL,
+        total_investment: (tradingDay?.total_investment || 0) + totalInvestment,
+        notes: tradingDay?.notes || ''
       };
 
       if (startingBalance) {
-        const startingVal = parseFloat(startingBalance);
-        if (isNaN(startingVal) || startingVal < 0) {
-          alert('Please enter a valid starting balance');
-          setLoading(false);
-          return;
-        }
-        dayData.starting_balance = startingVal;
+        dayData.starting_balance = parseFloat(startingBalance);
+      } else if (tradingDay?.starting_balance) {
+        dayData.starting_balance = tradingDay.starting_balance;
       }
+
       if (endingBalance) {
-        const endingVal = parseFloat(endingBalance);
-        if (isNaN(endingVal) || endingVal < 0) {
-          alert('Please enter a valid ending balance');
-          setLoading(false);
-          return;
-        }
-        dayData.ending_balance = endingVal;
+        dayData.ending_balance = parseFloat(endingBalance);
+      } else if (tradingDay?.ending_balance) {
+        dayData.ending_balance = tradingDay.ending_balance;
       }
 
-      const { data: tradingDay, error: dayError } = await supabase
-        .from('trading_days')
-        .upsert(dayData, {
-          onConflict: 'trade_date',
-        })
-        .select()
-        .maybeSingle();
-
-      if (dayError) throw dayError;
-      if (!tradingDay) throw new Error('Failed to create trading day');
+      storage.saveTradingDay(dayData);
 
       const tradesWithDayId = trades.map(trade => ({
         ...trade,
-        trading_day_id: tradingDay.id,
-      }));
+        id: Math.random().toString(36).substr(2, 9),
+        trading_day_id: dayData.id,
+      })) as Trade[];
 
-      const { error: tradesError } = await supabase
-        .from('trades')
-        .insert(tradesWithDayId);
-
-      if (tradesError) throw tradesError;
+      storage.saveTrades(tradesWithDayId);
 
       onTradesAdded();
       onClose();
@@ -193,7 +182,7 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
             }`}
           >
             <Upload className="w-5 h-5 inline-block mr-2" />
-            Import CSV
+            Import CSV / XLSX
           </button>
           <button
             onClick={() => setManualEntry(true)}
@@ -212,13 +201,13 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
           <div className="mb-6">
             <label className="block w-full p-8 border-2 border-dashed border-gray-700 rounded-xl text-center cursor-pointer hover:border-emerald-500 transition-colors">
               <Upload className="w-12 h-12 mx-auto mb-4 text-gray-600" />
-              <p className="text-white font-semibold mb-1">Upload CSV File</p>
+              <p className="text-white font-semibold mb-1">Upload CSV or XLSX File</p>
               <p className="text-sm text-gray-400">
-                Pocket Option CSV format with columns: Direction, Order, Expiration, Asset, Open time, Close time, Open price, Close price, Trade amount, Profit, Currency
+                Pocket Option statement format (.csv or .xlsx)
               </p>
               <input
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx"
                 onChange={handleFileUpload}
                 className="hidden"
               />

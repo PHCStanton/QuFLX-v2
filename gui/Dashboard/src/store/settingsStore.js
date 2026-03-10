@@ -105,6 +105,7 @@ const defaultSettings = {
     linkTimeframeSync: false,
     retryAttempts: 2,
     retryDelay: 500,
+    autoRefreshInterval: 5,
   },
   analysis: {
     defaultTimeframe: '1m',
@@ -341,6 +342,11 @@ const mergeSettings = (current, incoming) => {
       min: 0.5,
       max: 5,
       fallback: defaultSettings.automation.historyWaitTime,
+    }),
+    autoRefreshInterval: clampNumber(merged.automation?.autoRefreshInterval, {
+      min: 1,
+      max: 60,
+      fallback: defaultSettings.automation.autoRefreshInterval || 5,
     }),
   };
 
