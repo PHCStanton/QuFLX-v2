@@ -7,12 +7,14 @@ import AnimatedQuote from '../components/AnimatedQuote';
 import RiskVisualizationPrototype from '../components/RiskVisualizationPrototype';
 import UnifiedRiskControls from '../components/UnifiedRiskControls';
 import TradeSessionsManager from '../components/TradeSessionsManager';
-import TPDrawdownControls from '../components/TPDrawdownControls';
 import SessionCompletionModal from '../components/SessionCompletionModal';
 import AllSessionsCompleteModal from '../components/AllSessionsCompleteModal';
 import LimitReachedModal from '../components/LimitReachedModal';
 import { RiskCalculator as Calculator, SessionData, RiskScenario } from '../lib/risk-calculations';
+import ProfileSelector from '../components/ProfileSelector';
 import { exportToCSV } from '../lib/export-utils';
+import { storage } from '../lib/storage';
+import { TradingDay, Trade as CalendarTrade, Profile, formatDate } from '../lib/calendar-utils';
 
 interface Trade {
   id: number;
@@ -53,6 +55,7 @@ export default function RiskManager() {
   const [showAllSessionsCompleteModal, setShowAllSessionsCompleteModal] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limitType, setLimitType] = useState<'profit' | 'drawdown'>('drawdown');
+  const [sessionName, setSessionName] = useState('');
 
   const handleCalculate = () => {
     const calculator = new Calculator();
@@ -72,6 +75,41 @@ export default function RiskManager() {
     : { totalProfit: 0, totalGrowth: 0, winRate: 0, avgProfit: 0, finalBalance: 0 };
 
   const canEditSettings = trades.length === 0 && currentSession.length === 0;
+  // User requested to edit balance and payout during trades
+  const canEditBalanceAndPayout = true; 
+  const totalDrawdownAmount = initialBalance * (drawdownPercent / 100);
+  const maxDrawdownLimit = initialBalance - totalDrawdownAmount;
+  const takeProfitTarget = initialBalance + (totalDrawdownAmount * riskRewardRatio);
+
+  useEffect(() => {
+    loadProfileSettings();
+  }, []);
+
+  const loadProfileSettings = () => {
+    const profile = storage.getActiveProfile();
+    if (profile) {
+      setInitialBalance(profile.initial_balance);
+      setBalance(profile.initial_balance);
+      setSessionStartBalance(profile.initial_balance);
+      setRiskPercentPerTrade(profile.risk_per_trade);
+      setPayoutPercentage(profile.payout_percentage);
+      setUseFixedAmount(profile.use_fixed_amount);
+      setFixedRiskAmount(profile.fixed_risk_amount);
+      
+      // Also update scenarios if they haven't been touched
+      setStartingBalance(profile.initial_balance);
+      setRiskPercentage(profile.risk_per_trade);
+    }
+    
+    // Clear current session/trades when profile switches
+    setTrades([]);
+    setCurrentSession([]);
+    setCompletedSessions([]);
+  };
+
+  const handleProfileChange = () => {
+    loadProfileSettings();
+  };
 
   useEffect(() => {
     if (currentSession.length >= tradesPerSession && currentSession.length > 0) {
@@ -83,6 +121,17 @@ export default function RiskManager() {
     setInitialBalance(value);
     setBalance(value);
     setSessionStartBalance(value);
+    saveSettingToProfile('initial_balance', value);
+  };
+
+  const saveSettingToProfile = (key: keyof Profile, value: any) => {
+    const profile = storage.getActiveProfile();
+    if (profile) {
+      storage.saveProfile({
+        ...profile,
+        [key]: value
+      });
+    }
   };
 
   const handleAddTrade = (result: 'win' | 'loss') => {
@@ -109,10 +158,6 @@ export default function RiskManager() {
     setTrades([...trades, newTrade]);
 
     // Check limits
-    const totalDrawdownAmount = initialBalance * (drawdownPercent / 100);
-    const maxDrawdownLimit = initialBalance - totalDrawdownAmount;
-    const takeProfitTarget = initialBalance + (totalDrawdownAmount * riskRewardRatio);
-
     if (newBalance <= maxDrawdownLimit) {
       setLimitType('drawdown');
       setShowLimitModal(true);
@@ -142,9 +187,14 @@ export default function RiskManager() {
     }
   };
 
+  const handleAddSession = () => {
+    setMaxSessions(prev => prev + 1);
+  };
+
+
   const handleExportData = () => {
     const calculator = new Calculator();
-    const sessionData: SessionData[] = completedSessions.map((session, index) => ({
+    const sessionData: SessionData[] = completedSessions.map((session) => ({
       sessionNumber: session.id,
       startingBalance: session.startBalance,
       riskPerTrade: useFixedAmount ? fixedRiskAmount : calculator.calculateRiskPerTrade(session.startBalance, riskPercentPerTrade),
@@ -185,18 +235,82 @@ export default function RiskManager() {
     setShowLimitModal(false);
   };
 
+  const handleSyncToCalendar = () => {
+    if (trades.length === 0) {
+      alert('No trades to sync!');
+      return;
+    }
+
+    const dateStr = formatDate(new Date());
+    const tradingDay = storage.getTradingDayByDate(dateStr);
+
+    const winCount = trades.filter(t => t.result === 'win').length;
+    const lossCount = trades.filter(t => t.result === 'loss').length;
+    const totalPL = balance - initialBalance;
+    const totalInvestment = trades.length * (useFixedAmount ? fixedRiskAmount : (initialBalance * riskPercentPerTrade / 100));
+
+    const dayData: TradingDay = {
+      id: tradingDay?.id || Math.random().toString(36).substr(2, 9),
+      trade_date: dateStr,
+      is_trading_day: true,
+      total_trades: trades.length,
+      win_count: winCount,
+      loss_count: lossCount,
+      tie_count: 0,
+      total_profit_loss: totalPL,
+      total_investment: totalInvestment,
+      starting_balance: initialBalance,
+      ending_balance: balance,
+      notes: tradingDay?.notes || 'Synced from Risk Manager'
+    };
+
+    storage.saveTradingDay(dayData);
+
+    const calendarTrades: CalendarTrade[] = trades.map((t, idx) => ({
+      id: `rm-sync-${dateStr}-${t.id}`,
+      trading_day_id: dayData.id,
+      asset: 'Binary Option',
+      open_time: new Date(Date.now() - (trades.length - idx) * 60000).toISOString(),
+      close_time: new Date(Date.now() - (trades.length - idx) * 60000 + 60000).toISOString(),
+      open_price: 0,
+      close_price: 0,
+      investment_amount: useFixedAmount ? fixedRiskAmount : (initialBalance * riskPercentPerTrade / 100),
+      profit_loss: t.result === 'win' 
+        ? (useFixedAmount ? fixedRiskAmount : (initialBalance * riskPercentPerTrade / 100)) * (payoutPercentage / 100)
+        : -(useFixedAmount ? fixedRiskAmount : (initialBalance * riskPercentPerTrade / 100)),
+      profit_loss_percent: t.result === 'win' ? payoutPercentage : -100,
+      trade_type: 'CALL',
+      result: t.result === 'win' ? 'WIN' : 'LOSS',
+    }));
+
+    storage.saveTrades(calendarTrades);
+    alert('Session successfully synced to Trading Calendar!');
+  };
+
   return (
     <div className="min-h-screen bg-[#0f1419]">
       <div className="border-b border-gray-800 bg-[#1a1f2e]">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <Activity className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white">Binary Options Risk Manager</h1>
-              <p className="text-gray-400 text-sm">Calculate and analyze your trading risk scenarios</p>
+              <div className="flex items-center gap-2">
+                <p className="text-gray-400 text-sm">Session:</p>
+                <input
+                  type="text"
+                  value={sessionName}
+                  onChange={(e) => setSessionName(e.target.value)}
+                  placeholder="e.g., Morning_Session"
+                  className="bg-transparent border-b border-gray-700 text-emerald-400 text-sm focus:border-emerald-500 focus:outline-none px-1 py-0.5 min-w-[150px]"
+                />
+              </div>
             </div>
+          </div>
+          <div className="flex items-center gap-4 self-start md:self-center">
+            <ProfileSelector onProfileChanged={handleProfileChange} />
           </div>
         </div>
       </div>
@@ -300,35 +414,36 @@ export default function RiskManager() {
             </div>
           </>
         ) : (
-          <div className="space-y-6">
-            <UnifiedRiskControls
-              balance={balance}
-              initialBalance={initialBalance}
-              riskPercentPerTrade={riskPercentPerTrade}
-              drawdownPercent={drawdownPercent}
-              riskRewardRatio={riskRewardRatio}
-              payoutPercentage={payoutPercentage}
-              useFixedAmount={useFixedAmount}
-              fixedRiskAmount={fixedRiskAmount}
-              onBalanceChange={handleBalanceChange}
-              onRiskPercentChange={setRiskPercentPerTrade}
-              onDrawdownPercentChange={setDrawdownPercent}
-              onRiskRewardRatioChange={setRiskRewardRatio}
-              onPayoutPercentageChange={setPayoutPercentage}
-              onUseFixedAmountChange={setUseFixedAmount}
-              onFixedRiskAmountChange={setFixedRiskAmount}
-              onAddTrade={handleAddTrade}
-              onReset={handleReset}
-              canEditSettings={canEditSettings}
-              isLinked={false}
-            />
+          <div className="flex flex-col gap-8">
+            <div className="w-full">
+              <UnifiedRiskControls
+                balance={balance}
+                initialBalance={initialBalance}
+                riskPercentPerTrade={riskPercentPerTrade}
+                drawdownPercent={drawdownPercent}
+                riskRewardRatio={riskRewardRatio}
+                payoutPercentage={payoutPercentage}
+                useFixedAmount={useFixedAmount}
+                fixedRiskAmount={fixedRiskAmount}
+                onBalanceChange={handleBalanceChange}
+                onRiskPercentChange={(v) => { setRiskPercentPerTrade(v); saveSettingToProfile('risk_per_trade', v); }}
+                onDrawdownPercentChange={setDrawdownPercent}
+                onRiskRewardRatioChange={setRiskRewardRatio}
+                onPayoutPercentageChange={(v) => { setPayoutPercentage(v); saveSettingToProfile('payout_percentage', v); }}
+                onUseFixedAmountChange={(v) => { setUseFixedAmount(v); saveSettingToProfile('use_fixed_amount', v); }}
+                onFixedRiskAmountChange={(v) => { setFixedRiskAmount(v); saveSettingToProfile('fixed_risk_amount', v); }}
+                canEditSettings={canEditSettings || canEditBalanceAndPayout}
+              />
+            </div>
 
-            <div className="grid lg:grid-cols-2 gap-6">
+            <div className="w-full">
               <TradeSessionsManager
                 trades={currentSession}
                 balance={balance}
                 initialBalance={initialBalance}
                 riskPercent={riskPercentPerTrade}
+                drawdownPercent={drawdownPercent}
+                riskRewardRatio={riskRewardRatio}
                 tradesPerSession={tradesPerSession}
                 maxSessions={maxSessions}
                 onTradesPerSessionChange={setTradesPerSession}
@@ -336,14 +451,10 @@ export default function RiskManager() {
                 canEditSettings={canEditSettings}
                 currentSessionNumber={completedSessions.length + 1}
                 completedSessions={completedSessions}
-              />
-
-              <TPDrawdownControls
-                balance={balance}
-                initialBalance={initialBalance}
-                riskPercentPerTrade={riskPercentPerTrade}
-                drawdownPercent={drawdownPercent}
-                riskRewardRatio={riskRewardRatio}
+                onAddSession={handleAddSession}
+                onAddTrade={handleAddTrade}
+                onSyncSession={handleSyncToCalendar}
+                onReset={handleReset}
               />
             </div>
           </div>
@@ -377,7 +488,7 @@ export default function RiskManager() {
         <LimitReachedModal
           isOpen={showLimitModal}
           type={limitType}
-          amount={limitType === 'profit' ? balance : balance}
+          amount={limitType === 'profit' ? takeProfitTarget : maxDrawdownLimit}
           onClose={() => setShowLimitModal(false)}
           onContinue={() => setShowLimitModal(false)}
         />

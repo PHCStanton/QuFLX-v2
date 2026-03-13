@@ -88,6 +88,22 @@ class IndicatorSet:
     demarker: Optional[float] = None
     cci: Optional[float] = None
 
+    # Support / Resistance Enhancements
+    resistance_level: Optional[float] = None
+    support_level: Optional[float] = None
+    dist_to_resistance: Optional[float] = None   # % distance from close to nearest resistance
+    dist_to_support: Optional[float] = None       # % distance from close to nearest support
+    resistance_touch_count: Optional[int] = None  # times price tested resistance without breaking
+    support_touch_count: Optional[int] = None     # times price tested support without breaking
+    sr_flip: Optional[bool] = None                # True when a level was just broken (flip event)
+    sr_flip_price: Optional[float] = None         # price of the flipped level
+    resistance_zone_upper: Optional[float] = None # high of fractal candle (resistance zone top)
+    resistance_zone_lower: Optional[float] = None # body lower bound of fractal candle
+    support_zone_upper: Optional[float] = None    # body upper bound of fractal candle
+    support_zone_lower: Optional[float] = None    # low of fractal candle (support zone bottom)
+    resistance_freshness: Optional[str] = None    # 'fresh' | 'tested' | 'stale'
+    support_freshness: Optional[str] = None       # 'fresh' | 'tested' | 'stale'
+
 class TechnicalIndicatorsPipeline:
     """
     Comprehensive technical indicators calculation pipeline.
@@ -133,7 +149,7 @@ class TechnicalIndicatorsPipeline:
         if 'indicator_params' in self.config:
             self.params.update(self.config['indicator_params'])
     
-    def resample_to_grid(self, df: pd.DataFrame, timeframe: str = '1T') -> pd.DataFrame:
+    def resample_to_grid(self, df: pd.DataFrame, timeframe: str = '1min') -> pd.DataFrame:
         """
         Ensures the DataFrame has a continuous time index at the specified interval.
         Missing candles are forward-filled (pausing indicators).
@@ -176,7 +192,7 @@ class TechnicalIndicatorsPipeline:
             
             # Reset index and convert back to unix timestamps
             df_final = df_resampled.reset_index()
-            df_final[time_col] = df_final[time_col].view('int64') // 10**9
+            df_final[time_col] = df_final[time_col].astype('int64') // 10**9
             
             return df_final
             
@@ -202,7 +218,7 @@ class TechnicalIndicatorsPipeline:
             
             # 0.1 Time-Series Alignment: Fill gaps to prevent indicator distortion
             # Default to 1m grid for OTC Sniper
-            df = self.resample_to_grid(df, timeframe='1T')
+            df = self.resample_to_grid(df, timeframe='1min')
             
             result_df = df.copy()
             
@@ -257,6 +273,8 @@ class TechnicalIndicatorsPipeline:
                     df['bb_lower'] = bb_data[f"BBL_{self.params['bb_period']}_{self.params['bb_std']}"]
                     df['bb_middle'] = bb_data[f"BBM_{self.params['bb_period']}_{self.params['bb_std']}"]
                     df['bb_upper'] = bb_data[f"BBU_{self.params['bb_period']}_{self.params['bb_std']}"]
+                    # bb_width is in RATIO form [0, 1] (not percentage).
+                    # E.g., 0.04 = 4% bandwidth. Regime detector uses < 0.04 for squeeze detection.
                     df['bb_width'] = bb_data[f"BBB_{self.params['bb_period']}_{self.params['bb_std']}"] / 100
                     df['bb_percent'] = bb_data[f"BBP_{self.params['bb_period']}_{self.params['bb_std']}"]
             else:
@@ -265,12 +283,22 @@ class TechnicalIndicatorsPipeline:
                 df['bb_upper'] = df['bb_middle'] + (std_dev * self.params['bb_std'])
                 df['bb_lower'] = df['bb_middle'] - (std_dev * self.params['bb_std'])
                 bb_range = df['bb_upper'] - df['bb_lower']
+                # bb_width is in RATIO form [0, 1] (not percentage). Same scale as pandas_ta path.
                 df['bb_width'] = bb_range / df['bb_middle'].replace(0, np.nan)
                 df['bb_percent'] = (df['close'] - df['bb_lower']) / bb_range.replace(0, np.nan)
             
         except Exception as e:
-            self.logger.error(f"Error calculating trend indicators: {str(e)}")
-        
+            self.logger.error(f"Error calculating trend indicators: {str(e)}", exc_info=True)
+            # MIN-1: Explicitly NaN-fill expected columns so downstream code does not silently
+            # receive a partially-populated DataFrame (Core Principle #8: Zero Silent Failures).
+            for col in [
+                'sma_20', 'ema_16', 'ema_89', 'wma_20',
+                'macd', 'macd_signal', 'macd_histogram',
+                'bb_upper', 'bb_middle', 'bb_lower', 'bb_width', 'bb_percent',
+            ]:
+                if col not in df.columns:
+                    df[col] = np.nan
+
         return df
     
     def _calculate_momentum_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -548,63 +576,128 @@ class TechnicalIndicatorsPipeline:
         return df
 
     def _calculate_support_resistance(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculates Support/Resistance levels using fractal pivots with confirmation lag.
+
+        Enhancements (Phases 1-5):
+        - Phase 1: dist_to_resistance, dist_to_support (% distance from close)
+        - Phase 2: resistance_touch_count, support_touch_count, freshness classification
+        - Phase 3: sr_flip, sr_flip_price (broken level detection)
+        - Phase 4: zone bounds (resistance_zone_upper/lower, support_zone_upper/lower)
+        """
         try:
-            # Pivot Point / Local Extrema approach
-            # We look for highs that are higher than N neighbors on both sides
-            # and lows that are lower than N neighbors on both sides.
             n = self.params.get('support_resistance_period', 5)
-            
-            # Note: This is a "lagging" valid pivot detection if we strictily wait for future bars.
-            # To avoid repainting strictly, we can only confirm a pivot at index t after we have seen t+n.
-            # So the pivot value at t is only known at t+n. 
-            # We will project the LAST confirmed pivot forward.
-
-            df['resistance_level'] = np.nan
-            df['support_level'] = np.nan
-
-            # Find local maxima and minima
-            # rolling(2*n+1, center=True).max() == current value
-            # But we can't use center=True if we want to simulate real-time without looking ahead indefinitely.
-            # Actually, standard pivot points in TA often just look back, or if they look forward, they repaint.
-            # A common robust way for real-time:
-            # A level is "active" if it was a Swing High/Low in the past.
-            
-            # Using simple window approach for "Fractals":
-            # High[i] is a fractal top if High[i] > High[i-2], i-1, i+1, i+2
-            
-            # We will iterate to fill "resistance" and "support" columns with the *active* levels.
-            # Active level = the most recent confirmed fractal.
-            
-            # Optimization: Vectorized approach for Fractals
-            # Shifted comparisons
-            # To confirm a fractal at `i`, we need confirmed data up to `i+n`.
-            # So at index `current`, the most recent confirmed fractal is at `current - n`.
-            
-            # 1. Identify potential pivots (all historical)
             window = 2 * n + 1
-            
-            # Highs
+
+            # ── 1. Identify fractal pivots (vectorized, center=True for full-window look) ──
             rolling_max = df['high'].rolling(window=window, center=True).max()
             is_pivot_high = (df['high'] == rolling_max)
-            
-            # Lows
+
             rolling_min = df['low'].rolling(window=window, center=True).min()
             is_pivot_low = (df['low'] == rolling_min)
-            
-            # 2. Propagate forward
-            # Since rolling(center=True) uses future data, we must shift the signal forward by n
-            # so that at time t, we only see the pivot that happened at t-n.
+
+            # Shift signal by n so live bar only sees pivot confirmed n bars ago (no repainting)
             confirmed_highs = df['high'].where(is_pivot_high).shift(n)
-            confirmed_lows = df['low'].where(is_pivot_low).shift(n)
-            
+            confirmed_lows  = df['low'].where(is_pivot_low).shift(n)
+
             df['resistance_level'] = confirmed_highs.ffill()
-            df['support_level'] = confirmed_lows.ffill()
-            
+            df['support_level']    = confirmed_lows.ffill()
+
+            # ── Phase 4: Zone bounds (fractal candle body gives zone thickness) ──
+            # Capture the OHLC of each fractal candle to define the supply/demand zone
+            res_zone_upper = df['high'].where(is_pivot_high).shift(n).ffill()
+            res_zone_lower = df[['open', 'close']].min(axis=1).where(is_pivot_high).shift(n).ffill()
+            sup_zone_upper = df[['open', 'close']].max(axis=1).where(is_pivot_low).shift(n).ffill()
+            sup_zone_lower = df['low'].where(is_pivot_low).shift(n).ffill()
+
+            df['resistance_zone_upper'] = res_zone_upper
+            df['resistance_zone_lower'] = res_zone_lower
+            df['support_zone_upper']    = sup_zone_upper
+            df['support_zone_lower']    = sup_zone_lower
+
+            # ── Phase 1: Distance metrics (% distance from close to level) ──
+            df['dist_to_resistance'] = np.where(
+                df['resistance_level'].notna() & (df['close'] > 0),
+                (df['resistance_level'] - df['close']) / df['close'] * 100,
+                np.nan
+            )
+            df['dist_to_support'] = np.where(
+                df['support_level'].notna() & (df['close'] > 0),
+                (df['close'] - df['support_level']) / df['close'] * 100,
+                np.nan
+            )
+
+            # ── Phase 2: Touch count ──
+            # A "touch" occurs when price comes within 0.5×ATR of the level
+            # without closing through it (body close stays on the correct side).
+            atr = df.get('atr_14', df['high'] - df['low'])  # fallback if ATR not yet computed
+            touch_band = atr * 0.5
+
+            # For each bar, check proximity to the CURRENT active level
+            near_resistance = (
+                (df['high'] >= df['resistance_level'] - touch_band) &
+                (df['close'] < df['resistance_level'])  # body stayed below = touch not break
+            )
+            near_support = (
+                (df['low'] <= df['support_level'] + touch_band) &
+                (df['close'] > df['support_level'])   # body stayed above = touch not break
+            )
+
+            # Count cumulative touches per unique level — reset counter when level changes
+            res_level_id  = (df['resistance_level'] != df['resistance_level'].shift(1)).cumsum()
+            sup_level_id  = (df['support_level'] != df['support_level'].shift(1)).cumsum()
+
+            df['resistance_touch_count'] = (
+                near_resistance.astype(int)
+                .groupby(res_level_id)
+                .cumsum()
+                .astype('Int64')
+            )
+            df['support_touch_count'] = (
+                near_support.astype(int)
+                .groupby(sup_level_id)
+                .cumsum()
+                .astype('Int64')
+            )
+
+            # ── Phase 5: Freshness classification ──
+            def _freshness(tc: pd.Series) -> pd.Series:
+                return tc.map(lambda v: (
+                    'fresh'  if pd.isna(v) or v <= 1 else
+                    'tested' if v <= 3 else
+                    'stale'
+                ))
+
+            df['resistance_freshness'] = _freshness(df['resistance_touch_count'])
+            df['support_freshness']    = _freshness(df['support_touch_count'])
+
+            # ── Phase 3: S/R Flip detection ──
+            # A flip is when price CLOSES through the active level (body break, not just wick).
+            prev_res = df['resistance_level'].shift(1)
+            prev_sup = df['support_level'].shift(1)
+
+            resistance_broken = (df['close'] > prev_res) & prev_res.notna()
+            support_broken    = (df['close'] < prev_sup) & prev_sup.notna()
+
+            df['sr_flip']       = resistance_broken | support_broken
+            df['sr_flip_price'] = np.where(
+                resistance_broken, prev_res,
+                np.where(support_broken, prev_sup, np.nan)
+            )
+
         except Exception as e:
             self.logger.error(f"Error calculating Support/Resistance: {str(e)}")
-            df['resistance_level'] = np.nan
-            df['support_level'] = np.nan
-        
+            for col in [
+                'resistance_level', 'support_level',
+                'dist_to_resistance', 'dist_to_support',
+                'resistance_touch_count', 'support_touch_count',
+                'resistance_freshness', 'support_freshness',
+                'sr_flip', 'sr_flip_price',
+                'resistance_zone_upper', 'resistance_zone_lower',
+                'support_zone_upper', 'support_zone_lower',
+            ]:
+                df[col] = np.nan
+
         return df
 
     def _calculate_cci(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -639,7 +732,7 @@ class TechnicalIndicatorsPipeline:
                 high=float(df_row.get('high', 0.0)),
                 low=float(df_row.get('low', 0.0)),
                 close=float(df_row.get('close', 0.0)),
-                
+
                 sma_20=self._safe_float(df_row.get('sma_20')),
                 ema_16=self._safe_float(df_row.get('ema_16')),
                 ema_89=self._safe_float(df_row.get('ema_89')),
@@ -647,37 +740,53 @@ class TechnicalIndicatorsPipeline:
                 ema_50=self._safe_float(df_row.get('ema_50')),
                 ema_100=self._safe_float(df_row.get('ema_100')),
                 wma_20=self._safe_float(df_row.get('wma_20')),
-                
+
                 rsi_14=self._safe_float(df_row.get('rsi_14')),
                 rsi_21=self._safe_float(df_row.get('rsi_21')),
                 stoch_k=self._safe_float(df_row.get('stoch_k')),
                 stoch_d=self._safe_float(df_row.get('stoch_d')),
                 williams_r=self._safe_float(df_row.get('williams_r')),
                 roc_10=self._safe_float(df_row.get('roc_10')),
-                
+
                 macd=self._safe_float(df_row.get('macd')),
                 macd_signal=self._safe_float(df_row.get('macd_signal')),
                 macd_histogram=self._safe_float(df_row.get('macd_histogram')),
-                
+
                 bb_upper=self._safe_float(df_row.get('bb_upper')),
                 bb_middle=self._safe_float(df_row.get('bb_middle')),
                 bb_lower=self._safe_float(df_row.get('bb_lower')),
                 bb_width=self._safe_float(df_row.get('bb_width')),
                 bb_percent=self._safe_float(df_row.get('bb_percent')),
-                
+
                 atr_14=self._safe_float(df_row.get('atr_14')),
                 atr_21=self._safe_float(df_row.get('atr_21')),
                 true_range=self._safe_float(df_row.get('true_range')),
                 adx=self._safe_float(df_row.get('adx')),
                 plus_di=self._safe_float(df_row.get('plus_di')),
                 minus_di=self._safe_float(df_row.get('minus_di')),
-                
+
                 supertrend=self._safe_float(df_row.get('supertrend')),
                 supertrend_direction=str(df_row.get('supertrend_direction', '')),
-                
+
                 schaff_tc=self._safe_float(df_row.get('schaff_tc')),
                 demarker=self._safe_float(df_row.get('demarker')),
-                cci=self._safe_float(df_row.get('cci'))
+                cci=self._safe_float(df_row.get('cci')),
+
+                # S/R Enhancements (Phases 1–5)
+                resistance_level=self._safe_float(df_row.get('resistance_level')),
+                support_level=self._safe_float(df_row.get('support_level')),
+                dist_to_resistance=self._safe_float(df_row.get('dist_to_resistance')),
+                dist_to_support=self._safe_float(df_row.get('dist_to_support')),
+                resistance_touch_count=self._safe_int(df_row.get('resistance_touch_count')),
+                support_touch_count=self._safe_int(df_row.get('support_touch_count')),
+                resistance_freshness=str(df_row.get('resistance_freshness', 'fresh')) if df_row.get('resistance_freshness') else None,
+                support_freshness=str(df_row.get('support_freshness', 'fresh')) if df_row.get('support_freshness') else None,
+                sr_flip=bool(df_row.get('sr_flip', False)) if df_row.get('sr_flip') is not None else None,
+                sr_flip_price=self._safe_float(df_row.get('sr_flip_price')),
+                resistance_zone_upper=self._safe_float(df_row.get('resistance_zone_upper')),
+                resistance_zone_lower=self._safe_float(df_row.get('resistance_zone_lower')),
+                support_zone_upper=self._safe_float(df_row.get('support_zone_upper')),
+                support_zone_lower=self._safe_float(df_row.get('support_zone_lower')),
             )
         except Exception as e:
             self.logger.error(f"Error creating indicator set: {str(e)}")
@@ -688,5 +797,13 @@ class TechnicalIndicatorsPipeline:
             if pd.isna(value) or value is None:
                 return None
             return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    def _safe_int(self, value) -> Optional[int]:
+        try:
+            if value is None or (hasattr(pd, 'isna') and pd.isna(value)):
+                return None
+            return int(value)
         except (ValueError, TypeError):
             return None

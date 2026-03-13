@@ -17,6 +17,13 @@ export default {
         'text-primary': 'rgb(var(--text-primary) / <alpha-value>)',
         'text-secondary': 'rgb(var(--text-secondary) / <alpha-value>)',
         'border-primary': 'rgb(var(--border-color) / <alpha-value>)',
+      },
+      fontFamily: {
+        orbitron: ['Orbitron', 'sans-serif'],
+        sans: ['var(--font-primary)', 'ui-sans-serif', 'system-ui', 'sans-serif', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji'],
+        primary: ['var(--font-primary)'],
+        secondary: ['var(--font-secondary)'],
+        tertiary: ['var(--font-tertiary)'],
       }
     },
   },

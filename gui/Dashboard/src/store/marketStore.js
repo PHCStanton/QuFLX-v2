@@ -727,7 +727,22 @@ const createMarketSlice = (set, get) => ({
     set({ autoRefresh: true });
     const { refreshAssets } = get();
     refreshAssets(); // Uses store filter state
-    const interval = setInterval(() => refreshAssets(), 5 * 60 * 1000);
+    
+    // Lazy import or use the already available state if possible. 
+    // Since we are in a zustand store, we can access other stores via getState().
+    let intervalMins = 5;
+    try {
+        const settingsState = window.localStorage.getItem(QFLX_PERSIST_KEYS.settings);
+        if (settingsState) {
+            const parsed = JSON.parse(settingsState);
+            intervalMins = parsed?.state?.settings?.automation?.autoRefreshInterval || 5;
+        }
+    } catch (e) {
+        console.warn('Failed to parse settings for auto-refresh interval', e);
+    }
+
+    const intervalMs = Math.max(1, intervalMins) * 60 * 1000;
+    const interval = setInterval(() => refreshAssets(), intervalMs);
     set({ refreshInterval: interval });
   },
   stopAutoRefresh: () => {
@@ -784,31 +799,6 @@ const createMarketSlice = (set, get) => ({
     } catch (err) {
       console.error('Failed to refresh assets:', err);
       set({ lastError: `Failed to refresh assets: ${getErrorMessage(err)}` });
-    }
-  },
-  collectHistory: async () => {
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/history/collect-history`, {
-        method: 'POST'
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to start collection');
-      }
-
-      const data = await res.json();
-      console.log('History collection started:', data);
-
-      if (get().autoRunAlertMonitor) {
-        console.log('[CollectHistory] Auto-running Alert Monitor...');
-        // Start alerts for all payout assets or selected asset
-        const assets = get().payoutAssets || [];
-        get().startAlerts(assets);
-      }
-    } catch (err) {
-      console.error('Failed to start history collection:', err);
-      set({ lastError: `Collection Error: ${err.message}` });
     }
   },
   autoRunAlertMonitor: false,

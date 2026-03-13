@@ -72,11 +72,13 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 # Redis Config
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 if not logging.getLogger().handlers:
+    # Force UTF-8 encoding on stdout to prevent UnicodeEncodeError on Windows (cp1252)
+    _utf8_stdout = open(sys.stdout.fileno(), 'w', encoding='utf-8', closefd=False)
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)sZ | %(levelname)s | %(name)s | %(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
-        handlers=[logging.StreamHandler(sys.stdout)]
+        handlers=[logging.StreamHandler(_utf8_stdout)]
     )
 logger = logging.getLogger("OTC_Dispatch")
 
@@ -432,17 +434,19 @@ class DiscordDispatcher:
         self.last_sent = {} # Dedup: {asset: timestamp}
         self._session = None  # Initialize to None for clarity
     
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create a shared aiohttp session for Discord webhooks."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+        return self._session
+
     async def send_alert(self, context: AlertContext, ai_verdict: AIAnalysisResult) -> bool:
         if not self.webhook_url:
             logger.warning("Discord Webhook missing.")
             return False
 
-        # Rate Limit Check - REMOVED (dispatcher-level cooldown is the single source of truth)
-        # The OTCDispatcher.COOLDOWN_SECONDS handles rate limiting at line 900-904
-
-        # Shared Session
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+        # Shared Session (DRY: use _get_session())
+        await self._get_session()
 
         direction_emoji = "📈" if context.direction == "CALL" else "📉"
         
@@ -494,8 +498,7 @@ class DiscordDispatcher:
         if not self.webhook_url:
             return False
 
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+        await self._get_session()
 
         color = 0xffa500  # Orange for warnings
         
@@ -539,8 +542,7 @@ class DiscordDispatcher:
         if not self.webhook_url:
             return False
 
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+        await self._get_session()
 
         direction_emoji = "📈" if context.direction == "CALL" else "📉"
         tech = context.technicals
@@ -648,7 +650,8 @@ class TickLogger:
                 try:
                     from dateutil import parser
                     return int(parser.parse(str(t)).timestamp())
-                except:
+                except Exception as parse_err:
+                    logger.warning(f"Unparseable timestamp in tick data: {t!r} ({parse_err})")
                     return int(datetime.now().timestamp())
 
         ts_start = get_ts(chunk[0])
@@ -751,7 +754,7 @@ class TickerSubscriber:
                 await asyncio.sleep(5)
             finally:
                 if 'client' in locals():
-                    await client.close()
+                    await client.aclose()
 
 
 # --- Main Service ---
@@ -820,7 +823,7 @@ class SettingsSubscriber:
                 await asyncio.sleep(5)
             finally:
                 if 'client' in locals():
-                    await client.close()
+                    await client.aclose()
 
 class OTCDispatcher:
     def __init__(self, assets: List[str], test_mode: bool = False):
@@ -852,12 +855,16 @@ class OTCDispatcher:
         self.cooldowns: Dict[str, float] = {}
         self.COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
         
-        # Correlation Groups (R4)
+        # Correlation Groups (R4) — expanded to cover NZD, JPY, CAD, CHF
         self.correlation_groups = {
-            "AUD": ["AUDCADOTC", "AUDCHFDOTC", "AUDJPYOTC", "AUDNZDOTC", "AUDUSDOTC"],
-            "EUR": ["EURUSDOTC", "EURJPYOTC", "EURGBPOTC", "EURAUDOTC", "EURCADOTC", "EURCHFDOTC"],
-            "GBP": ["GBPUSDOTC", "GBPJPYOTC", "GBPAUDOTC", "GBPCADOTC", "GBPCHFDOTC"],
-            "USD": ["EURUSDOTC", "GBPUSDOTC", "AUDUSDOTC", "USDJPYOTC", "USDCADOTC", "USDCHFDOTC"]
+            "AUD": ["AUDCADOTC", "AUDCHFOTC", "AUDJPYOTC", "AUDNZDOTC", "AUDUSDOTC"],
+            "EUR": ["EURUSDOTC", "EURJPYOTC", "EURGBPOTC", "EURAUDOTC", "EURCADOTC", "EURCHFOTC"],
+            "GBP": ["GBPUSDOTC", "GBPJPYOTC", "GBPAUDOTC", "GBPCADOTC", "GBPCHFOTC"],
+            "USD": ["EURUSDOTC", "GBPUSDOTC", "AUDUSDOTC", "USDJPYOTC", "USDCADOTC", "USDCHFOTC"],
+            "NZD": ["NZDUSDOTC", "NZDJPYOTC", "AUDNZDOTC", "NZDCADOTC", "NZDCHFOTC"],
+            "JPY": ["USDJPYOTC", "EURJPYOTC", "GBPJPYOTC", "AUDJPYOTC", "NZDJPYOTC", "CADJPYOTC", "CHFJPYOTC"],
+            "CAD": ["USDCADOTC", "EURCADOTC", "GBPCADOTC", "AUDCADOTC", "NZDCADOTC", "CADJPYOTC"],
+            "CHF": ["USDCHFOTC", "EURCHFOTC", "GBPCHFOTC", "AUDCHFOTC", "NZDCHFOTC", "CHFJPYOTC"],
         }
         self.group_last_alert: Dict[str, float] = {} # {group: timestamp}
         self.GROUP_COOLDOWN = 120 # 2 minutes between correlated alerts
@@ -930,12 +937,22 @@ class OTCDispatcher:
                 await asyncio.sleep(5)  # Backoff on persistent errors
 
     async def close(self):
-        """Gracefully shutdown all components."""
+        """Gracefully shutdown all components — cancels worker tasks before closing sessions."""
         logger.info("Closing OTC Dispatcher components...")
+
+        # Cancel all per-asset worker tasks
+        tasks_to_cancel = [t for t in self._asset_tasks.values() if not t.done()]
+        for task in tasks_to_cancel:
+            task.cancel()
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        self._asset_tasks.clear()
+        logger.info(f"Cancelled {len(tasks_to_cancel)} worker task(s).")
+
         await self.ai.close()
         await self.discord.close()
         if self._redis_client:
-            await self._redis_client.close()
+            await self._redis_client.aclose()
             logger.info("Persistent Redis client closed")
 
 
@@ -1005,13 +1022,15 @@ class OTCDispatcher:
                     required_limit = max(200, self.candle_count)
                     candles = df.tail(required_limit).to_dict('records')
                     
-                    # Optional: Data Recency Check (Phase 2C)
+                    # Data Recency Check — skip stale files to prevent phantom alerts
+                    STALE_THRESHOLD = int(os.getenv("STALE_DATA_THRESHOLD_SECONDS", "300"))  # 5 min default
                     if candles:
                         last_ts = candles[-1].get('time', 0)
                         now_ts = int(datetime.now().timestamp())
                         age = now_ts - last_ts
-                        if age > 120:  # More than 2 minutes old
-                            logger.warning(f"Data for {asset} is STALE ({age}s old).")
+                        if age > STALE_THRESHOLD:
+                            logger.warning(f"Data for {asset} is STALE ({age}s old). Skipping scan.")
+                            return []  # Return empty → process_asset() exits early, no phantom alerts
                         else:
                             logger.debug(f"Data for {asset} recency: {age}s")
 
@@ -1080,6 +1099,11 @@ class OTCDispatcher:
              }
         else:
             result = self.scanner.analyze(data_points, asset=asset, candle_count=self.candle_count)
+
+        # Guard: scanner returns None when there are not enough candles or data is empty
+        if result is None:
+            return
+
         # Prepare Context
         ctx = AlertContext(
             asset=asset,

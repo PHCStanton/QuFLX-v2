@@ -59,7 +59,6 @@ export default function TradingMetricsChart({
   const rewardAmount = riskAmount * riskRewardRatio;
   const takeProfitTarget = initialBalance + rewardAmount;
   const maxDrawdownLimit = initialBalance - riskAmount;
-  const rewardPercentage = (rewardAmount / initialBalance) * 100;
   const requiredWinRate = (1 / (1 + riskRewardRatio)) * 100;
 
   useEffect(() => {

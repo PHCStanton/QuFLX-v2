@@ -1,4 +1,4 @@
-import { CheckCircle, Download, TrendingUp } from 'lucide-react';
+import { CheckCircle, Download } from 'lucide-react';
 
 interface AllSessionsCompleteModalProps {
   isOpen: boolean;

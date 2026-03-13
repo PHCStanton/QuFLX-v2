@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { LineSeries, LineStyle } from 'lightweight-charts';
 import { prepareChartData } from '../utils/chartData';
+import useSettingsStore from '../store/settingsStore';
+
+// Returns whether a specific indicator's price scale label should be visible.
+// Global toggle (showIndicatorPriceLabels) acts as a master off-switch.
+const getPriceLabelVisible = (ind) => {
+  const globalOn = useSettingsStore.getState().settings?.analysis?.showIndicatorPriceLabels !== false;
+  if (!globalOn) return false;
+  // Per-indicator: default true unless explicitly set to false
+  return ind.params?.showPriceLabel !== false;
+};
 
 const getErrorMessage = (err) => {
   if (err instanceof Error) return err.message;
@@ -45,6 +55,7 @@ const useOverlayIndicators = ({
   selectedAsset,
   selectedTimeframe,
   seriesKey: seriesKeyProp,
+  refreshKey,
   onError
 }) => {
   const overlayIndicators = useMemo(
@@ -53,6 +64,15 @@ const useOverlayIndicators = ({
   );
 
   const overlaySeriesRef = useRef({});
+
+  // REF button: when refreshKey changes, bust all cached hashes so every
+  // series unconditionally calls setData() on the next render pass.
+  useEffect(() => {
+    if (!refreshKey) return; // skip initial mount (refreshKey starts at 0)
+    Object.values(overlaySeriesRef.current).forEach((entry) => {
+      if (entry && typeof entry === 'object') entry.lastDataHash = '';
+    });
+  }, [refreshKey]);
 
   useEffect(() => {
     if (!mainChart) return;
@@ -67,6 +87,11 @@ const useOverlayIndicators = ({
         if (entry?.downSeries) mainChart.removeSeries(entry.downSeries);
         if (entry?.upper) mainChart.removeSeries(entry.upper);
         if (entry?.lower) mainChart.removeSeries(entry.lower);
+        // Phase 4: Zone band cleanup
+        if (entry?.resZoneUpper) mainChart.removeSeries(entry.resZoneUpper);
+        if (entry?.resZoneLower) mainChart.removeSeries(entry.resZoneLower);
+        if (entry?.supZoneUpper) mainChart.removeSeries(entry.supZoneUpper);
+        if (entry?.supZoneLower) mainChart.removeSeries(entry.supZoneLower);
       } catch (err) {
         if (onError) onError(`Overlay cleanup failed: ${getErrorMessage(err)}`);
       }
@@ -74,12 +99,11 @@ const useOverlayIndicators = ({
     });
 
     overlayIndicators.forEach((ind) => {
-      // Use explicit seriesKey if provided (e.g., for Strategy Lab: "lab|{fileId}")
-      // Otherwise construct from asset + timeframe (live chart pattern)
       const key = seriesKeyProp || (selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null);
       const seriesForKey = key && indicatorSeries ? indicatorSeries[key] : null;
       if (!seriesForKey) return;
 
+      // --- Create chart series on first encounter ---
       if (!overlaySeriesRef.current[ind.id]) {
         let series;
         let upSeries;
@@ -90,77 +114,151 @@ const useOverlayIndicators = ({
         const type = ind.type || ind.value;
 
         if (type === 'bollinger_bands') {
+          const vis = getPriceLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#a855f7',
             lineWidth: 2,
-            title: 'BB Middle'
+            title: 'BB Middle',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
           upper = mainChart.addSeries(LineSeries, {
             color: '#a855f7',
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            title: 'BB Upper'
+            title: 'BB Upper',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
           lower = mainChart.addSeries(LineSeries, {
             color: '#a855f7',
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            title: 'BB Lower'
+            title: 'BB Lower',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
         } else if (type === 'supertrend') {
+          const vis = getPriceLabelVisible(ind);
           upSeries = mainChart.addSeries(LineSeries, {
             color: '#22c55e',
             lineWidth: 2,
-            title: 'SuperTrend Up'
+            title: 'SuperTrend Up',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
           downSeries = mainChart.addSeries(LineSeries, {
             color: '#ef4444',
             lineWidth: 2,
-            title: 'SuperTrend Down'
+            title: 'SuperTrend Down',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
         } else if (type === 'ema') {
+          const vis = getPriceLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#fbbf24',
             lineWidth: 2,
-            title: `EMA ${ind.params?.period || 16}`
+            title: `EMA ${ind.params?.period || 16}`,
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
         } else if (type === 'support_resistance') {
+          // Main S/R lines
+          const vis = getPriceLabelVisible(ind);
           upper = mainChart.addSeries(LineSeries, {
-            color: '#ef4444', // Red for resistance
+            color: '#ef4444',
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
-            title: 'Resistance'
+            title: 'Resistance',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
           lower = mainChart.addSeries(LineSeries, {
-            color: '#22c55e', // Green for support
+            color: '#22c55e',
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
-            title: 'Support'
+            title: 'Support',
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
+          // Phase 4: Zone bound lines — always hidden from price scale (decorative only)
+          const resZoneUpper = mainChart.addSeries(LineSeries, {
+            color: 'rgba(239,68,68,0.25)',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dotted,
+            title: '',
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          const resZoneLower = mainChart.addSeries(LineSeries, {
+            color: 'rgba(239,68,68,0.25)',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dotted,
+            title: '',
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          const supZoneUpper = mainChart.addSeries(LineSeries, {
+            color: 'rgba(34,197,94,0.25)',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dotted,
+            title: '',
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          const supZoneLower = mainChart.addSeries(LineSeries, {
+            color: 'rgba(34,197,94,0.25)',
+            lineWidth: 1,
+            lineStyle: LineStyle.Dotted,
+            title: '',
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          // Store zone series in the ref entry (assigned below)
+          overlaySeriesRef.current[ind.id] = {
+            series: undefined, upSeries: undefined, downSeries: undefined,
+            upper, lower,
+            resZoneUpper, resZoneLower, supZoneUpper, supZoneLower,
+            lastDataHash: '',
+            lastParamsHash: JSON.stringify(ind.params)
+          };
+          // Skip the generic assignment below
+          return;
         } else if (type === 'ema_cross') {
           // 21 (Blue)
+          const vis = getPriceLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#3b82f6',
             lineWidth: 2,
-            title: `EMA ${ind.params?.fast || 21}`
+            title: `EMA ${ind.params?.fast || 21}`,
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
           // 50 (White)
           upper = mainChart.addSeries(LineSeries, {
             color: '#ffffff',
             lineWidth: 2,
-            title: `EMA ${ind.params?.med || 50}`
+            title: `EMA ${ind.params?.med || 50}`,
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
           // 100 (Red)
           lower = mainChart.addSeries(LineSeries, {
             color: '#ef4444',
             lineWidth: 2,
-            title: `EMA ${ind.params?.slow || 100}`
+            title: `EMA ${ind.params?.slow || 100}`,
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
         } else {
+          const vis = getPriceLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#3b82f6',
             lineWidth: 2,
-            title: ind.label
+            title: ind.label,
+            lastValueVisible: vis,
+            priceLineVisible: vis,
           });
         }
 
@@ -178,30 +276,51 @@ const useOverlayIndicators = ({
       const seriesObj = overlaySeriesRef.current[ind.id];
       const data = seriesForKey[ind.key] || [];
 
+      // --- Suspended: clear all series data and hold until resumed ---
+      if (ind.suspended) {
+        try {
+          if (seriesObj.series) seriesObj.series.setData([]);
+          if (seriesObj.upSeries) seriesObj.upSeries.setData([]);
+          if (seriesObj.downSeries) seriesObj.downSeries.setData([]);
+          if (seriesObj.upper) seriesObj.upper.setData([]);
+          if (seriesObj.lower) seriesObj.lower.setData([]);
+          if (seriesObj.resZoneUpper) seriesObj.resZoneUpper.setData([]);
+          if (seriesObj.resZoneLower) seriesObj.resZoneLower.setData([]);
+          if (seriesObj.supZoneUpper) seriesObj.supZoneUpper.setData([]);
+          if (seriesObj.supZoneLower) seriesObj.supZoneLower.setData([]);
+          seriesObj.lastDataHash = ''; // ensure restore on resume
+        } catch (err) {
+          if (onError) onError(`Overlay suspend clear failed: ${getErrorMessage(err)}`);
+        }
+        return; // skip data update
+      }
+
       const currentParamsHash = JSON.stringify(ind.params);
       const type = ind.type || ind.value;
 
+      // --- Params changed: update series options including price-label visibility ---
       if (seriesObj.lastParamsHash !== currentParamsHash) {
+        const vis = getPriceLabelVisible(ind);
+        const priceLabelOpts = { lastValueVisible: vis, priceLineVisible: vis };
         try {
           if (type === 'ema') {
-            seriesObj.series.applyOptions({ title: `EMA ${ind.params?.period || 16}` });
+            seriesObj.series.applyOptions({ title: `EMA ${ind.params?.period || 16}`, ...priceLabelOpts });
           } else if (type === 'bollinger_bands') {
-            seriesObj.series.applyOptions({ title: 'BB Middle' });
-            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper' });
-            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower' });
+            seriesObj.series.applyOptions({ title: 'BB Middle', ...priceLabelOpts });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper', ...priceLabelOpts });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower', ...priceLabelOpts });
           } else if (type === 'supertrend') {
-            if (seriesObj.series && !seriesObj.upSeries && !seriesObj.downSeries) {
-              seriesObj.series.applyOptions({ title: 'SuperTrend' });
-            }
-            if (seriesObj.upSeries) seriesObj.upSeries.applyOptions({ title: 'SuperTrend Up' });
-            if (seriesObj.downSeries) seriesObj.downSeries.applyOptions({ title: 'SuperTrend Down' });
+            if (seriesObj.upSeries) seriesObj.upSeries.applyOptions({ title: 'SuperTrend Up', ...priceLabelOpts });
+            if (seriesObj.downSeries) seriesObj.downSeries.applyOptions({ title: 'SuperTrend Down', ...priceLabelOpts });
           } else if (type === 'support_resistance') {
-            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'Resistance' });
-            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'Support' });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'Resistance', ...priceLabelOpts });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'Support', ...priceLabelOpts });
           } else if (type === 'ema_cross') {
-            if (seriesObj.series) seriesObj.series.applyOptions({ title: `EMA ${ind.params?.fast || 21}` });
-            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: `EMA ${ind.params?.med || 50}` });
-            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: `EMA ${ind.params?.slow || 100}` });
+            if (seriesObj.series) seriesObj.series.applyOptions({ title: `EMA ${ind.params?.fast || 21}`, ...priceLabelOpts });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: `EMA ${ind.params?.med || 50}`, ...priceLabelOpts });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: `EMA ${ind.params?.slow || 100}`, ...priceLabelOpts });
+          } else if (seriesObj.series) {
+            seriesObj.series.applyOptions({ ...priceLabelOpts });
           }
         } catch (err) {
           if (onError) onError(`Overlay options update failed: ${getErrorMessage(err)}`);
@@ -298,11 +417,80 @@ const useOverlayIndicators = ({
         if (type === 'support_resistance') {
           const resistanceData = seriesForKey['resistance_level'] || [];
           const supportData = seriesForKey['support_level'] || [];
-          const dataHash = JSON.stringify([resistanceData.slice(-1), supportData.slice(-1)]);
+          const resZoneUpperData = seriesForKey['resistance_zone_upper'] || [];
+          const resZoneLowerData = seriesForKey['resistance_zone_lower'] || [];
+          const supZoneUpperData = seriesForKey['support_zone_upper'] || [];
+          const supZoneLowerData = seriesForKey['support_zone_lower'] || [];
+          const resFreshnessData = seriesForKey['resistance_freshness'] || [];
+          const supFreshnessData = seriesForKey['support_freshness'] || [];
+          const srFlipData = seriesForKey['sr_flip'] || [];
+
+          const showZones = ind.params?.showZones !== false;
+          const showFreshness = ind.params?.showFreshness !== false;
+          const showFlip = ind.params?.showFlip !== false;
+
+          // Include zone + freshness tail in hash so any backend change triggers re-render
+          const dataHash = JSON.stringify([
+            resistanceData.slice(-1), supportData.slice(-1),
+            resZoneUpperData.slice(-1), resZoneLowerData.slice(-1),
+            supZoneUpperData.slice(-1), supZoneLowerData.slice(-1),
+            resFreshnessData.slice(-1), supFreshnessData.slice(-1),
+            srFlipData.slice(-1),
+            showZones, showFreshness, showFlip
+          ]);
 
           if (seriesObj.lastDataHash !== dataHash) {
-            if (seriesObj.upper) seriesObj.upper.setData(sortByTimeAsc(resistanceData));
-            if (seriesObj.lower) seriesObj.lower.setData(sortByTimeAsc(supportData));
+            // --- S/R Flip colour: orange if last bar broke a level ---
+            const srFlipActive = showFlip &&
+              Boolean(srFlipData?.slice(-1)?.[0]?.value);
+
+            // --- Main S/R lines ---
+            // When showFreshness is OFF, render as single solid coloured line.
+            // When showFreshness is ON, split into per-segment styled lines via
+            // lightweight-charts' per-point color/lineStyle is not supported, so we
+            // apply the CURRENT (last-bar) freshness to the whole line — this is by design:
+            // the line style reflects the freshness of the ACTIVE level right now.
+            const freshnessToStyle = (f) => (
+              f === 'stale' ? LineStyle.Dashed :
+                f === 'tested' ? LineStyle.LargeDashed :
+                  LineStyle.Solid
+            );
+            const freshnessToWidth = (f) => (f === 'stale' ? 1 : 2);
+
+            const resFreshness = resFreshnessData?.slice(-1)?.[0]?.value ?? 'fresh';
+            const supFreshness = supFreshnessData?.slice(-1)?.[0]?.value ?? 'fresh';
+
+            if (seriesObj.upper) {
+              seriesObj.upper.applyOptions({
+                color: srFlipActive ? '#f97316' : '#ef4444',
+                lineStyle: showFreshness ? freshnessToStyle(resFreshness) : LineStyle.Solid,
+                lineWidth: showFreshness ? freshnessToWidth(resFreshness) : 2,
+              });
+              seriesObj.upper.setData(sortByTimeAsc(resistanceData));
+            }
+            if (seriesObj.lower) {
+              seriesObj.lower.applyOptions({
+                color: '#22c55e',
+                lineStyle: showFreshness ? freshnessToStyle(supFreshness) : LineStyle.Solid,
+                lineWidth: showFreshness ? freshnessToWidth(supFreshness) : 2,
+              });
+              seriesObj.lower.setData(sortByTimeAsc(supportData));
+            }
+
+            // --- Zone bands (Phase 4): only set data when showZones is enabled ---
+            if (seriesObj.resZoneUpper) {
+              seriesObj.resZoneUpper.setData(showZones && resZoneUpperData.length > 0 ? sortByTimeAsc(resZoneUpperData) : []);
+            }
+            if (seriesObj.resZoneLower) {
+              seriesObj.resZoneLower.setData(showZones && resZoneLowerData.length > 0 ? sortByTimeAsc(resZoneLowerData) : []);
+            }
+            if (seriesObj.supZoneUpper) {
+              seriesObj.supZoneUpper.setData(showZones && supZoneUpperData.length > 0 ? sortByTimeAsc(supZoneUpperData) : []);
+            }
+            if (seriesObj.supZoneLower) {
+              seriesObj.supZoneLower.setData(showZones && supZoneLowerData.length > 0 ? sortByTimeAsc(supZoneLowerData) : []);
+            }
+
             seriesObj.lastDataHash = dataHash;
           }
           return;
@@ -339,6 +527,7 @@ const useOverlayIndicators = ({
     selectedAsset,
     selectedTimeframe,
     seriesKeyProp,
+    refreshKey,
     onError
   ]);
 

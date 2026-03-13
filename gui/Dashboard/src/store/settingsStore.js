@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 import { getApiBaseUrl } from '../api/apiBase';
 
-const SETTINGS_VERSION = 5;
+const SETTINGS_VERSION = 6;
 
 const normalizeTheme = (value) => {
   if (value === 'black-white') return 'black-white';
@@ -105,6 +105,7 @@ const defaultSettings = {
     linkTimeframeSync: false,
     retryAttempts: 2,
     retryDelay: 500,
+    autoRefreshInterval: 5,
   },
   analysis: {
     defaultTimeframe: '1m',
@@ -112,6 +113,9 @@ const defaultSettings = {
     autoLoadIndicators: false,
     indicatorPresetId: 'custom',
     dataSourceMode: 'history_and_streaming',
+    showIndicatorPriceLabels: true,
+    showChartTooltip: true,
+    showChartWatermark: true,
   },
   ai: {
     responseVerbosity: 'balanced',
@@ -338,6 +342,11 @@ const mergeSettings = (current, incoming) => {
       min: 0.5,
       max: 5,
       fallback: defaultSettings.automation.historyWaitTime,
+    }),
+    autoRefreshInterval: clampNumber(merged.automation?.autoRefreshInterval, {
+      min: 1,
+      max: 60,
+      fallback: defaultSettings.automation.autoRefreshInterval || 5,
     }),
   };
 

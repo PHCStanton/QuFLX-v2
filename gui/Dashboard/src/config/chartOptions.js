@@ -13,6 +13,9 @@ export const csvOptions = [
   { label: 'AUDNZD_2023.csv', value: 'file1' },
 ];
 
+// Shared price-label toggle — appended to every indicator's paramConfig
+const PRICE_LABEL_PARAM = { name: 'showPriceLabel', label: 'Show Price Scale Label', type: 'boolean', default: true };
+
 export const indicatorOptions = [
   {
     label: 'Stochastic Oscillator',
@@ -28,6 +31,7 @@ export const indicatorOptions = [
       { name: 'slowing', label: 'Slowing', type: 'number', min: 1, max: 50, default: 3 },
       { name: 'overbought', label: 'Overbought', type: 'number', min: 50, max: 100, default: 80 },
       { name: 'oversold', label: 'Oversold', type: 'number', min: 0, max: 50, default: 20 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -42,6 +46,7 @@ export const indicatorOptions = [
       { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
       { name: 'overbought', label: 'Overbought', type: 'number', min: -50, max: 0, default: -20 },
       { name: 'oversold', label: 'Oversold', type: 'number', min: -100, max: -50, default: -80 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -54,6 +59,7 @@ export const indicatorOptions = [
     params: { period: 10, zeroLine: 0 },
     paramConfig: [
       { name: 'period', label: 'Period', type: 'number', min: 1, max: 100, default: 10 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -68,6 +74,7 @@ export const indicatorOptions = [
       { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
       { name: 'overbought', label: 'Overbought', type: 'number', min: 50, max: 100, default: 75 },
       { name: 'oversold', label: 'Oversold', type: 'number', min: 0, max: 50, default: 25 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -82,6 +89,7 @@ export const indicatorOptions = [
       { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
       { name: 'overbought', label: 'Overbought', type: 'number', min: 0, max: 300, default: 100 },
       { name: 'oversold', label: 'Oversold', type: 'number', min: -300, max: 0, default: -100 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -96,6 +104,7 @@ export const indicatorOptions = [
       { name: 'fast', label: 'Fast Period', type: 'number', min: 1, max: 100, default: 12 },
       { name: 'slow', label: 'Slow Period', type: 'number', min: 1, max: 200, default: 26 },
       { name: 'signal', label: 'Signal Period', type: 'number', min: 1, max: 50, default: 9 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -110,6 +119,7 @@ export const indicatorOptions = [
       { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 10 },
       { name: 'overbought', label: 'Overbought', type: 'number', min: 0.5, max: 1.0, step: 0.1, default: 0.7 },
       { name: 'oversold', label: 'Oversold', type: 'number', min: 0.0, max: 0.5, step: 0.1, default: 0.3 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -123,6 +133,7 @@ export const indicatorOptions = [
     paramConfig: [
       { name: 'period', label: 'Period', type: 'number', min: 2, max: 50, default: 14 },
       { name: 'overbought', label: 'Strong Trend Level', type: 'number', min: 10, max: 90, default: 30 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -135,6 +146,7 @@ export const indicatorOptions = [
     params: { period: 14 },
     paramConfig: [
       { name: 'period', label: 'Period', type: 'number', min: 1, max: 200, default: 14 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -151,6 +163,7 @@ export const indicatorOptions = [
       { name: 'period', label: 'Cycle Period', type: 'number', min: 1, max: 50, default: 3 },
       { name: 'overbought', label: 'Overbought', type: 'number', min: 50, max: 100, default: 75 },
       { name: 'oversold', label: 'Oversold', type: 'number', min: 0, max: 50, default: 25 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -164,6 +177,7 @@ export const indicatorOptions = [
     paramConfig: [
       { name: 'period', label: 'Period', type: 'number', min: 1, max: 50, default: 7 },
       { name: 'multiplier', label: 'Multiplier', type: 'number', min: 0.1, max: 10, step: 0.1, default: 3.0 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -176,6 +190,7 @@ export const indicatorOptions = [
     params: { period: 16 },
     paramConfig: [
       { name: 'period', label: 'Period', type: 'number', min: 1, max: 500, default: 16 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -189,6 +204,7 @@ export const indicatorOptions = [
     paramConfig: [
       { name: 'period', label: 'Period', type: 'number', min: 1, max: 100, default: 20 },
       { name: 'stdDev', label: 'Std Dev', type: 'number', min: 0.1, max: 5.0, step: 0.1, default: 2.0 },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -198,9 +214,13 @@ export const indicatorOptions = [
     kind: 'overlay',
     displayValue: '5',
     source: 'backend',
-    params: { period: 5 },
+    params: { period: 5, showZones: true, showFreshness: true, showFlip: true },
     paramConfig: [
       { name: 'period', label: 'Pivot Period (L/R)', type: 'number', min: 1, max: 50, default: 5 },
+      { name: 'showZones', label: 'Show Zone Bands', type: 'boolean', default: true },
+      { name: 'showFreshness', label: 'Freshness Line Styling', type: 'boolean', default: true },
+      { name: 'showFlip', label: 'Highlight S/R Flip Levels', type: 'boolean', default: true },
+      PRICE_LABEL_PARAM,
     ],
   },
   {
@@ -215,6 +235,7 @@ export const indicatorOptions = [
       { name: 'fast', label: 'Fast EMA (Blue)', type: 'number', min: 1, max: 500, default: 21 },
       { name: 'med', label: 'Med EMA (White)', type: 'number', min: 1, max: 500, default: 50 },
       { name: 'slow', label: 'Slow EMA (Red)', type: 'number', min: 1, max: 500, default: 100 },
+      PRICE_LABEL_PARAM,
     ],
   },
 ];

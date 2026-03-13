@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Star } from 'lucide-react';
 import { getDaysInMonth, getWeekDays, formatDate, isSameDay, getDayColor, TradingDay } from '../lib/calendar-utils';
 
 interface CalendarViewProps {
@@ -146,6 +146,20 @@ export default function CalendarView({ tradingDays, selectedDate, onSelectDate, 
                     <div className="text-xs text-gray-500">
                       W:{tradingDay.win_count} L:{tradingDay.loss_count}
                     </div>
+                    {tradingDay.session_quality && (
+                      <div className="flex gap-0.5 mt-1">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`w-2 h-2 ${
+                              i < (tradingDay.session_quality || 0)
+                                ? 'text-yellow-400 fill-yellow-400'
+                                : 'text-gray-600'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

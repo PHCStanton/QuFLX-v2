@@ -599,6 +599,16 @@ const SettingsPanel = () => {
               onChange={(val) => updateSection('automation', { retryDelay: val })}
             />
           </SettingRow>
+          <SettingRow label="Auto Refresh Interval" description="Minutes between automatic asset list refreshes">
+            <SliderInput
+              value={settings.automation.autoRefreshInterval || 5}
+              min={1}
+              max={60}
+              step={1}
+              unit="min"
+              onChange={(val) => updateSection('automation', { autoRefreshInterval: val })}
+            />
+          </SettingRow>
         </CollapsiblePanel>
 
         {/* Analysis & Charting */}
@@ -644,6 +654,24 @@ const SettingsPanel = () => {
             <NeomorphicSwitch
               checked={settings.analysis.autoLoadIndicators}
               onChange={() => updateSection('analysis', { autoLoadIndicators: !settings.analysis.autoLoadIndicators })}
+            />
+          </SettingRow>
+          <SettingRow label="Show Indicator Price Labels" description="Show or hide price tags on the ruler for all indicators">
+            <NeomorphicSwitch
+              checked={settings.analysis.showIndicatorPriceLabels !== false}
+              onChange={() => updateSection('analysis', { showIndicatorPriceLabels: settings.analysis.showIndicatorPriceLabels === false })}
+            />
+          </SettingRow>
+          <SettingRow label="Show Chart Tooltip" description="Show or hide the OHLC tooltip when hovering over the chart">
+            <NeomorphicSwitch
+              checked={settings.analysis.showChartTooltip !== false}
+              onChange={() => updateSection('analysis', { showChartTooltip: settings.analysis.showChartTooltip === false })}
+            />
+          </SettingRow>
+          <SettingRow label="Chart Watermark" description="Display the active asset name as a faint watermark on the chart">
+            <NeomorphicSwitch
+              checked={settings.analysis.showChartWatermark !== false}
+              onChange={() => updateSection('analysis', { showChartWatermark: settings.analysis.showChartWatermark === false })}
             />
           </SettingRow>
         </CollapsiblePanel>

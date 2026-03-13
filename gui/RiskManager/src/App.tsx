@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { HelpCircle } from 'lucide-react';
-import Dashboard from './pages/Dashboard';
-import RiskManager from './pages/RiskManager';
-import TradingCalendar from './pages/TradingCalendar';
-import DataVisualizationDemo from './pages/DataVisualizationDemo';
-import HowItWorksModal from './components/HowItWorksModal';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const RiskManager = lazy(() => import('./pages/RiskManager'));
+const TradingCalendar = lazy(() => import('./pages/TradingCalendar'));
+const DataVisualizationDemo = lazy(() => import('./pages/DataVisualizationDemo'));
+const HowItWorksModal = lazy(() => import('./components/HowItWorksModal'));
 
 function App() {
   const [activePage, setActivePage] = useState<'dashboard' | 'risk' | 'calendar' | 'analysis'>('dashboard');
@@ -69,17 +70,18 @@ function App() {
         </div>
       </nav>
 
-      {activePage === 'dashboard' && (
-        <Dashboard
-          onNavigate={setActivePage}
-          onOpenHelp={() => setShowHowItWorks(true)}
-        />
-      )}
-      {activePage === 'risk' && <RiskManager />}
-      {activePage === 'calendar' && <TradingCalendar />}
-      {activePage === 'analysis' && <DataVisualizationDemo />}
-
-      {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
+      <Suspense fallback={<div className="px-6 py-8 text-gray-400">Loading...</div>}>
+        {activePage === 'dashboard' && (
+          <Dashboard
+            onNavigate={setActivePage}
+            onOpenHelp={() => setShowHowItWorks(true)}
+          />
+        )}
+        {activePage === 'risk' && <RiskManager />}
+        {activePage === 'calendar' && <TradingCalendar />}
+        {activePage === 'analysis' && <DataVisualizationDemo />}
+        {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
+      </Suspense>
     </div>
   );
 }

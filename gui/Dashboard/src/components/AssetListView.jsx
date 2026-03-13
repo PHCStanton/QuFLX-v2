@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import Card from './Card';
+import { CollapsibleCard } from './Card';
 import TickerTape from './TickerTape';
 import NeomorphicSwitch from './NeomorphicSwitch';
 import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap, Star } from 'lucide-react';
@@ -60,12 +60,9 @@ const AssetListView = ({
   const count = Array.isArray(payoutAssets) ? payoutAssets.length : 0;
 
   return (
-    <Card
-      className="p-3 rounded-lg flex flex-col min-h-0 quflx-section-light transition-all duration-300 ease-in-out flex-1"
-    >
-      <div
-        className="flex justify-between items-center mb-2 shrink-0"
-      >
+    <CollapsibleCard
+      id="asset-list-view"
+      headerLeft={
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
             {panelMode === 'list' ? `${minPayout}% Payout Assets` : 'OTC Ticker'}
@@ -83,8 +80,9 @@ const AssetListView = ({
             </div>
           </h3>
         </div>
-
-        <div className="flex items-center gap-2">
+      }
+      headerRight={
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <NeomorphicSwitch
             checked={panelMode === 'ticker'}
             onChange={onTogglePanelMode}
@@ -92,7 +90,10 @@ const AssetListView = ({
             rightLabel="Ticker View"
           />
         </div>
-      </div>
+      }
+      className="p-3 rounded-lg flex flex-col min-h-0 quflx-section-light transition-all duration-300 ease-in-out flex-1"
+      bodyClassName="flex flex-col flex-1 min-h-0 min-w-0"
+    >
 
       {panelMode === 'list' ? (
             <>
@@ -278,7 +279,7 @@ const AssetListView = ({
               <TickerTape assets={tickerAssets} quotesByAssetKey={quotesByAssetKey} />
             </div>
           )}
-    </Card>
+    </CollapsibleCard>
   );
 };
 
