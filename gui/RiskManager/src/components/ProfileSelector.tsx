@@ -89,26 +89,28 @@ export default function ProfileSelector({ onProfileChanged }: ProfileSelectorPro
               <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-3 py-2">Switch Account</div>
               <div className="space-y-1">
                 {profiles.map(p => (
-                  <button
+                  <div
                     key={p.id}
-                    onClick={() => handleSwitch(p.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors ${
-                      p.id === activeProfile?.id 
-                        ? 'bg-blue-500/10 text-blue-400' 
+                    className={`group w-full flex items-center gap-2 rounded-lg transition-colors ${
+                      p.id === activeProfile?.id
+                        ? 'bg-blue-500/10 text-blue-400'
                         : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                     }`}
                   >
-                    <span className="font-semibold text-sm">{p.name}</span>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleExport(p); }}
-                        className="p-1 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Export Data"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </button>
+                    <button
+                      onClick={() => handleSwitch(p.id)}
+                      className="flex-1 text-left px-3 py-2 font-semibold text-sm"
+                    >
+                      {p.name}
+                    </button>
+                    <button
+                      onClick={() => handleExport(p)}
+                      className="p-1 mr-2 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Export Data"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>

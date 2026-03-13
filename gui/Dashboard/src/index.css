@@ -31,7 +31,7 @@
    it overrides the default texture without fighting !important specificity */
 :root:not(.theme-dark):not(.theme-orange-dark):not(.theme-ironman):not(.theme-black-white) .bg-dashboard-bg {
   background-color: transparent !important;
-  background-image: var(--quflx-dashboard-bg, url('./assets/textures/METAL_GRID_SILVER_BG.jpg')) !important;
+  background-image: var(--quflx-dashboard-bg, url('./assets/textures/DARK_PATERN_BG1.jpg')) !important;
   background-repeat: repeat !important;
   background-size: auto !important;
 }
@@ -89,7 +89,7 @@
 
 .theme-orange-dark .quflx-card {
   background-image:
-    linear-gradient(165deg, #ff9500 0%, #8b4513 25%, #020408 70%);
+    linear-gradient(165deg, #f8b353 0%, #fb8b0b 25%, #020408 70%);
   box-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.9),
     0 0 0 1px rgba(255, 140, 0, 0.2);
@@ -128,7 +128,7 @@
 
 .theme-orange-dark .quflx-topbar {
   background-image:
-    linear-gradient(90deg, rgba(21, 23, 27, 0.92), rgba(var(--accent-glow), 0.72)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.92), rgba(var(--accent-glow), 0.72)),
     radial-gradient(circle at top left, rgba(248, 245, 245, 0.4), transparent 55%);
 }
 

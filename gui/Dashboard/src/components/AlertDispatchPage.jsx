@@ -83,6 +83,10 @@ const AlertDispatchPage = () => {
 
     const pauseBuffer = useRef([]);
     const idCounter = useRef(0);
+    // pausedRef keeps the Socket.IO handler in sync with the paused state.
+    // Without this ref the handler captures the initial value (false) via stale closure.
+    const pausedRef = useRef(false);
+    useEffect(() => { pausedRef.current = paused; }, [paused]);
 
     /* ── Socket.IO Connection ─────────── */
     useEffect(() => {
@@ -111,7 +115,7 @@ const AlertDispatchPage = () => {
                     setHeartbeat({ ...data, receivedAt: Date.now() });
                 }
 
-                if (paused) {
+                if (pausedRef.current) {
                     pauseBuffer.current.push(entry);
                     return;
                 }
@@ -161,7 +165,8 @@ const AlertDispatchPage = () => {
         })();
 
         return () => { cancelled = true; };
-    }, [tab, selectedFile]);
+    }, [tab]);  // Note: selectedFile intentionally excluded — it is set inside the effect
+               //  and including it would cause a double-fetch loop on tab switch.
 
     const loadLogTail = useCallback(async () => {
         if (!selectedFile) return;
@@ -201,6 +206,14 @@ const AlertDispatchPage = () => {
     );
 
     /* ── Heartbeat derived ─────────────── */
+    // tick forces recalculation every 5s so STALE/SYNC indicator updates even
+    // when no new Socket.IO events arrive (prevents stale "SYNC" display).
+    const [_tick, setTick] = useState(0);
+    useEffect(() => {
+        const id = setInterval(() => setTick(t => t + 1), 5000);
+        return () => clearInterval(id);
+    }, []);
+
     const heartbeatAge = heartbeat ? Date.now() - heartbeat.receivedAt : null;
     const heartbeatStale = heartbeat && heartbeatAge > (heartbeat.scan_interval || 60) * 3000;
 

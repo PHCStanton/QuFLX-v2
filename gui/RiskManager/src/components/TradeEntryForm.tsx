@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Upload, Plus, X } from 'lucide-react';
-import { Trade, TradingDay } from '../lib/calendar-utils';
+import { Trade, TradingDay, formatDate } from '../lib/calendar-utils';
 import { storage } from '../lib/storage';
 import { parsePocketOptionExcel, parseUploadedCSV } from '../lib/excel-parser';
 
@@ -103,7 +103,7 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
 
     setLoading(true);
     try {
-      const dateStr = selectedDate.toISOString().split('T')[0];
+      const dateStr = formatDate(selectedDate);
 
       const totalPL = trades.reduce((sum, t) => sum + (t.profit_loss || 0), 0);
       const winCount = trades.filter(t => t.result === 'WIN').length;
@@ -113,7 +113,7 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
       const tieCount = trades.filter(t => t.result === 'TIE').length;
 
       // Find or create trading day
-      let tradingDay = storage.getTradingDayByDate(dateStr);
+      const tradingDay = storage.getTradingDayByDate(dateStr);
       
       const dayData: TradingDay = {
         id: tradingDay?.id || Math.random().toString(36).substr(2, 9),

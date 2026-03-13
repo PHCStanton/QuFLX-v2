@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, BookOpen, Star } from 'lucide-react';
-import { EMOTION_OPTIONS, MARKET_CONDITIONS, JournalEntry } from '../lib/calendar-utils';
+import { EMOTION_OPTIONS, MARKET_CONDITIONS, JournalEntry, formatDate } from '../lib/calendar-utils';
 import { storage } from '../lib/storage';
 
 interface JournalEntryFormProps {
@@ -46,7 +46,7 @@ export default function JournalEntryForm({ selectedDate, tradingDayId, onEntrySa
       let dayId = tradingDayId;
 
       if (!dayId) {
-        const dateStr = selectedDate.toISOString().split('T')[0];
+        const dateStr = formatDate(selectedDate);
         let tradingDay = storage.getTradingDayByDate(dateStr);
         
         if (!tradingDay) {

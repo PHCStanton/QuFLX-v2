@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, TrendingUp, TrendingDown, Calendar as CalendarIcon } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import RiskCalculator from '../components/RiskCalculator';
 import SessionTable from '../components/SessionTable';
 import RiskComparison from '../components/RiskComparison';
@@ -7,7 +7,6 @@ import AnimatedQuote from '../components/AnimatedQuote';
 import RiskVisualizationPrototype from '../components/RiskVisualizationPrototype';
 import UnifiedRiskControls from '../components/UnifiedRiskControls';
 import TradeSessionsManager from '../components/TradeSessionsManager';
-import TPDrawdownControls from '../components/TPDrawdownControls';
 import SessionCompletionModal from '../components/SessionCompletionModal';
 import AllSessionsCompleteModal from '../components/AllSessionsCompleteModal';
 import LimitReachedModal from '../components/LimitReachedModal';
@@ -15,7 +14,7 @@ import { RiskCalculator as Calculator, SessionData, RiskScenario } from '../lib/
 import ProfileSelector from '../components/ProfileSelector';
 import { exportToCSV } from '../lib/export-utils';
 import { storage } from '../lib/storage';
-import { TradingDay, Trade as CalendarTrade, Profile } from '../lib/calendar-utils';
+import { TradingDay, Trade as CalendarTrade, Profile, formatDate } from '../lib/calendar-utils';
 
 interface Trade {
   id: number;
@@ -78,6 +77,9 @@ export default function RiskManager() {
   const canEditSettings = trades.length === 0 && currentSession.length === 0;
   // User requested to edit balance and payout during trades
   const canEditBalanceAndPayout = true; 
+  const totalDrawdownAmount = initialBalance * (drawdownPercent / 100);
+  const maxDrawdownLimit = initialBalance - totalDrawdownAmount;
+  const takeProfitTarget = initialBalance + (totalDrawdownAmount * riskRewardRatio);
 
   useEffect(() => {
     loadProfileSettings();
@@ -156,10 +158,6 @@ export default function RiskManager() {
     setTrades([...trades, newTrade]);
 
     // Check limits
-    const totalDrawdownAmount = initialBalance * (drawdownPercent / 100);
-    const maxDrawdownLimit = initialBalance - totalDrawdownAmount;
-    const takeProfitTarget = initialBalance + (totalDrawdownAmount * riskRewardRatio);
-
     if (newBalance <= maxDrawdownLimit) {
       setLimitType('drawdown');
       setShowLimitModal(true);
@@ -193,9 +191,6 @@ export default function RiskManager() {
     setMaxSessions(prev => prev + 1);
   };
 
-  const handleAddAdditionalTrade = () => {
-    setTradesPerSession(prev => prev + 1);
-  };
 
   const handleExportData = () => {
     const calculator = new Calculator();
@@ -246,8 +241,8 @@ export default function RiskManager() {
       return;
     }
 
-    const dateStr = new Date().toISOString().split('T')[0];
-    let tradingDay = storage.getTradingDayByDate(dateStr);
+    const dateStr = formatDate(new Date());
+    const tradingDay = storage.getTradingDayByDate(dateStr);
 
     const winCount = trades.filter(t => t.result === 'win').length;
     const lossCount = trades.filter(t => t.result === 'loss').length;
@@ -419,8 +414,8 @@ export default function RiskManager() {
             </div>
           </>
         ) : (
-          <div className="grid lg:grid-cols-12 gap-8 items-start relative">
-            <div className="lg:col-span-4 sticky top-6">
+          <div className="flex flex-col gap-8">
+            <div className="w-full">
               <UnifiedRiskControls
                 balance={balance}
                 initialBalance={initialBalance}
@@ -437,17 +432,18 @@ export default function RiskManager() {
                 onPayoutPercentageChange={(v) => { setPayoutPercentage(v); saveSettingToProfile('payout_percentage', v); }}
                 onUseFixedAmountChange={(v) => { setUseFixedAmount(v); saveSettingToProfile('use_fixed_amount', v); }}
                 onFixedRiskAmountChange={(v) => { setFixedRiskAmount(v); saveSettingToProfile('fixed_risk_amount', v); }}
-                onReset={handleReset}
                 canEditSettings={canEditSettings || canEditBalanceAndPayout}
               />
             </div>
 
-            <div className="lg:col-span-8 flex flex-col gap-6">
+            <div className="w-full">
               <TradeSessionsManager
                 trades={currentSession}
                 balance={balance}
                 initialBalance={initialBalance}
                 riskPercent={riskPercentPerTrade}
+                drawdownPercent={drawdownPercent}
+                riskRewardRatio={riskRewardRatio}
                 tradesPerSession={tradesPerSession}
                 maxSessions={maxSessions}
                 onTradesPerSessionChange={setTradesPerSession}
@@ -456,43 +452,9 @@ export default function RiskManager() {
                 currentSessionNumber={completedSessions.length + 1}
                 completedSessions={completedSessions}
                 onAddSession={handleAddSession}
-                onAddTrade={handleAddAdditionalTrade}
-              />
-
-              <div className="flex flex-col gap-4">
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => handleAddTrade('win')}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl transition-colors font-bold text-lg shadow-lg shadow-emerald-500/10"
-                  >
-                    <TrendingUp className="w-6 h-6" />
-                    Add Win
-                  </button>
-                  <button
-                    onClick={() => handleAddTrade('loss')}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl transition-colors font-bold text-lg shadow-lg shadow-red-500/10"
-                  >
-                    <TrendingDown className="w-6 h-6" />
-                    Add Loss
-                  </button>
-                </div>
-                
-                <button
-                  onClick={handleSyncToCalendar}
-                  disabled={trades.length === 0}
-                  className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-800 disabled:text-gray-500 text-white rounded-2xl transition-all font-bold text-lg shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2"
-                >
-                  <CalendarIcon className="w-6 h-6" />
-                  Sync Session to Calendar
-                </button>
-              </div>
-
-              <TPDrawdownControls
-                balance={balance}
-                initialBalance={initialBalance}
-                riskPercentPerTrade={riskPercentPerTrade}
-                drawdownPercent={drawdownPercent}
-                riskRewardRatio={riskRewardRatio}
+                onAddTrade={handleAddTrade}
+                onSyncSession={handleSyncToCalendar}
+                onReset={handleReset}
               />
             </div>
           </div>
@@ -526,7 +488,7 @@ export default function RiskManager() {
         <LimitReachedModal
           isOpen={showLimitModal}
           type={limitType}
-          amount={limitType === 'profit' ? balance : balance}
+          amount={limitType === 'profit' ? takeProfitTarget : maxDrawdownLimit}
           onClose={() => setShowLimitModal(false)}
           onContinue={() => setShowLimitModal(false)}
         />

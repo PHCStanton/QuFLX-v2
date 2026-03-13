@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Upload, Calendar as CalendarIcon, DollarSign } from 'lucide-react';
 import CalendarView from '../components/CalendarView';
 import TradeEntryForm from '../components/TradeEntryForm';
@@ -22,7 +22,7 @@ export default function TradingCalendar() {
   const [showBalanceEdit, setShowBalanceEdit] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     try {
       setLoading(true);
       const days = storage.getTradingDays();
@@ -35,9 +35,9 @@ export default function TradingCalendar() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadSelectedDayData = () => {
+  const loadSelectedDayData = useCallback(() => {
     const dateStr = formatDate(selectedDate);
     const tradingDay = tradingDays.find(td => td.trade_date === dateStr);
 
@@ -51,17 +51,17 @@ export default function TradingCalendar() {
       setSelectedDayTrades([]);
       setSelectedDayJournals([]);
     }
-  };
+  }, [selectedDate, tradingDays]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     if (tradingDays.length > 0) {
       loadSelectedDayData();
     }
-  }, [selectedDate, tradingDays]);
+  }, [tradingDays.length, loadSelectedDayData]);
 
   const selectedTradingDay = tradingDays.find(td => td.trade_date === formatDate(selectedDate));
 

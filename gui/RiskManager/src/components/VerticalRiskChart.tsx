@@ -58,7 +58,6 @@ export default function VerticalRiskChart({
 
   const getBarStyle = () => {
     const baseColor = metrics.isProfit ? '#10b981' : '#ef4444';
-    const gradientColor = metrics.isProfit ? '#059669' : '#dc2626';
 
     switch (variant) {
       case 'outlined':

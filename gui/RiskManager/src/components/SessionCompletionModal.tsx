@@ -1,4 +1,4 @@
-import { CheckCircle, TrendingUp, ArrowRight } from 'lucide-react';
+import { CheckCircle, ArrowRight } from 'lucide-react';
 
 interface SessionCompletionModalProps {
   isOpen: boolean;
