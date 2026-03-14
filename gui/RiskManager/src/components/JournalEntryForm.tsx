@@ -55,14 +55,17 @@ export default function JournalEntryForm({ selectedDate, tradingDayId, onEntrySa
             trade_date: dateStr,
             is_trading_day: false,
             total_profit_loss: 0,
+            total_investment: 0,
             win_count: 0,
             loss_count: 0,
             total_trades: 0,
             notes: ''
           };
           storage.saveTradingDay(tradingDay);
+          dayId = tradingDay.id;
+        } else {
+          dayId = tradingDay.id;
         }
-        dayId = tradingDay.id;
       }
 
       const journalEntry: JournalEntry = {
