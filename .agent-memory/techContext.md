@@ -61,6 +61,14 @@ All prefixed with `/api/v1/`:
 | `/timeframe` | `timeframe.py` | Selenium timeframe sync |
 | `/dev-logs` | `dev_logs.py` | Dev log streaming |
 
+### Indicator Endpoint Architecture (Updated 14-03-2026)
+- `POST /api/v1/indicators` in `backend/services/gateway/routes/indicators.py` now executes **in-process**.
+- Previous subprocess invocation (`runner.py indicator_calculator`) has been removed from the route path.
+- CPU-bound indicator work runs under `asyncio.to_thread()`.
+- Per-asset DataFrame cache (`_df_cache`) reduces repeated CSV loads/recalculations when `csv_path` is unchanged.
+- `current_candle` requests intentionally bypass cache to keep live-candle updates accurate.
+- Response shape remains compatible: `{ ok, asset, timeframe, series, count }`.
+
 ## SSID Service (ssid_service)
 - Standalone FastAPI microservice in `backend/services/ssid_service/`.
 - **Endpoints**: `POST /connect`, `POST /trade`, `GET /balance`, `POST /switch-mode`, `GET /ssid-status`, `GET /assets`.
@@ -93,6 +101,9 @@ All prefixed with `/api/v1/`:
 - **Intraday Candles**: UNIX timestamps in seconds for `time` values.
 - **Overlays** (on main pane): SuperTrend, Bollinger Bands, EMA Cross-Over (21/50/100), Support/Resistance (pivot fractals).
 - **Oscillators** (separate synced panes): RSI, MACD histogram, Stochastic, CCI — time-scale synchronized with main chart via `lightweight-charts` API.
+- Indicator optimization plan status (`Indicator_Fixes_Optimizations_Plan_2026-03-05.md`):
+  - Implemented: BUG-1/2/3, INC-1/2/3/4, OPT-1/2, MIN-1/2
+  - Deferred: OPT-3 (monitor-only recommendation for shared oscillator chart architecture)
 - `ChartWorkspace.jsx` is the orchestrator (<250 LOC target); logic extracted to hooks and sub-components.
 - Static chart options in `gui/Dashboard/src/config/chartOptions.js`.
 
@@ -107,6 +118,15 @@ All prefixed with `/api/v1/`:
 - AI Service uses persistent `aiohttp.ClientSession` with `TCPConnector` (keep-alive), managed via FastAPI lifespan.
 - Voice WS relay: Browser ↔ Backend (local WS for PCM audio) ↔ xAI `wss://api.x.ai/v1/realtime`.
 
+### Current `/api/v1/ai/ask` Contract Guardrails (14-03-2026)
+- Request model: `prompt` + flexible `context` object + optional `asset`/`timeframe` + optional base64 image.
+- Current validation limits:
+  - `prompt`: required, trimmed, max 8000 chars
+  - `context`: must be JSON-serializable object, max 150 KB serialized
+  - `image`: validated as data URL/base64, approx max 2 MB decoded bytes
+- Backend currently enriches missing indicator snapshots via subprocess-based runner call in `_inject_backend_indicators`.
+- Strict TradingContext schema enforcement is still pending.
+
 ## Coding Standards
 - **Python**: PEP 8, type hints, Pydantic v2 models. No `&&` in PowerShell commands.
 - **JS/JSX**: Functional components, hooks for logic, clear store/view separation.
@@ -115,3 +135,4 @@ All prefixed with `/api/v1/`:
 ## Known Warnings / Follow-ups
 - Pydantic v2 deprecation: migrate class-based `Config` to `model_config = ConfigDict(...)` incrementally.
 - Vite may warn that `settingsStore.js` is both statically and dynamically imported (informational only).
+- Dashboard panel gaps still pending: oscillator visibility persistence, profile JSON import, Risk Manager panel implementation, Calendar & Journal panel implementation.

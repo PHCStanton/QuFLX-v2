@@ -20,6 +20,7 @@ ssid_integration/
 # gui/Alert-Dispatch
 gui/Alert-Dispatch/
 
+
 # Copilot files / Legacy Files
 _legacy/
 legacy/*  
@@ -30,6 +31,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# RiskManager
+gui/RiskManager/
 # C extensions
 *.so
 

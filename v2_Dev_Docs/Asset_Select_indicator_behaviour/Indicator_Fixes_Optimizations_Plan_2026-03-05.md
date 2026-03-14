@@ -31,26 +31,34 @@ This document captures the findings from a thorough code audit of the QuFLX-v2 i
 
 ## 2. Findings Summary
 
+### Completion Status Update (as of 2026-03-14)
+
+- ✅ Implemented: **BUG-1, BUG-2, BUG-3, INC-1, INC-2, INC-3, INC-4, OPT-1, OPT-2, MIN-1, MIN-2**
+- ⏸️ Deferred by design: **OPT-3** (monitor-only recommendation; no current functional defect)
+- ✅ Verification completed:
+  - `conda run -n QuFLX-v2 python -m pytest backend/tests/ -q --tb=short` → **127/127 passed**
+  - Import smoke check for new indicators route architecture → **Import OK**
+
 ### Severity Legend
 - 🔴 **CRITICAL** — Bug that causes incorrect behavior, silent failures, or production-breaking issues
 - 🟠 **INCONSISTENCY** — Misalignment between layers that causes features to silently not work
 - 🟡 **OPTIMIZATION** — Performance or architecture improvement
 - 🟢 **MINOR** — Code quality, documentation, or housekeeping
 
-| ID | Severity | Title | Effort |
-|----|----------|-------|--------|
-| BUG-1 | 🔴 Critical | Full indicator recalculation on every tick | Medium |
-| BUG-2 | 🔴 Critical | Dead `ta` library imports in regime_detector | Low |
-| BUG-3 | 🔴 Critical | Deprecated pandas `'1T'` frequency alias | Low |
-| INC-1 | 🟠 Inconsistency | `ema_89` column not exposed to frontend | Low |
-| INC-2 | 🟠 Inconsistency | `indicators` request param never used for filtering | Medium |
-| INC-3 | 🟠 Inconsistency | `bb_width` scaling ambiguity between library paths | Low |
-| INC-4 | 🟠 Inconsistency | S/R enhancement data silently missing from frontend | Low |
-| OPT-1 | 🟡 Optimization | Subprocess spawn per indicator request | High |
-| OPT-2 | 🟡 Optimization | Row-by-row DataFrame iteration in series extraction | Low |
-| OPT-3 | 🟡 Optimization | Multiple independent chart instances for oscillators | Low |
-| MIN-1 | 🟢 Minor | Silent error swallowing in indicator pipeline methods | Low |
-| MIN-2 | 🟢 Minor | Redundant column mapping code in regime_detector | Low |
+| ID | Severity | Title | Effort | Status |
+|----|----------|-------|--------|--------|
+| BUG-1 | 🔴 Critical | Full indicator recalculation on every tick | Medium | ✅ Done |
+| BUG-2 | 🔴 Critical | Dead `ta` library imports in regime_detector | Low | ✅ Done |
+| BUG-3 | 🔴 Critical | Deprecated pandas `'1T'` frequency alias | Low | ✅ Done |
+| INC-1 | 🟠 Inconsistency | `ema_89` column not exposed to frontend | Low | ✅ Done |
+| INC-2 | 🟠 Inconsistency | `indicators` request param never used for filtering | Medium | ✅ Done (contract clarified) |
+| INC-3 | 🟠 Inconsistency | `bb_width` scaling ambiguity between library paths | Low | ✅ Done |
+| INC-4 | 🟠 Inconsistency | S/R enhancement data silently missing from frontend | Low | ✅ Done |
+| OPT-1 | 🟡 Optimization | Subprocess spawn per indicator request | High | ✅ Done (in-process + cache) |
+| OPT-2 | 🟡 Optimization | Row-by-row DataFrame iteration in series extraction | Low | ✅ Done |
+| OPT-3 | 🟡 Optimization | Multiple independent chart instances for oscillators | Low | ⏸️ Deferred (monitor only) |
+| MIN-1 | 🟢 Minor | Silent error swallowing in indicator pipeline methods | Low | ✅ Done |
+| MIN-2 | 🟢 Minor | Redundant column mapping code in regime_detector | Low | ✅ Done |
 
 ---
 
@@ -568,6 +576,13 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 ## 4. Implementation Priority & Sequence
 
+### Implementation Outcome (14-03-2026)
+
+- **Phase 1:** ✅ Completed
+- **Phase 2:** ✅ Completed
+- **Phase 3:** ✅ Completed (OPT-1 implemented in `backend/services/gateway/routes/indicators.py`)
+- **Remaining recommendation:** OPT-3 remains intentionally deferred unless oscillator performance issues are reported.
+
 ### Phase 1 — Quick Wins (< 1 hour total)
 
 | ID | Task | File | Time |
@@ -579,6 +594,8 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
 | OPT-2 | Vectorize `extract_series` | `indicator_calculator.py` | 10 min |
 | MIN-2 | Consolidate column mapping | `regime_detector.py` | 10 min |
 
+**Status:** ✅ Completed
+
 ### Phase 2 — Medium Fixes (1-2 hours)
 
 | ID | Task | File | Time |
@@ -588,11 +605,15 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
 | MIN-1 | Explicit NaN assignment in except blocks | `indicators.py` | 20 min |
 | INC-2 | Clarify/remove `indicators` filter param | `indicator_calculator.py` | 20 min |
 
+**Status:** ✅ Completed
+
 ### Phase 3 — Architecture Refactor (2-4 hours)
 
 | ID | Task | Files | Time |
 |----|------|-------|------|
 | OPT-1 | In-process indicator calculation (no subprocess) | `gateway/routes/indicators.py`, `indicator_calculator.py` | 3-4 hrs |
+
+**Status:** ✅ Completed (implemented in `backend/services/gateway/routes/indicators.py`)
 
 ---
 
@@ -617,8 +638,12 @@ After implementing each fix, verify:
 
 ### OPT-1 Fix Verification
 - [ ] Measure indicator load time before and after (target: < 100ms)
-- [ ] Verify all indicators still calculate correctly
-- [ ] Verify no blocking of the gateway event loop
+- [x] Verify all indicators still calculate correctly
+- [x] Verify no blocking of the gateway event loop
+
+### Verification Notes (executed)
+- [x] `conda run -n QuFLX-v2 python -m pytest backend/tests/ -q --tb=short` → **127/127 passed**
+- [x] Import smoke check: `from backend.services.gateway.routes.indicators import router, _invalidate_cache` → **Import OK**
 
 ---
 
@@ -697,7 +722,7 @@ QuFLX-v2 Indicator Stack
 ├── Backend
 │   ├── backend/services/strategy/indicators.py          ← Core pipeline
 │   ├── backend/services/strategy/regime_detector.py     ← Regime detection (uses pipeline)
-│   ├── backend/services/gateway/routes/indicators.py    ← HTTP endpoint (spawns subprocess)
+│   ├── backend/services/gateway/routes/indicators.py    ← HTTP endpoint (in-process pipeline + asyncio.to_thread + _df_cache)
 │   ├── capabilities_v2/indicator_calculator.py          ← Subprocess entry point
 │   └── backend/utils/history_utils.py                   ← CSV file management
 │

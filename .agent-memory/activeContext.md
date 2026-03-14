@@ -1,12 +1,33 @@
 # Active Context
 
-## Current Focus (as of 28-02-2026)
-- **SSID Persistence**: 7 targeted fixes implemented and verified — gateway validator, /ssid-status endpoint, store badges, SettingsPanel Save&Close/Export, LiveTradingPanel indicator.
-- **Settings Panel**: "Save & Close" and "Export Config (JSON)" are now fully functional.
-- **Test Organization**: All test files have been moved from project root into `backend/tests/` and `tests/`. Path references fixed.
-- **Next Priorities**: Oscillator pane polish, Profile UX enhancements, AI TradingContext hardening.
+## Current Focus (as of 14-03-2026)
+- **Indicator Fixes & Optimizations Plan (2026-03-05):** Core implementation is now complete, including OPT-1 architecture refactor (in-process indicator calculation).
+- **Indicator API Performance:** `POST /api/v1/indicators` now runs in-process via `asyncio.to_thread()` with per-asset DataFrame caching (no subprocess spawning).
+- **Verification:** Backend regression suite passed after refactor (`127/127` tests passing in `backend/tests/`).
+- **Next Priorities:** Oscillator pane polish (visibility persistence), Profile import/export round-trip UX, AI TradingContext hardening.
+
+### Architecture Review Checkpoint (14-03-2026)
+- Confirmed `RiskManagerPanel.jsx` and `CalendarJournalPanel.jsx` remain placeholder implementations.
+- Confirmed `OscillatorPanel.jsx` currently renders panes but does not persist visibility state through `settingsStore`.
+- Confirmed `profileStore.js` currently supports CRUD and active profile sync, but has no import-from-JSON action.
+- Confirmed `/api/v1/ai/ask` validates prompt/context/image size/shape but still uses flexible `context: Dict[str, Any]` (strict TradingContext schema enforcement still pending).
 
 ## Recent Changes (chronological)
+
+### Indicator Stack Optimization & Plan Closure (14-03-2026)
+- Completed implementation of the remaining item in `Indicator_Fixes_Optimizations_Plan_2026-03-05.md`:
+  - **OPT-1** (`backend/services/gateway/routes/indicators.py`) migrated from subprocess-based execution to in-process pipeline execution.
+- Added in-process route architecture:
+  - `TechnicalIndicatorsPipeline` called directly in gateway route.
+  - CPU-bound work moved to `asyncio.to_thread()`.
+  - Per-asset in-memory cache introduced (`_df_cache`) keyed by `(asset, csv_path)`.
+  - Cache bypass for `current_candle` requests to preserve live-bar correctness.
+  - Cache helper exposed: `_invalidate_cache(asset)` for future explicit invalidation hooks.
+- Retained output compatibility:
+  - Same response envelope (`ok`, `asset`, `timeframe`, `series`, `count`).
+  - Series includes numeric/string/bool/int indicator fields (including S/R enhancement fields).
+- Audit status from plan now effectively:
+  - **10/11 implemented prior** + **OPT-1 now implemented** = **all actionable items completed**.
 
 ### Live Trading Panel Refinement
 - Added dedicated Demo/Real toggle in `LiveTradingPanel` using `isDemoMode` from `tradingStore`.
@@ -62,6 +83,7 @@
 - Collector / Strategy / Gateway are operational.
 - SSID Service (`ssid_service`) is running as a standalone FastAPI microservice.
 - History endpoints are explicit and reliable (`POST .../bootstrap-history`, `GET .../history/{asset}`).
+- Indicator endpoint (`POST /api/v1/indicators`) now runs in-process with thread offload and per-asset DataFrame cache (no subprocess spawn).
 - Profile system fully operational — CRUD, active profile, settings sync.
 - AI Service integrated into Gateway lifespan with persistent `aiohttp` client.
 - `/api/v1/ai/ask` supports prefix caching via `x-grok-conv-id`.
@@ -101,6 +123,7 @@
 
 ### Backend
 - `backend/services/gateway/main.py` — Gateway startup, lifespan, routes
+- `backend/services/gateway/routes/indicators.py` — in-process indicator API (OPT-1), series extraction, DataFrame cache
 - `backend/services/gateway/routes/trading.py` — SSID proxy (Fix 1, Fix 3)
 - `backend/services/gateway/routes/profiles.py` — profile CRUD
 - `backend/services/ssid_service/routes.py` — SSID Service (Fix 2)

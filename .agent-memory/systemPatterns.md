@@ -17,7 +17,7 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture with a standalon
 - **Pub/Sub**: Decouples producers (Collector) from consumers (Strategy, Gateway).
 - **Adapter Pattern**: Collector adapts Chrome DevTools Protocol; Gateway proxies SSID service.
 - **Repository Pattern**: Abstract data access for historical data (Redis Streams, CSV files).
-- **Context Injection (AI)**: Backend builds `TradingContext` (candles, indicators, regimes) and injects into xAI requests with optional chart screenshots.
+- **Context Injection (AI)**: Frontend sends context object, backend validates serializability/size and normalizes fields before xAI calls. Strict TradingContext schema enforcement is pending.
 - **AI Prefix Caching**: `conversation_id` maps to `x-grok-conv-id`. Prompt is tiered:
   1. Static System Instructions (Cached)
   2. Semi-static Tool Definitions (Cached)
@@ -30,7 +30,7 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture with a standalon
 3. **Process**: Strategy Engine reads `Tick` → Updates Indicators → Publishes `IndicatorUpdate` / signals.
 4. **Serve**: Gateway receives `Tick` & `IndicatorUpdate` → Emits via Socket.IO / REST.
 5. **Visualize**: Frontend Store receives update → Mutates State → Chart re-renders (price, overlays, oscillators).
-6. **Advise**: AI Gateway builds `TradingContext` from strategy data + optional chart image → Calls xAI → Returns advisory to UI via `/api/v1/ai/ask` and voice.
+6. **Advise**: AI Gateway accepts prompt + context + optional chart image, optionally injects backend indicator snapshots when missing, then calls xAI and returns advisory via `/api/v1/ai/ask` and voice.
 7. **Trade**: Frontend → `POST /api/v1/trading/connect` → Gateway proxy → SSID Service → PocketOption WS.
 
 ## SSID Persistence Pattern
@@ -88,8 +88,19 @@ QuFLX v2 uses an **Event-Driven Modular Monolith** architecture with a standalon
 - stdout is semi-structured: status lines + trailing JSON. Backend extracts JSON via `_parse_script_json()`.
 - `FavoriteStarSelect` is the single source of truth for 92% payout starring.
 
+## Indicator Route Pattern (Post OPT-1, 14-03-2026)
+- `POST /api/v1/indicators` is now **in-process** in `backend/services/gateway/routes/indicators.py`.
+- Gateway directly imports and runs `TechnicalIndicatorsPipeline` (no per-request subprocess spawn).
+- CPU-bound calculation is offloaded with `asyncio.to_thread()` to keep the event loop responsive.
+- Per-asset in-memory cache (`_df_cache`) stores `(csv_path, result_df)`.
+  - Cache hit when `csv_path` is unchanged and `current_candle` is absent.
+  - Cache bypass when `current_candle` is present (live bar correctness over cache reuse).
+  - Cache naturally invalidates when `get_recent_history_file()` resolves a new CSV path.
+  - Explicit helper `_invalidate_cache(asset)` is available for manual invalidation hooks.
+- Series payload remains contract-compatible: `numeric`, `string`, `bool`, and `int` indicator series are all emitted under `series`.
+
 ## AI & Voice Integration Patterns
-- For all xAI calls: backend constructs a concise `TradingContext` from strategy data.
+- For all xAI calls: backend currently accepts flexible context (`Dict[str, Any]`) with payload-size guardrails; strict schema mapping is a pending hardening task.
 - Chart screenshots captured in Dashboard, sent as base64 to backend, attached to xAI vision requests.
 - Voice Assistant WS Bridge: Browser ↔ Backend (local WS for PCM audio) ↔ `wss://api.x.ai/v1/realtime`.
 - Ask AI Modal: quick assist entry point, voice dictation, optional TTS read-back.

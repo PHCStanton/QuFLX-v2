@@ -148,7 +148,29 @@
 - [x] Fixed all `Path(__file__).resolve().parents[N]` references in moved files
 - [x] `pytest.ini` already covers both test directories — no config changes needed
 
+## Phase 5.13: Indicator Stack Fixes & Optimizations Plan (2026-03-05) ✅
+- [x] BUG-1: Candle-close detection added in `useChartWorkspaceIndicators.js` (no per-tick indicator recalculation)
+- [x] BUG-2: Dead `ta` imports removed from `backend/services/strategy/regime_detector.py`
+- [x] BUG-3: Pandas `'1T'` alias replaced with `'1min'` in indicator resampling path
+- [x] INC-1: `ema_89` exposed to frontend series output
+- [x] INC-2: Indicator filtering contract clarified (accepted but intentionally not selective)
+- [x] INC-3: `bb_width` ratio semantics documented for both library and fallback paths
+- [x] INC-4: Support/Resistance enhancement columns exposed (numeric/string/bool/int)
+- [x] OPT-1: `POST /api/v1/indicators` refactored to in-process pipeline execution via `asyncio.to_thread()` with per-asset DataFrame cache
+- [x] OPT-2: Vectorized numeric/bool/int series extraction applied
+- [x] MIN-1: Explicit NaN backfill + `exc_info=True` logging for trend indicator failure path
+- [x] MIN-2: Regime column mapping consolidated to `_ensure_regime_columns()` as single source of truth
+- [ ] OPT-3: Multi-oscillator shared-chart refactor (deferred; monitor-only recommendation)
+
+### Verification (14-03-2026)
+- [x] Backend regression suite: `conda run -n QuFLX-v2 python -m pytest backend/tests/ -q --tb=short` → **127/127 passed**
+- [x] Import smoke check: `from backend.services.gateway.routes.indicators import router` → **Import OK**
+
 ## Phase 6: Integration & Polish (In Progress)
+- [x] Architecture review checkpoint (14-03-2026): validated placeholder status for Risk Manager / Calendar Journal panels
+- [x] Architecture review checkpoint (14-03-2026): confirmed missing oscillator visibility persistence in `OscillatorPanel.jsx`
+- [x] Architecture review checkpoint (14-03-2026): confirmed missing profile JSON import action in `profileStore.js`
+- [x] Architecture review checkpoint (14-03-2026): confirmed `/api/v1/ai/ask` still uses flexible `context` object (schema hardening pending)
 - [ ] Oscillator pane visibility toggle persistence
 - [ ] Profile import from exported JSON (round-trip)
 - [ ] Risk Manager Panel (placeholder → implementation)

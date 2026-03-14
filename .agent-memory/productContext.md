@@ -49,6 +49,12 @@ QuFLX v2 is a sophisticated automated trading and decision-support platform for 
 - Overlay indicators (SuperTrend, Bollinger Bands, EMA Cross-Over, Support/Resistance) are rendered on the main chart.
 - Test files are organized into `tests/` (infra/integration) and `backend/tests/` (unit/backend).
 
+## Current Integration Gaps (Validated 14-03-2026)
+- Oscillator pane visibility preferences are not yet persisted to settings.
+- Profile JSON import (round-trip from exported config/profile files) is not yet implemented in the profile store flow.
+- Risk Manager and Calendar & Journal tabs still use placeholder panel bodies.
+- AI endpoint still accepts flexible context payloads; strict TradingContext schema enforcement is pending.
+
 ## Success Metrics
 - **Modularity**: Components (Collector, Strategy, Gateway, SSID Service) restart independently.
 - **Latency**: End-to-end latency (Tick → Chart) under 100ms; AI responses fast enough for tactical decisions.
