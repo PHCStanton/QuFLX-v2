@@ -22,7 +22,7 @@ export default function ProfileSelector({ onProfileChanged }: ProfileSelectorPro
     const allProfiles = storage.getProfiles();
     setProfiles(allProfiles);
     const active = storage.getActiveProfile();
-    setActiveProfile(active);
+    setActiveProfile(active ?? undefined);
   };
 
   const handleSwitch = (id: string) => {

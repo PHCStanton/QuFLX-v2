@@ -81,7 +81,7 @@ export default function TradeEntryForm({ selectedDate, onTradesAdded, onClose }:
       investment_amount: investment,
       profit_loss: profitLoss,
       profit_loss_percent: (profitLoss / investment) * 100,
-      trade_type: formData.trade_type,
+      trade_type: formData.trade_type as 'CALL' | 'PUT',
       result: profitLoss > 0 ? 'WIN' : profitLoss < 0 ? 'LOSS' : 'BREAKEVEN',
     };
 
