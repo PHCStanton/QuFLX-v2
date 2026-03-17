@@ -98,12 +98,25 @@ const createUiSlice = (set) => ({
   captureChartImage: null,
   setCaptureChartImage: (fn) => set({ captureChartImage: typeof fn === 'function' ? fn : null }),
   activeIndicators: [],
+  // Fix 3: Structured warning for missing timeframe data (separate from generic lastError).
+  // Set when the indicator API returns 404 (no CSV for the requested timeframe).
+  // Shape: { asset: string, timeframe: string } | null
+  indicatorWarning: null,
+  setIndicatorWarning: (warning) => set({ indicatorWarning: warning }),
+  clearIndicatorWarning: () => set({ indicatorWarning: null }),
   setActiveIndicators: (indicators) =>
     set({ activeIndicators: Array.isArray(indicators) ? indicators : [] }),
   addIndicator: (indicator) =>
-    set((state) => ({
-      activeIndicators: [...state.activeIndicators, indicator]
-    })),
+    set((state) => {
+      // Prevent adding a duplicate indicator of the same type (value).
+      // The system maps each indicator type to a fixed backend series column,
+      // so two instances of the same type would always show identical data.
+      const alreadyExists = state.activeIndicators.some(
+        (ind) => ind.value === indicator.value
+      );
+      if (alreadyExists) return state; // no-op — caller should show a toast if needed
+      return { activeIndicators: [...state.activeIndicators, indicator] };
+    }),
   updateIndicator: (id, patch) =>
     set((state) => ({
       activeIndicators: state.activeIndicators.map((indicator) =>
@@ -473,13 +486,19 @@ const createMarketSlice = (set, get) => ({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        set((state) => ({
-          indicatorStatus: {
-            ...state.indicatorStatus,
-            [key]: 'error'
-          },
-          lastError: errorData.detail || `Failed to load indicators for ${asset}`
-        }));
+        // Fix 3: 404 means no CSV for this timeframe — show a targeted reminder popup
+        // instead of a generic error banner. Other errors still use lastError.
+        if (res.status === 404) {
+          set((state) => ({
+            indicatorStatus: { ...state.indicatorStatus, [key]: 'error' },
+            indicatorWarning: { asset, timeframe },
+          }));
+        } else {
+          set((state) => ({
+            indicatorStatus: { ...state.indicatorStatus, [key]: 'error' },
+            lastError: errorData.detail || `Failed to load indicators for ${asset}`,
+          }));
+        }
         return;
       }
 

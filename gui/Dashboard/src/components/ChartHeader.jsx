@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { X, Layers, Clock, FileText, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import ChartActions from './ChartActions';
 import NeoSyncButton from './NeoSyncButton';
 import syncClickSound from '../assets/Sounds/Click_TF_Sync_Button1.mp3';
@@ -30,6 +30,15 @@ const ChartHeader = ({
 }) => {
   const { strategyLabFiles, selectedStrategyFileId, setSelectedStrategyFileId } = useMarketStore();
   const [syncClicked, setSyncClicked] = useState(false);
+  const [duplicateMsg, setDuplicateMsg] = useState('');
+  const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
+  const duplicateMsgTimer = useRef(null);
+
+  const showDuplicateMsg = (label) => {
+    if (duplicateMsgTimer.current) clearTimeout(duplicateMsgTimer.current);
+    setDuplicateMsg(`${label} already active`);
+    duplicateMsgTimer.current = setTimeout(() => setDuplicateMsg(''), 2500);
+  };
 
   const handleSyncClick = async () => {
     if (!onSyncTimeframe || isSyncingTimeframe) return;
@@ -96,13 +105,19 @@ const ChartHeader = ({
           />
         </div>
 
-        <div className="w-32">
+        <div className="w-32 relative">
           <Combobox
             placeholder="+ Indicator"
             options={indicatorOptions}
             onChange={(val) => {
               const meta = indicatorOptions.find((o) => o.value === val);
               if (!meta) return;
+              // Guard: prevent duplicate indicator types
+              const alreadyActive = (activeIndicators || []).some((ind) => ind.value === val);
+              if (alreadyActive) {
+                showDuplicateMsg(meta.label);
+                return;
+              }
               const id = `${val}-${Date.now()}`;
               const value =
                 meta.displayValue ||
@@ -125,6 +140,11 @@ const ChartHeader = ({
             }}
             icon={Layers}
           />
+          {duplicateMsg && (
+            <div className="absolute top-full left-0 mt-1 px-2 py-1 text-[10px] text-yellow-300 bg-gray-900 border border-yellow-600/50 rounded shadow-lg whitespace-nowrap z-50">
+              {duplicateMsg}
+            </div>
+          )}
         </div>
 
         {/* Force-refresh all active indicators */}
@@ -142,18 +162,35 @@ const ChartHeader = ({
       </div>
 
       <div className="ml-auto flex items-center gap-3 px-2">
-        <div className="flex-1 flex gap-2 overflow-x-auto items-center justify-end no-scrollbar">
-          {activeIndicators.map((ind) => (
-            <IndicatorBadge
-              key={ind.id}
-              name={ind.name}
-              value={ind.value}
-              suspended={!!ind.suspended}
-              onClick={() => onIndicatorClick && onIndicatorClick(ind)}
-              onRemove={() => removeIndicator(ind.id)}
-              onSuspend={() => onIndicatorSuspend && onIndicatorSuspend(ind.id)}
-            />
-          ))}
+        <div className="relative">
+          <button
+            onClick={() => setIsIndicatorsOpen(!isIndicatorsOpen)}
+            className="flex items-center gap-1.5 px-2 py-1 bg-section-bg/80 border border-border-primary rounded hover:border-accent-green/70 transition-colors"
+            title={`Active Indicators (${activeIndicators.length})`}
+          >
+            <Layers size={14} className="text-accent-green" />
+            <span className="text-[10px] font-bold text-gray-300">{activeIndicators.length}</span>
+            {isIndicatorsOpen ? <ChevronUp size={12} className="text-gray-400" /> : <ChevronDown size={12} className="text-gray-400" />}
+          </button>
+          
+          {isIndicatorsOpen && (
+            <div className="absolute right-0 top-full mt-2 w-64 p-2 bg-card-bg border border-border-primary rounded shadow-xl z-50 flex flex-col gap-2">
+              {activeIndicators.length === 0 && (
+                <div className="text-[10px] text-gray-500 text-center py-2">No active indicators</div>
+              )}
+              {activeIndicators.map((ind) => (
+                <IndicatorBadge
+                  key={ind.id}
+                  name={ind.name}
+                  value={ind.displayValue || ind.value}
+                  suspended={!!ind.suspended}
+                  onClick={() => onIndicatorClick && onIndicatorClick(ind)}
+                  onRemove={() => removeIndicator(ind.id)}
+                  onSuspend={() => onIndicatorSuspend && onIndicatorSuspend(ind.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <ChartActions
           onOpenScreenshot={onOpenScreenshot}

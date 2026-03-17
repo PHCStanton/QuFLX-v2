@@ -3,6 +3,27 @@ import { LineSeries, LineStyle } from 'lightweight-charts';
 import { prepareChartData } from '../utils/chartData';
 import useSettingsStore from '../store/settingsStore';
 
+// Known indicator type identifiers — used to recover the type from ind.id
+// when ind.type is missing (e.g. indicators persisted before the type field was added).
+const KNOWN_OVERLAY_TYPES = [
+  'ema_cross', 'support_resistance', 'bollinger_bands', 'supertrend', 'ema',
+];
+
+/**
+ * Resolve the canonical overlay indicator type.
+ * Priority: ind.type → extract from ind.id → ind.value (last resort).
+ * This ensures type checks like `if (type === 'ema_cross')` always work,
+ * even for indicators persisted before the `type` field was introduced.
+ */
+const resolveOverlayType = (ind) => {
+  if (ind.type) return ind.type;
+  if (typeof ind.id === 'string') {
+    const match = KNOWN_OVERLAY_TYPES.find((t) => ind.id.startsWith(t + '-'));
+    if (match) return match;
+  }
+  return ind.value || '';
+};
+
 // Returns whether a specific indicator's price scale label should be visible.
 // Global toggle (showIndicatorPriceLabels) acts as a master off-switch.
 const getPriceLabelVisible = (ind) => {
@@ -10,6 +31,12 @@ const getPriceLabelVisible = (ind) => {
   if (!globalOn) return false;
   // Per-indicator: default true unless explicitly set to false
   return ind.params?.showPriceLabel !== false;
+};
+
+// Returns whether the indicator's series name/title text should be shown on the chart line.
+// Default true — only hidden when explicitly set to false.
+const getSeriesLabelVisible = (ind) => {
+  return ind.params?.showSeriesLabel !== false;
 };
 
 const getErrorMessage = (err) => {
@@ -111,14 +138,15 @@ const useOverlayIndicators = ({
         let upper;
         let lower;
 
-        const type = ind.type || ind.value;
+        const type = resolveOverlayType(ind);
 
         if (type === 'bollinger_bands') {
           const vis = getPriceLabelVisible(ind);
+          const serVis = getSeriesLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#a855f7',
             lineWidth: 2,
-            title: 'BB Middle',
+            title: serVis ? 'BB Middle' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -126,7 +154,7 @@ const useOverlayIndicators = ({
             color: '#a855f7',
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            title: 'BB Upper',
+            title: serVis ? 'BB Upper' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -134,43 +162,46 @@ const useOverlayIndicators = ({
             color: '#a855f7',
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            title: 'BB Lower',
+            title: serVis ? 'BB Lower' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
         } else if (type === 'supertrend') {
           const vis = getPriceLabelVisible(ind);
+          const serVis = getSeriesLabelVisible(ind);
           upSeries = mainChart.addSeries(LineSeries, {
             color: '#22c55e',
             lineWidth: 2,
-            title: 'SuperTrend Up',
+            title: serVis ? 'SuperTrend Up' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
           downSeries = mainChart.addSeries(LineSeries, {
             color: '#ef4444',
             lineWidth: 2,
-            title: 'SuperTrend Down',
+            title: serVis ? 'SuperTrend Down' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
         } else if (type === 'ema') {
           const vis = getPriceLabelVisible(ind);
+          const serVis = getSeriesLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#fbbf24',
             lineWidth: 2,
-            title: `EMA ${ind.params?.period || 16}`,
+            title: serVis ? `EMA ${ind.params?.period || 16}` : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
         } else if (type === 'support_resistance') {
           // Main S/R lines
           const vis = getPriceLabelVisible(ind);
+          const serVis = getSeriesLabelVisible(ind);
           upper = mainChart.addSeries(LineSeries, {
             color: '#ef4444',
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
-            title: 'Resistance',
+            title: serVis ? 'Resistance' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -178,7 +209,7 @@ const useOverlayIndicators = ({
             color: '#22c55e',
             lineWidth: 2,
             lineStyle: LineStyle.Solid,
-            title: 'Support',
+            title: serVis ? 'Support' : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -228,10 +259,11 @@ const useOverlayIndicators = ({
         } else if (type === 'ema_cross') {
           // 21 (Blue)
           const vis = getPriceLabelVisible(ind);
+          const serVis = getSeriesLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#3b82f6',
             lineWidth: 2,
-            title: `EMA ${ind.params?.fast || 21}`,
+            title: serVis ? `EMA ${ind.params?.fast || 21}` : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -239,7 +271,7 @@ const useOverlayIndicators = ({
           upper = mainChart.addSeries(LineSeries, {
             color: '#ffffff',
             lineWidth: 2,
-            title: `EMA ${ind.params?.med || 50}`,
+            title: serVis ? `EMA ${ind.params?.med || 50}` : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -247,16 +279,17 @@ const useOverlayIndicators = ({
           lower = mainChart.addSeries(LineSeries, {
             color: '#ef4444',
             lineWidth: 2,
-            title: `EMA ${ind.params?.slow || 100}`,
+            title: serVis ? `EMA ${ind.params?.slow || 100}` : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
         } else {
           const vis = getPriceLabelVisible(ind);
+          const serVis = getSeriesLabelVisible(ind);
           series = mainChart.addSeries(LineSeries, {
             color: '#3b82f6',
             lineWidth: 2,
-            title: ind.label,
+            title: serVis ? (ind.label || '') : '',
             lastValueVisible: vis,
             priceLineVisible: vis,
           });
@@ -296,29 +329,30 @@ const useOverlayIndicators = ({
       }
 
       const currentParamsHash = JSON.stringify(ind.params);
-      const type = ind.type || ind.value;
+      const type = resolveOverlayType(ind);
 
-      // --- Params changed: update series options including price-label visibility ---
+      // --- Params changed: update series options including price-label + series-label visibility ---
       if (seriesObj.lastParamsHash !== currentParamsHash) {
         const vis = getPriceLabelVisible(ind);
+        const serVis = getSeriesLabelVisible(ind);
         const priceLabelOpts = { lastValueVisible: vis, priceLineVisible: vis };
         try {
           if (type === 'ema') {
-            seriesObj.series.applyOptions({ title: `EMA ${ind.params?.period || 16}`, ...priceLabelOpts });
+            seriesObj.series.applyOptions({ title: serVis ? `EMA ${ind.params?.period || 16}` : '', ...priceLabelOpts });
           } else if (type === 'bollinger_bands') {
-            seriesObj.series.applyOptions({ title: 'BB Middle', ...priceLabelOpts });
-            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'BB Upper', ...priceLabelOpts });
-            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'BB Lower', ...priceLabelOpts });
+            seriesObj.series.applyOptions({ title: serVis ? 'BB Middle' : '', ...priceLabelOpts });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: serVis ? 'BB Upper' : '', ...priceLabelOpts });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: serVis ? 'BB Lower' : '', ...priceLabelOpts });
           } else if (type === 'supertrend') {
-            if (seriesObj.upSeries) seriesObj.upSeries.applyOptions({ title: 'SuperTrend Up', ...priceLabelOpts });
-            if (seriesObj.downSeries) seriesObj.downSeries.applyOptions({ title: 'SuperTrend Down', ...priceLabelOpts });
+            if (seriesObj.upSeries) seriesObj.upSeries.applyOptions({ title: serVis ? 'SuperTrend Up' : '', ...priceLabelOpts });
+            if (seriesObj.downSeries) seriesObj.downSeries.applyOptions({ title: serVis ? 'SuperTrend Down' : '', ...priceLabelOpts });
           } else if (type === 'support_resistance') {
-            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: 'Resistance', ...priceLabelOpts });
-            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: 'Support', ...priceLabelOpts });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: serVis ? 'Resistance' : '', ...priceLabelOpts });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: serVis ? 'Support' : '', ...priceLabelOpts });
           } else if (type === 'ema_cross') {
-            if (seriesObj.series) seriesObj.series.applyOptions({ title: `EMA ${ind.params?.fast || 21}`, ...priceLabelOpts });
-            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: `EMA ${ind.params?.med || 50}`, ...priceLabelOpts });
-            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: `EMA ${ind.params?.slow || 100}`, ...priceLabelOpts });
+            if (seriesObj.series) seriesObj.series.applyOptions({ title: serVis ? `EMA ${ind.params?.fast || 21}` : '', ...priceLabelOpts });
+            if (seriesObj.upper) seriesObj.upper.applyOptions({ title: serVis ? `EMA ${ind.params?.med || 50}` : '', ...priceLabelOpts });
+            if (seriesObj.lower) seriesObj.lower.applyOptions({ title: serVis ? `EMA ${ind.params?.slow || 100}` : '', ...priceLabelOpts });
           } else if (seriesObj.series) {
             seriesObj.series.applyOptions({ ...priceLabelOpts });
           }
@@ -500,12 +534,19 @@ const useOverlayIndicators = ({
           const ema21 = seriesForKey['ema_21'] || [];
           const ema50 = seriesForKey['ema_50'] || [];
           const ema100 = seriesForKey['ema_100'] || [];
-          const dataHash = JSON.stringify([ema21.slice(-1), ema50.slice(-1), ema100.slice(-1)]);
+          // enableFast/Med/Slow default to true if not set (backward-compatible)
+          const enableFast = ind.params?.enableFast !== false;
+          const enableMed  = ind.params?.enableMed  !== false;
+          const enableSlow = ind.params?.enableSlow !== false;
+          const dataHash = JSON.stringify([
+            ema21.slice(-1), ema50.slice(-1), ema100.slice(-1),
+            enableFast, enableMed, enableSlow
+          ]);
 
           if (seriesObj.lastDataHash !== dataHash) {
-            if (seriesObj.series) seriesObj.series.setData(sortByTimeAsc(ema21));
-            if (seriesObj.upper) seriesObj.upper.setData(sortByTimeAsc(ema50));
-            if (seriesObj.lower) seriesObj.lower.setData(sortByTimeAsc(ema100));
+            if (seriesObj.series) seriesObj.series.setData(enableFast ? sortByTimeAsc(ema21) : []);
+            if (seriesObj.upper)  seriesObj.upper.setData(enableMed  ? sortByTimeAsc(ema50)  : []);
+            if (seriesObj.lower)  seriesObj.lower.setData(enableSlow ? sortByTimeAsc(ema100) : []);
             seriesObj.lastDataHash = dataHash;
           }
           return;

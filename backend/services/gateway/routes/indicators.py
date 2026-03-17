@@ -11,6 +11,8 @@ Expected improvement: ~500ms → ~50ms per request (10x speedup, no disk I/O per
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import pandas as pd
 import numpy as np
@@ -25,21 +27,30 @@ router = APIRouter()
 logger = logging.getLogger("gateway.indicators")
 
 # ── In-memory DataFrame cache ────────────────────────────────────────────────
-# Key: asset (str)  →  Value: (csv_path_str, result_df)
-# Invalidated when csv_path changes (new file written by history bootstrap).
-_df_cache: Dict[str, Tuple[str, pd.DataFrame]] = {}
+# Key: asset (str)  →  Value: (csv_path_str, params_hash, result_df)
+# Invalidated when csv_path OR pipeline_params change.
+# Fix 1: params_hash ensures parameter changes (e.g. EMA 16→20) always trigger
+# a fresh calculation instead of returning stale cached results.
+_df_cache: Dict[str, Tuple[str, str, pd.DataFrame]] = {}
 
 
-def _get_cached_df(asset: str, csv_path: Path) -> Optional[pd.DataFrame]:
-    """Return cached result_df if csv_path hasn't changed, else None."""
+def _params_hash(pipeline_params: Dict[str, Any]) -> str:
+    """Deterministic MD5 hash of pipeline params dict (sorted keys)."""
+    return hashlib.md5(
+        json.dumps(pipeline_params, sort_keys=True).encode()
+    ).hexdigest()
+
+
+def _get_cached_df(asset: str, csv_path: Path, params_hash: str) -> Optional[pd.DataFrame]:
+    """Return cached result_df if BOTH csv_path AND params_hash match, else None."""
     cached = _df_cache.get(asset)
-    if cached and cached[0] == str(csv_path):
-        return cached[1]
+    if cached and cached[0] == str(csv_path) and cached[1] == params_hash:
+        return cached[2]
     return None
 
 
-def _set_cached_df(asset: str, csv_path: Path, df: pd.DataFrame) -> None:
-    _df_cache[asset] = (str(csv_path), df)
+def _set_cached_df(asset: str, csv_path: Path, params_hash: str, df: pd.DataFrame) -> None:
+    _df_cache[asset] = (str(csv_path), params_hash, df)
 
 
 def _invalidate_cache(asset: str) -> None:
@@ -138,10 +149,15 @@ def _calculate_in_thread(
     asset: str,
     pipeline_params: Dict[str, Any],
     current_candle: Optional[Dict[str, Any]],
+    timeframe_min: int = 1,
 ) -> Tuple[pd.DataFrame, Dict[str, list], int]:
     """
     Synchronous calculation — safe to run in a thread pool.
     Returns (result_df, series_dict, row_count).
+
+    Fix 2: timeframe_min is forwarded to calculate_indicators() so the pipeline
+    resamples to the correct grid (e.g. 5min for a 5m CSV) instead of always
+    using the hardcoded 1min grid.
     """
     df = pd.read_csv(csv_path)
 
@@ -167,7 +183,7 @@ def _calculate_in_thread(
     df.columns = [c.lower() for c in df.columns]
 
     pipeline = TechnicalIndicatorsPipeline(config={"indicator_params": pipeline_params})
-    result_df = pipeline.calculate_indicators(df)
+    result_df = pipeline.calculate_indicators(df, timeframe_min=timeframe_min)
 
     series = _build_series(result_df)
     return result_df, series, len(result_df)
@@ -276,10 +292,16 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
     # ── Map frontend params → pipeline params ─────────────────────────────────
     pipeline_params = _map_params(params or {})
 
-    # ── Check cache (skip recalculation if CSV hasn't changed and no live candle) ──
+    # ── Fix 1: Compute params hash for cache key ──────────────────────────────
+    # Cache is now keyed by (csv_path, params_hash) so any parameter change
+    # (e.g. EMA period 16→20) causes a cache miss and triggers fresh calculation.
+    p_hash = _params_hash(pipeline_params)
+
+    # ── Check cache (skip recalculation if CSV + params haven't changed) ──────
     # When current_candle is provided, we must recalculate (live bar update).
     # When csv_path changed (new bootstrap), cache miss forces fresh calculation.
-    cached_df = None if current_candle else _get_cached_df(asset, csv_path)
+    # When params changed, cache miss forces fresh calculation (Fix 1).
+    cached_df = None if current_candle else _get_cached_df(asset, csv_path, p_hash)
 
     try:
         if cached_df is not None:
@@ -296,10 +318,11 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
                 asset,
                 pipeline_params,
                 current_candle,
+                timeframe_min,  # Fix 2: pass actual timeframe to pipeline
             )
             # Only cache when no live candle override (stable data)
             if not current_candle:
-                _set_cached_df(asset, csv_path, result_df)
+                _set_cached_df(asset, csv_path, p_hash, result_df)
 
         return {
             "ok": True,

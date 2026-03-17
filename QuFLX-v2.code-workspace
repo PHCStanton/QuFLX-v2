@@ -10,6 +10,7 @@
     "python.envFile": "${workspaceFolder}/.env",
     "python.terminal.activateEnvInCurrentTerminal": true,
     "python.testing.pytestEnabled": true,
-    "editor.wordWrap": "on"
+    "editor.wordWrap": "on",
+    "python.useEnvironmentsExtension": true
   }
 }

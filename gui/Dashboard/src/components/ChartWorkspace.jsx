@@ -27,6 +27,7 @@ import ChartContextMenu from './ChartContextMenu';
 import { ZonePrimitive } from '../utils/zonePrimitive';
 import { HistogramSeries } from 'lightweight-charts';
 import { timeframeOptions, csvOptions, indicatorOptions } from '../config/chartOptions';
+import IndicatorTimeframeWarning from './IndicatorTimeframeWarning';
 
 const ChartWorkspace = () => {
   const { settings } = useSettingsStore();
@@ -563,7 +564,12 @@ const ChartWorkspace = () => {
       if (!settingsIndicator) {
         return;
       }
-      updateIndicator(settingsIndicator.id, { value, params });
+      // CRITICAL FIX: `value` here is the badge label (e.g. "10,50,100"), NOT the
+      // indicator type identifier. We must NEVER overwrite `ind.value` (which holds
+      // the type key like "ema_cross" or "support_resistance") — it is used by
+      // buildIndicatorRequest, useOverlayIndicators, and the tooltip to identify
+      // the indicator type. Store the badge label in `displayValue` instead.
+      updateIndicator(settingsIndicator.id, { displayValue: value, params });
       setSettingsIndicator(null);
     },
     [settingsIndicator, updateIndicator]
@@ -721,6 +727,9 @@ const ChartWorkspace = () => {
           />
         </div>
       ) : null}
+
+      {/* Fix 3: Timeframe data warning popup — shown once per session per asset|timeframe */}
+      <IndicatorTimeframeWarning />
     </Card>
   );
 };

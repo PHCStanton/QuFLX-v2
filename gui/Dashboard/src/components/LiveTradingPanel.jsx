@@ -2,89 +2,23 @@
  * LiveTradingPanel.jsx — Live Trading Panel
  *
  * Sections (top-to-bottom):
- *   1. Real-mode safety banner (when in Real mode)
- *   2. Connection Bar   — SSID input, Connect/Disconnect, Demo/Real toggle
- *   3. Account Status   — Balance, mode badge, last updated
- *   4. Trade Form       — Asset, Direction, Amount, Expiry, Execute
- *   5. Recent Trades    — Mini-table with WIN/LOSS/pending results
- *   6. 92% Assets       — Collapsed AssetPayoutPanel
+ *   1. Real-mode safetatedaprofiel. NOthinfgy banner (when in Real mode)
+ *   2. Trade Form       — Asset, Direction, Amount, Expiry, Execute
+ *   3. Recent Trades    — Mini-table with WIN/LOSS/pending results
+ *   4. 92% Assets       — Collapsed AssetPayoutPanel
  *
  * Relies on: tradingStore.js, settingsStore.js (liveTrading section)
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import useTradingStore from '../store/tradingStore';
-import useMarketStore from '../store/marketStore';
 import useSettingsStore from '../store/settingsStore';
 import { useShallow } from 'zustand/react/shallow';
 import AssetPayoutPanel from './AssetPayoutPanel';
 import CollapsiblePanel from './CollapsiblePanel';
 import { normalizeSpecificAsset } from '../utils/assetUtils';
-import clickSound from '../assets/Sounds/UIClick-Camera_snapshot.mp3';
-
-// ─── Module-level audio singleton (prevents object leak on rapid toggling) ───
-let clickAudioInstance = null;
-const getClickAudio = () => {
-  if (!clickAudioInstance) {
-    clickAudioInstance = new Audio(clickSound);
-  }
-  return clickAudioInstance;
-};
 
 // ─── Local Components ───────────────────────────────────────────────────────
-
-/**
- * Customized Neomorphic switch for Demo/Real mode
- */
-const TradingModeSwitch = React.memo(function TradingModeSwitch({ isDemo, onChange, isConnecting }) {
-  // checked = REAL mode (false = DEMO)
-  const checked = !isDemo;
-
-  const handleChange = () => {
-    if (isConnecting) return;
-    const nextDemo = !isDemo;
-    const audio = getClickAudio();
-    audio.currentTime = 0; // Reset for rapid clicks
-    audio.play().catch((e) => {
-      // Non-critical: audio play was blocked (e.g., user hasn't interacted with page yet)
-      console.debug('[TradingModeSwitch] Audio play blocked:', e?.message || e);
-    });
-    if (onChange) onChange(nextDemo);
-  };
-
-  return (
-    <div className="flex items-center gap-3">
-      <span className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${isDemo ? 'text-[#3b82f6]' : 'text-text-secondary'}`}>Demo</span>
-
-      <label className="relative inline-block w-[46px] h-[22px] cursor-pointer select-none">
-        <input
-          type="checkbox"
-          className="hidden"
-          checked={checked}
-          onChange={handleChange}
-          disabled={isConnecting}
-        />
-        {/* Track */}
-        <div className={`absolute inset-0 rounded-full transition-all duration-300 border shadow-inner ${checked ? 'border-[#ff4757]/40 bg-[#ff4757]/10' : 'border-[#3b82f6]/40 bg-[#3b82f6]/10'}`}
-          style={{
-            boxShadow: 'inset 2px 2px 5px rgba(0,0,0,0.5)',
-          }}
-        />
-
-        {/* Knob */}
-        <div className={`absolute top-[3px] left-[3px] w-[16px] h-[16px] rounded-full transition-all duration-300 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] border shadow-md flex items-center justify-center
-          ${checked
-            ? 'translate-x-[24px] bg-[#ff4757] border-white/40 shadow-[0_0_8px_rgba(255,71,87,0.4)]'
-            : 'bg-[#3b82f6] border-white/40 shadow-[0_0_8px_rgba(59,130,246,0.4)]'}`}
-        >
-          <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
-        </div>
-      </label>
-
-      <span className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${!isDemo ? 'text-[#ff4757]' : 'text-text-secondary'}`}>Real</span>
-    </div>
-  );
-});
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
@@ -272,34 +206,26 @@ const EXPIRY_PRESETS = [
 const LiveTradingPanel = () => {
   // ── Store selectors ──────────────────────────────────────────────────
   const {
-    isConnected, isConnecting, isSwitchingMode, isDemoMode,
-    balance, lastBalanceUpdate,
+    isConnected, isDemoMode,
     selectedAsset, setSelectedAsset,
     selectedDirection, setSelectedDirection,
     tradeAmount, setTradeAmount,
     tradeExpiration, setTradeExpiration,
-    isExecuting, lastCooldownEnd,
-    assets, assetsLoaded,
+    isExecuting, lastCooldownEnd, assetsLoaded,
     trades, activeTrade,
-    error, connectError,
-    connect, disconnect, switchMode, setDemoMode,
+    error,
     executeTrade, checkResult, fetchAssets,
-    hasDemoSsid, hasRealSsid, fetchSsidStatus,
     clearError,
   } = useTradingStore(useShallow((s) => ({
-    isConnected: s.isConnected, isConnecting: s.isConnecting, isSwitchingMode: s.isSwitchingMode, isDemoMode: s.isDemoMode,
-    balance: s.balance, lastBalanceUpdate: s.lastBalanceUpdate,
+    isConnected: s.isConnected, isDemoMode: s.isDemoMode,
     selectedAsset: s.selectedAsset, setSelectedAsset: s.setSelectedAsset,
     selectedDirection: s.selectedDirection, setSelectedDirection: s.setSelectedDirection,
     tradeAmount: s.tradeAmount, setTradeAmount: s.setTradeAmount,
     tradeExpiration: s.tradeExpiration, setTradeExpiration: s.setTradeExpiration,
-    isExecuting: s.isExecuting, lastCooldownEnd: s.lastCooldownEnd,
-    assets: s.assets, assetsLoaded: s.assetsLoaded,
+    isExecuting: s.isExecuting, lastCooldownEnd: s.lastCooldownEnd, assetsLoaded: s.assetsLoaded,
     trades: s.trades, activeTrade: s.activeTrade,
-    error: s.error, connectError: s.connectError,
-    connect: s.connect, disconnect: s.disconnect, switchMode: s.switchMode, setDemoMode: s.setDemoMode,
+    error: s.error,
     executeTrade: s.executeTrade, checkResult: s.checkResult, fetchAssets: s.fetchAssets,
-    hasDemoSsid: s.hasDemoSsid, hasRealSsid: s.hasRealSsid, fetchSsidStatus: s.fetchSsidStatus,
     clearError: s.clearError,
   })));
 
@@ -308,7 +234,6 @@ const LiveTradingPanel = () => {
 
   // ── Local UI state ───────────────────────────────────────────────────
   const [pendingTrade, setPendingTrade] = useState(null); // for confirm modal
-  const ssidRef = useRef(null);
   const pollTimer = useRef(null);
   const defaultsAppliedRef = useRef(false); // Prevent settings from overwriting user choices
 
@@ -320,11 +245,6 @@ const LiveTradingPanel = () => {
       defaultsAppliedRef.current = true;
     }
   }, [lt.defaultAmount, lt.defaultExpiration, setTradeAmount, setTradeExpiration]); // Run once on mount
-
-  // Fix 5b: Fetch SSID badge status on mount so the Connection Bar shows "Saved SSID ready"
-  useEffect(() => {
-    fetchSsidStatus();
-  }, [fetchSsidStatus]);
 
   // ── Balance polling ──────────────────────────────────────────────────
   useEffect(() => {
@@ -414,24 +334,6 @@ const LiveTradingPanel = () => {
     containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [setSelectedAsset]);
 
-  const handleModeToggle = useCallback(async (nextDemo) => {
-    // nextDemo is always passed by TradingModeSwitch (true = demo, false = real)
-    if (nextDemo === isDemoMode) return;
-
-    if (isConnected) {
-      const ok = await switchMode(nextDemo);
-      if (!ok) {
-        // FIX (BUG-3): Mode switch failed (most likely: no saved SSID for target mode).
-        // Auto-disconnect and let the user enter the new mode's SSID.
-        // The error message is already displayed via connectError from the store.
-        await disconnect();
-        setDemoMode(nextDemo);
-      }
-    } else {
-      setDemoMode(nextDemo);
-    }
-  }, [isConnected, isDemoMode, switchMode, setDemoMode, disconnect]);
-
   const handleAmountStep = useCallback((delta) => {
     const base = Number(tradeAmount) || 0;
     setTradeAmount(Math.max(lt.minAmount ?? 1, Math.min(lt.maxAmount ?? 1000, base + delta)));
@@ -507,118 +409,7 @@ const LiveTradingPanel = () => {
         </div>
       )}
 
-      {/* ── 2. Connection Bar ─────────────────────────────────────── */}
-      <CollapsiblePanel
-        id="lt-connection-bar"
-        title="Connection Status"
-        expandable={true}
-        className="bg-section-bg"
-      >
-        <div className="flex flex-col gap-4 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <TradingModeSwitch
-              isDemo={isDemoMode}
-              onChange={handleModeToggle}
-              isConnecting={isConnecting || isSwitchingMode}
-            />
-
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/40 border border-border-primary/50 shadow-inner">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-accent-green shadow-[0_0_12px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/20'}`} />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">
-                {isConnecting ? 'CONNECTING...' : isConnected ? 'ONLINE' : 'OFFLINE'}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2.5">
-            {!isConnected ? (
-              <div className="flex flex-col gap-2">
-                <button
-                  id="lt-connect-btn"
-                  onClick={() => connect('', isDemoMode)}
-                  disabled={isConnecting}
-                  className={`w-full py-3 rounded-xl font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] shadow-xl
-                    ${isConnecting
-                      ? 'bg-white/5 border border-border-primary text-text-secondary/20 cursor-not-allowed'
-                      : 'bg-accent-blue text-white hover:opacity-95 hover:shadow-[0_8px_25px_rgba(59,130,246,0.4)]'}`}
-                >
-                  {isConnecting ? 'Connecting...' : 'Connect Session'}
-                </button>
-                {/* Fix 5b: Show contextual saved-SSID indicator */}
-                {(isDemoMode ? hasDemoSsid : hasRealSsid) ? (
-                  <p className="text-[9px] text-accent-green font-bold text-center">
-                    ✓ Saved {isDemoMode ? 'Demo' : 'Real'} SSID ready — click to connect
-                  </p>
-                ) : (
-                  <p className="text-[9px] text-text-secondary text-center opacity-50">
-                    SSID configuration is now in Settings Panel
-                  </p>
-                )}
-              </div>
-            ) : (
-              <button
-                id="lt-disconnect-btn"
-                onClick={disconnect}
-                className="w-full py-3 rounded-xl bg-white/5 border border-border-primary text-text-secondary hover:text-[#ff4757] hover:border-[#ff4757]/60 hover:bg-[#ff4757]/10 font-black text-[11px] uppercase tracking-[0.2em] transition-all active:scale-[0.98] shadow-lg"
-              >
-                Disconnect Session
-              </button>
-            )}
-
-            {(connectError || error) && (
-              <div className="p-4 rounded-xl bg-[#ff4757]/10 border border-[#ff4757]/30 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-500 shadow-lg">
-                <span className="text-base">⚠️</span>
-                <span className="text-[10px] font-black text-[#ff4757] uppercase tracking-widest leading-relaxed">
-                  {connectError || error}
-                </span>
-                <button
-                  onClick={clearError}
-                  className="ml-auto p-1.5 text-[#ff4757] hover:bg-[#ff4757]/20 rounded-full transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </CollapsiblePanel>
-
-      {/* ── 3. Account Status ─────────────────────────────────────── */}
-      <CollapsiblePanel
-        id="lt-account-status"
-        title="Account Portfolio"
-        expandable={true}
-        className="bg-section-bg"
-      >
-        <div className="p-5 flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.25em] mb-2 opacity-60">Available Balance</span>
-              <div className="flex items-baseline gap-2.5">
-                <span className="text-3xl font-black text-text-primary tracking-tighter drop-shadow-sm">
-                  {fmt.bal(balance)}
-                </span>
-                <span className="text-[11px] font-black text-text-secondary/40 uppercase tracking-[0.2em]">USD</span>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-3">
-              <div className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg border backdrop-blur-md transition-all
-                ${isDemoMode
-                  ? 'bg-accent-blue/10 border-accent-blue/40 text-accent-blue shadow-accent-blue/5'
-                  : 'bg-[#ff4757]/10 border-[#ff4757]/40 text-[#ff4757] shadow-[#ff4757]/5'}`}
-              >
-                {isDemoMode ? 'Demo Account' : 'Real Account'}
-              </div>
-              <div className="flex items-center gap-2 text-[9px] font-black text-text-secondary/20 uppercase tracking-widest">
-                <div className="w-1.5 h-1.5 rounded-full bg-current opacity-30" />
-                <span>Synced: {fmt.time(lastBalanceUpdate)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </CollapsiblePanel>
-
-      {/* ── 4. Trade Form ─────────────────────────────────────────── */}
+      {/* ── 2. Trade Form ─────────────────────────────────────────── */}
       <CollapsiblePanel
         id="lt-trade-form"
         title="Execution Terminal"
@@ -753,10 +544,24 @@ const LiveTradingPanel = () => {
               </div>
             )}
           </button>
+
+          {error && (
+            <div className="p-3 rounded-xl bg-[#ff4757]/10 border border-[#ff4757]/30 flex items-center gap-2.5">
+              <span className="text-sm">⚠️</span>
+              <span className="text-[10px] font-black text-[#ff4757] uppercase tracking-widest leading-relaxed">{error}</span>
+              <button
+                type="button"
+                onClick={clearError}
+                className="ml-auto p-1 text-[#ff4757] hover:bg-[#ff4757]/20 rounded-full transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
       </CollapsiblePanel>
 
-      {/* ── 5. Recent Trades ──────────────────────────────────────── */}
+      {/* ── 3. Recent Trades ──────────────────────────────────────── */}
       <CollapsiblePanel
         id="lt-recent-trades"
         title="Recent Trades"
@@ -826,7 +631,7 @@ const LiveTradingPanel = () => {
         </div>
       </CollapsiblePanel>
 
-      {/* ── 6. 92% Assets (collapsible) ────────────────────────────── */}
+      {/* ── 4. 92% Assets (collapsible) ────────────────────────────── */}
       <CollapsiblePanel
         id="live-trading-assets"
         title="High Payout Markets"

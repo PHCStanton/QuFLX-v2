@@ -11,7 +11,7 @@ import StrategyLabPanel from './StrategyLabPanel';
 const TAB_PANEL_CONFIG = {
   analysis: ['analysis-assets', 'analysis-realtime-analytics', 'analysis-monitoring-pool'],
   ai_insights: ['ai-insights-assets', 'ai-insights-main'],
-  live_trading: ['lt-connection-bar', 'lt-account-status', 'lt-trade-form', 'lt-recent-trades', 'live-trading-assets'],
+  live_trading: ['lt-trade-form', 'lt-recent-trades', 'live-trading-assets'],
   risk_manager: ['risk-manager-assets', 'risk-manager-main'],
   calendar_journal: ['calendar-journal-main'],
   strategy_lab: ['strategy-lab-header', 'strategy-lab-upload', 'strategy-lab-file-info', 'strategy-lab-market-regime', 'strategy-lab-entry-signals']
@@ -74,4 +74,6 @@ const ContextPanelRouter = () => {
 };
 
 export default ContextPanelRouter;
+
+
 

@@ -211,7 +211,13 @@ const Dashboard = () => {
                   onStartAlerts={() => useMarketStore.getState().startAlerts(useMarketStore.getState().payoutAssets)}
                   onStopAlerts={useMarketStore.getState().stopAlerts}
                   enableTickLogging={useMarketStore.getState().enableTickLogging}
-                  onToggleTickLogging={useMarketStore.getState().toggleTickLogging}
+                  onToggleTickLogging={() => {
+                    const { toggleTickLogging } = useMarketStore.getState();
+                    const { settings, updateSection } = useSettingsStore.getState();
+                    const newValue = !settings.alerts?.enableTickLogging;
+                    updateSection('alerts', { enableTickLogging: newValue });
+                    toggleTickLogging();
+                  }}
                 />
                 <div className="flex-1 min-h-0">
                   <ContextPanelRouter />

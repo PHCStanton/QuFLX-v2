@@ -200,9 +200,16 @@ class TechnicalIndicatorsPipeline:
             self.logger.error(f"Resampling failed: {e}")
             return df
     
-    def calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+    def calculate_indicators(self, df: pd.DataFrame, timeframe_min: int = 1) -> pd.DataFrame:
         """
         Calculate all technical indicators for the given DataFrame.
+
+        Args:
+            df: OHLCV DataFrame with columns [open, high, low, close, timestamp].
+            timeframe_min: Candle interval in minutes (default 1). Used to build
+                the correct resampling grid so indicators are computed on the right
+                time scale (e.g. 5min for 5m data, not the hardcoded 1min).
+                Fix 2: previously hardcoded to '1min', now uses the actual timeframe.
         """
         try:
             if len(df) < 50:  # Minimal data check
@@ -216,9 +223,11 @@ class TechnicalIndicatorsPipeline:
             # 0. Defensive: Handle infinity/NaN in input data
             df = df.replace([np.inf, -np.inf], np.nan)
             
-            # 0.1 Time-Series Alignment: Fill gaps to prevent indicator distortion
-            # Default to 1m grid for OTC Sniper
-            df = self.resample_to_grid(df, timeframe='1min')
+            # 0.1 Time-Series Alignment: Fill gaps to prevent indicator distortion.
+            # Fix 2: Use the actual requested timeframe instead of hardcoded '1min'.
+            # For 5m data this produces a 5min grid; for 1m data it stays at 1min.
+            pandas_alias = f'{max(1, int(timeframe_min))}min'
+            df = self.resample_to_grid(df, timeframe=pandas_alias)
             
             result_df = df.copy()
             
@@ -369,8 +378,31 @@ class TechnicalIndicatorsPipeline:
         return df
 
     def _calculate_adx(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculates ADX using Wilder's smoothing (alpha = 1/period).
+        Standard platforms (TradingView, MetaTrader, Pocket Option) all use
+        Wilder's smoothing — NOT the standard EMA (span=period).
+        Using ewm(span=period) produces alpha=2/(period+1) which is ~2x faster
+        and yields systematically higher ADX values than the industry standard.
+        """
         try:
             period = self.params.get('adx_period', 14)
+
+            # Use pandas_ta if available — it implements Wilder's correctly
+            if PANDAS_TA_AVAILABLE:
+                adx_data = ta.adx(df['high'], df['low'], df['close'], length=period)
+                if adx_data is not None and not adx_data.empty:
+                    adx_col = f'ADX_{period}'
+                    dmp_col = f'DMP_{period}'
+                    dmn_col = f'DMN_{period}'
+                    if adx_col in adx_data.columns:
+                        df['adx'] = adx_data[adx_col]
+                        df['plus_di'] = adx_data.get(dmp_col, np.nan)
+                        df['minus_di'] = adx_data.get(dmn_col, np.nan)
+                        return df
+
+            # Fallback: manual Wilder's smoothing (alpha = 1/period)
+            alpha = 1.0 / period
             high_diff = df['high'].diff()
             low_diff = -df['low'].diff()
             plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0.0)
@@ -382,13 +414,14 @@ class TechnicalIndicatorsPipeline:
                 df = self._calculate_volatility_indicators(df)
                 atr = df['atr_14']
 
-            plus_di = 100 * (plus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, np.nan))
-            minus_di = 100 * (minus_dm.ewm(span=period, adjust=False).mean() / atr.replace(0, np.nan))
+            # Wilder's smoothing: ewm(alpha=1/period) — matches industry standard
+            plus_di = 100 * (plus_dm.ewm(alpha=alpha, adjust=False).mean() / atr.replace(0, np.nan))
+            minus_di = 100 * (minus_dm.ewm(alpha=alpha, adjust=False).mean() / atr.replace(0, np.nan))
 
             denominator = (plus_di + minus_di).replace(0, np.nan)
             dx = 100 * (abs(plus_di - minus_di) / denominator)
 
-            df['adx'] = dx.ewm(span=period, adjust=False).mean()
+            df['adx'] = dx.ewm(alpha=alpha, adjust=False).mean()
             df['plus_di'] = plus_di
             df['minus_di'] = minus_di
 

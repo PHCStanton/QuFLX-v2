@@ -898,7 +898,16 @@ const SettingsPanel = () => {
             <SettingRow label="Enable Raw Tick Logging" description="Subscribe to Redis and save all ticks to CSV">
               <NeomorphicSwitch
                 checked={settings.alerts?.enableTickLogging || false}
-                onChange={() => updateSection('alerts', { enableTickLogging: !settings.alerts?.enableTickLogging })}
+                onChange={() => {
+                  const nextValue = !settings.alerts?.enableTickLogging;
+                  updateSection('alerts', { enableTickLogging: nextValue });
+                  // Sync with marketStore state
+                  const { toggleTickLogging } = useMarketStore.getState();
+                  // Only toggle if current marketStore state differs
+                  if (useMarketStore.getState().enableTickLogging !== nextValue) {
+                    toggleTickLogging();
+                  }
+                }}
               />
             </SettingRow>
 
