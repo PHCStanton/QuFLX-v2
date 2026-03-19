@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Download, BarChart3, Plus, TrendingUp, TrendingDown, Calendar, RotateCcw } from 'lucide-react';
 import { RiskCalculator, SessionData } from '../lib/risk-calculations';
 import { exportToCSV } from '../lib/export-utils';
@@ -56,6 +56,7 @@ export default function TradeSessionsManager({
   onSyncSession,
   onReset
 }: TradeSessionsManagerProps) {
+  const [chartVariant, setChartVariant] = useState<'solid' | 'outlined' | 'glow' | 'gradient'>('solid');
   const allTrades = [...completedSessions.flatMap(s => s.trades), ...trades];
   const wins = allTrades.filter(t => t.result === 'win').length;
   const losses = allTrades.filter(t => t.result === 'loss').length;
@@ -195,6 +196,7 @@ export default function TradeSessionsManager({
           </div>
 
           <div className="bg-[#0f1419] rounded-2xl border border-gray-800 p-6 flex flex-col items-center min-h-[520px] flex-1">
+
             <div className="flex gap-2 w-full mb-8">
               <button
                 onClick={() => onAddTrade('win')}
@@ -229,6 +231,13 @@ export default function TradeSessionsManager({
                   <stop offset="0%" stopColor="#ef4444" stopOpacity="0.7" />
                   <stop offset="100%" stopColor="#dc2626" stopOpacity="0.9" />
                 </linearGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
               </defs>
 
               <rect
@@ -348,7 +357,10 @@ export default function TradeSessionsManager({
                 y={barY}
                 width={barWidth}
                 height={barHeight}
-                fill={`url(#${metrics.isProfit ? 'profitGradient' : 'lossGradient'})`}
+                fill={chartVariant === 'outlined' ? 'none' : (metrics.isProfit ? 'url(#profitGradient)' : 'url(#lossGradient)')}
+                stroke={chartVariant === 'outlined' ? (metrics.isProfit ? '#10b981' : '#ef4444') : 'none'}
+                strokeWidth={chartVariant === 'outlined' ? 3 : 0}
+                filter={chartVariant === 'glow' ? 'url(#glow)' : 'none'}
                 rx="4"
                 className="transition-all duration-500 ease-out"
               />
@@ -374,6 +386,26 @@ export default function TradeSessionsManager({
                 </>
               )}
             </svg>
+          </div>
+
+          {/* Chart Style Variants */}
+          <div className="w-full mt-6 p-4 bg-[#1a1f2e]/50 border border-gray-800 rounded-xl">
+            <h4 className="text-[10px] uppercase font-black text-gray-500 tracking-wider mb-3">Chart Style Variants</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {(['solid', 'outlined', 'glow', 'gradient'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setChartVariant(v)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all border ${
+                    chartVariant === v
+                      ? 'bg-purple-500 border-purple-400 text-white shadow-lg shadow-purple-500/20'
+                      : 'bg-[#0f1419] border-gray-800 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  {v.replace('gradient', 'Gradient').replace('glow', 'Glow Effect').replace('solid', 'Solid Fill').replace('outlined', 'Outlined')}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -454,6 +486,17 @@ export default function TradeSessionsManager({
             </div>
           </div>
 
+          <div className="mt-2">
+            <button
+              onClick={onAddSession}
+              className="w-full py-3 bg-[#0f1419] hover:bg-gray-800 border border-gray-700 text-gray-400 rounded-xl transition-all flex items-center justify-center gap-2 font-bold text-xs"
+              title="Add Session"
+            >
+              <Plus className="w-4 h-4" />
+              Add Session
+            </button>
+          </div>
+
           <div className="flex flex-col min-h-[240px]">
             <div className="flex items-center justify-between mb-3 px-1">
               <h4 className="text-white font-bold text-xs uppercase tracking-tight">History ({currentSessionNumber}/{maxSessions})</h4>
@@ -522,16 +565,6 @@ export default function TradeSessionsManager({
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="pt-4 mt-4 border-t border-gray-800/50 flex justify-end">
-        <button
-          onClick={onAddSession}
-          className="p-3 bg-[#0f1419] hover:bg-gray-800 border border-gray-700 text-gray-400 rounded-xl transition-colors"
-          title="Add Session"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
       </div>
     </div>
   );
