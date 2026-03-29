@@ -14,6 +14,15 @@
 
 ## Recent Changes (chronological)
 
+### Asset Normalization Single Source of Truth (2026-03-21)
+- **Unified Normalization:** Consolidated 4 separate implementations into canonical utilities (`asset_utils.py` for backend, `assetUtils.js` for frontend).
+- **Indicators Cache Fix:** Applied `normalize_asset` at the indicator route entry to prevent cache thrashing.
+- **History Utility Hardening:** Fixed filename base divergence in `history_utils.py`.
+- **Alert Dispatcher Fix:** Implemented deterministic "exact match wins" logic for asset folder mapping.
+- **Frontend Consolidation:** Replaced local `normalizeAsset` duplicates in `marketStore.js` and `TickerTape.jsx` with shared imports.
+- **Defensive UI Labels:** Added normalization guard to `formatAssetLabel` in `ChartContainer.jsx`.
+- **API Symbol Context:** Maintained separate Context 2 (`_normalize_asset_symbol`) for PocketOption API compatibility while cross-referencing documentation.
+
 ### Indicator Stack Optimization & Plan Closure (14-03-2026)
 - Completed implementation of the remaining item in `Indicator_Fixes_Optimizations_Plan_2026-03-05.md`:
   - **OPT-1** (`backend/services/gateway/routes/indicators.py`) migrated from subprocess-based execution to in-process pipeline execution.

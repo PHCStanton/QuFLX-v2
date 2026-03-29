@@ -18,13 +18,15 @@ const formatPriceValue = (price) => {
 // Convert a raw asset key (e.g. 'AUDUSDOTC' or 'AUD/USD OTC') into a readable label.
 const formatAssetLabel = (asset) => {
   if (!asset || typeof asset !== 'string') return '';
+  // Normalize first to ensure consistent input format
+  const normalized = asset.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   // Already formatted with slash/space — use as-is
   if (asset.includes('/') || asset.includes(' ')) return asset.toUpperCase();
   // Detect OTC suffix
-  const isOtc = asset.toUpperCase().endsWith('OTC');
-  const base = isOtc ? asset.slice(0, -3) : asset;
+  const isOtc = normalized.endsWith('OTC');
+  const base = isOtc ? normalized.slice(0, -3) : normalized;
   // Split 6-char forex pair (e.g. AUDUSD → AUD/USD)
-  const clean = base.toUpperCase().replace(/[^A-Z]/g, '');
+  const clean = base.replace(/[^A-Z]/g, '');
   const formatted = clean.length >= 6
     ? `${clean.slice(0, 3)}/${clean.slice(3)}`
     : clean;

@@ -27,7 +27,3 @@ def parse_script_json(stdout: str) -> Dict[str, Any]:
             pass
             
     return {"ok": False, "error": f"Failed to parse script output as JSON: {stdout[:200]}..."}
-
-def normalize_asset_name(asset: str) -> str:
-    """Deprecated: Use normalize_asset instead."""
-    return normalize_asset(asset)

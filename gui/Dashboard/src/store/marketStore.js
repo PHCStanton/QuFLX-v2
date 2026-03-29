@@ -4,6 +4,7 @@ import { validateMarketData } from '../utils/validators';
 import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 import { getApiBaseUrl } from '../api/apiBase';
 import { normalizeTimestamp } from '../utils/time';
+import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
 import alertSignalSound from '../assets/Sounds/TopGun_Clip_Music_Voice.mp3';
 
 const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
@@ -33,11 +34,6 @@ const writeStringToStorage = (key, value) => {
 };
 
 const initialLastAnnotatedScreenshotDataUrl = readStringFromStorage(LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY);
-
-const normalizeAsset = (asset) => {
-  if (!asset) return '';
-  return String(asset).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-};
 
 const uniq = (arr) => Array.from(new Set((arr || []).filter(Boolean)));
 

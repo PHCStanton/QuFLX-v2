@@ -116,6 +116,7 @@ const defaultSettings = {
     showIndicatorPriceLabels: true,
     showChartTooltip: true,
     showChartWatermark: true,
+    visibleOscillators: { rsi: true, macd: true, stoch: true, cci: true },
   },
   ai: {
     responseVerbosity: 'balanced',
@@ -192,6 +193,11 @@ const sanitizeSettingsForBackend = (settings) => {
 
 const normalizeSettings = (settings) => {
   const s = settings && typeof settings === 'object' ? settings : {};
+
+  // Ensure analysis.visibleOscillators exists and is an object
+  if (s.analysis && (!s.analysis.visibleOscillators || typeof s.analysis.visibleOscillators !== 'object')) {
+    s.analysis.visibleOscillators = { ...defaultSettings.analysis.visibleOscillators };
+  }
 
   const merged = {
     ...defaultSettings,

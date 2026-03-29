@@ -31,6 +31,9 @@ class AnalysisSettings(BaseModel):
     chartPrecision: int = Field(5, ge=0, le=8)
     autoLoadIndicators: bool = False
     dataSourceMode: str = "history_and_streaming"
+    visibleOscillators: Dict[str, bool] = Field(
+        default_factory=lambda: {"rsi": True, "macd": True, "stoch": True, "cci": True}
+    )
 
 class AISettings(BaseModel):
     responseVerbosity: str = "balanced"

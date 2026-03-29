@@ -1,9 +1,5 @@
 import { TrendingUp, TrendingDown } from 'lucide-react';
-
-const normalizeAsset = (asset) => {
-  if (!asset) return '';
-  return String(asset).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-};
+import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
 
 const formatPrice = (price) => {
   if (!Number.isFinite(price)) return '--';

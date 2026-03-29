@@ -17,7 +17,11 @@ def _normalize_asset_symbol(asset: str) -> str:
       - 'AUDCHFOTC'     → 'AUDCHF_otc'  (QuFLX normalized display format)
       - 'AUDCHF_otc'    → 'AUDCHF_otc'  (already correct)
       - 'audchf_otc'    → 'AUDCHF_otc'  (wrong case variant)
-      - '#AAPL_otc'     → '#AAPL_otc'   (stock with # prefix)
+      - '#AAPL_otc'     → '#AAPL_otc'   (stock with # prefix preserved)
+
+    NOTE: This is the Context 2 normalizer (PocketOption API format).
+    For internal/canonical normalization, see normalize_asset() in
+    backend/utils/asset_utils.py (Context 1).
     """
     if not asset:
         return ""

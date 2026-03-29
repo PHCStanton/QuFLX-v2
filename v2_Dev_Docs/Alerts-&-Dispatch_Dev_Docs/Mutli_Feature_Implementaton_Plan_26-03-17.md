@@ -12,8 +12,8 @@ WARNING
 
 Q8B (Auto-Trade via SSID) is intentionally excluded from this plan. It requires a dedicated safety architecture review and paper-trade mode before implementation.
 
-Proposed Changes
-Q2 — Tick Flush Threshold + Stale Data Improvements (Critical)
+## Proposed Changes
+**Q2 — Tick Flush Threshold + Stale Data Improvements (Critical)**
 Reduces cold-start latency and adds graceful handling when data is stale.
 
 [MODIFY] 

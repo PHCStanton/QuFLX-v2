@@ -25,11 +25,10 @@ def persist_history_csv(asset: str, timeframe_min: int, candles: List[Dict[str, 
     # Assuming this util is in backend/utils/, project root is 2 levels up
     root = Path(__file__).resolve().parents[2]
     
-    # Directory name (canonical)
+    # Canonical normalize — used for both directory name AND filename base
+    # Single source of truth; no split needed.
     asset_clean = normalize_asset(asset)
-    
-    # Asset base name for filename
-    asset_base = normalize_asset(asset.split("(")[0])
+    asset_base = asset_clean
     
     # Asset type
     asset_type = "otc" if "otc" in asset.lower() else "fx"

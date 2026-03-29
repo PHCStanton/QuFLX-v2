@@ -21,6 +21,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
 
 from backend.utils.history_utils import get_recent_history_file
+from backend.utils.asset_utils import normalize_asset
 from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
 
 router = APIRouter()
@@ -248,6 +249,8 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
     asset = payload.get("asset")
     if not asset:
         raise HTTPException(status_code=400, detail="asset required")
+    # Normalize immediately — ensures consistent cache keys regardless of input format
+    asset = normalize_asset(asset)
 
     timeframe = payload.get("timeframe", "1m")
     indicators = payload.get("indicators", [])   # accepted for API compat, not used to filter

@@ -972,17 +972,23 @@ class OTCDispatcher:
                     raw_name = item.name
                     norm_name = normalize_asset(raw_name)
                     
-                    # Preference: Exact match folder name wins over underscored version if both exist
-                    if norm_name in self.asset_folder_map:
-                        if raw_name != norm_name:
-                             continue # Keep the exact match one
-
                     # Check if any .csv exists and ignore LEGACY
                     csvs = [f for f in item.glob("*.csv") if "LEGACY" not in f.name]
-                    if csvs:
-                        if norm_name not in found_normalized:
-                            found_normalized.append(norm_name)
+                    if not csvs:
+                        continue
+
+                    # Preference: Exact match wins over underscored variant if both exist on disk
+                    if norm_name in self.asset_folder_map:
+                        if raw_name == norm_name:
+                            # Exact match takes precedence — update to the better one
+                            self.asset_folder_map[norm_name] = raw_name
+                            logger.debug(f"Asset folder conflict resolved: {norm_name} → {raw_name} (exact match)")
+                        # else: keep existing entry (underscored variant already wins)
+                    else:
                         self.asset_folder_map[norm_name] = raw_name
+
+                    if norm_name not in found_normalized:
+                        found_normalized.append(norm_name)
                         
         except Exception as e:
             logger.error(f"Asset Scan Error: {e}")

@@ -2,19 +2,20 @@ import re
 
 def normalize_asset(asset: str) -> str:
     """
-    Canonical asset normalization - use everywhere.
+    Canonical asset normalization - use everywhere for internal keys.
     Removes all non-alphanumeric characters and converts to uppercase.
-    
+
     Example: 'EUR/USD (OTC)' -> 'EURUSDOTC'
+    Example: 'EURUSD_otc'   -> 'EURUSDOTC'
+
+    NOTE: Stock symbols with '#' prefix (e.g. '#AAPL_otc') will have
+    the '#' stripped → 'AAPOTC'. This is intentional for internal key
+    consistency. The SSID executor's _normalize_asset_symbol() handles
+    the '#' prefix separately for PocketOption API calls.
     """
     if not asset:
         return ""
-    import re
     return re.sub(r"[^A-Za-z0-9]", "", str(asset)).upper()
-
-def normalize_asset_name(asset: str) -> str:
-    """Deprecated: Use normalize_asset instead."""
-    return normalize_asset(asset)
 
 def safe_filename(name: str) -> str:
     """

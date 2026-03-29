@@ -48,6 +48,8 @@ async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
     Fetch historical candle data for a specific asset and timeframe from local CSV.
     Supports both legacy {timeframe}.csv and new unified timestamp-based filenames.
     """
+    # Normalize asset to canonical internal format for consistent directory resolution
+    asset = normalize_asset(asset)
     logger.info(f"HISTORY: Fetching history for asset={asset}, timeframe={timeframe}")
     csv_path = get_recent_history_file(asset, timeframe)
     

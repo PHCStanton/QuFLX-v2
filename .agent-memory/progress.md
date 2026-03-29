@@ -129,6 +129,7 @@
 - [x] Asset label normalization: `EURUSD_otc` → `EURUSDOTC` (UI display)
 - [x] Asset dropdown sorted by payout percentage (descending)
 - [x] Asset selection synchronized across panels
+- [x] Single Source of Truth implementation: consolidated 4+ divergent normalization paths into `backend/utils/asset_utils.py` and `gui/Dashboard/src/utils/assetUtils.js`.
 
 ## Phase 5.10: Strategy Lab Integration ✅
 - [x] `StrategyLabPanel.jsx` — CSV upload, file management, regime/entry-signal analysis
