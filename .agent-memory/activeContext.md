@@ -1,10 +1,29 @@
 # Active Context
 
-## Current Focus (as of 14-03-2026)
-- **Indicator Fixes & Optimizations Plan (2026-03-05):** Core implementation is now complete, including OPT-1 architecture refactor (in-process indicator calculation).
-- **Indicator API Performance:** `POST /api/v1/indicators` now runs in-process via `asyncio.to_thread()` with per-asset DataFrame caching (no subprocess spawning).
-- **Verification:** Backend regression suite passed after refactor (`127/127` tests passing in `backend/tests/`).
-- **Next Priorities:** Oscillator pane polish (visibility persistence), Profile import/export round-trip UX, AI TradingContext hardening.
+## Current Focus (as of 29-03-2026)
+- **Data Collection & Persistence Refactor (2026-03-29):** Forensic report and full implementation plan compiled. No code changes made yet — plan is ready for phase-by-phase execution.
+- **Plan Location:** `v2_Dev_Docs/History_Handeling/Data_Collection_Persistence_Refactor_Plan_26-03-29.md`
+- **Report Location:** `@reports_2026-03/Data_Collection_Persistence_Refactor_Report_26-03-29.md`
+- **Status:** Awaiting user command `"Proceed with Phase 0"` or `"Proceed with Phase 1"` to begin implementation.
+
+### Data Persistence Refactor — Plan Summary (29-03-2026)
+**Root Cause:** Every history load spawns a new Python subprocess that creates a new Selenium/Chrome DevTools connection and destructively consumes Chrome performance logs — competing with the running CollectorService. This causes intermittent failures after the first 1-2 requests.
+
+**Solution:** 7-phase plan to:
+1. Create `backend/utils/data_store.py` — Single Source of Truth for all data path resolution and read/write (replaces scattered `history_utils.py` functions)
+2. Redirect all persistence to `data/supabase_migration_data/candles/{ASSET}_{TF}.csv` (one file per asset+timeframe, append-only, deduped by timestamp, ascending sort)
+3. Refactor `bootstrap_history()` to in-process `asyncio.to_thread()` — eliminates subprocess and Chrome log contention
+4. Update all consumers (`indicators.py`, `ai.py`, `strategy.py`, `collector/main.py`, `history_collector.py`) to use `data_store`
+5. Replace `history_utils.py` with thin deprecation wrappers for backward compatibility
+6. Add frontend chart persistence — `historyCandles[asset]` cache survives asset switches; no re-bootstrap on switch-back
+7. Full verification suite with 18+ unit tests, integration script, and multi-agent final review
+
+**Key Design Decisions:**
+- Schema is Supabase-ready: each CSV maps directly to a future `COPY FROM` import
+- Supports all 8 timeframes: 1M, 3M, 5M, 15M, 30M, 1H, 4H, 1D
+- Session tracking via `sessions/sessions.jsonl` (JSONL, one record per bootstrap)
+- Atomic writes (temp file + rename) prevent partial CSV corruption
+- `_get_shared_driver()` reuses the collector's existing Chrome connection — no new Selenium session
 
 ### Architecture Review Checkpoint (14-03-2026)
 - Confirmed `RiskManagerPanel.jsx` and `CalendarJournalPanel.jsx` remain placeholder implementations.
@@ -142,9 +161,25 @@
 - `backend/scripts/otc_alert_dispatch.py` — Alert Dispatcher with MarketScanner
 
 ## Next Steps
+
+### 🔴 IMMEDIATE — Data Collection & Persistence Refactor (Plan Ready)
+Issue command `"Proceed with Phase 0"` to begin. Phases must be executed sequentially with @Reviewer sign-off between each.
+
+| Phase | Description | Command to Start |
+|-------|-------------|-----------------|
+| Phase 0 | Directory bootstrap (`data/supabase_migration_data/`) | `"Proceed with Phase 0"` |
+| Phase 1 | Create `backend/utils/data_store.py` + unit tests | `"Proceed with Phase 1"` |
+| Phase 2 | Refactor `history.py` — in-process bootstrap, no subprocess | `"Proceed with Phase 2"` |
+| Phase 3 | Update all backend consumers to use `data_store` | `"Proceed with Phase 3"` |
+| Phase 4 | Deprecate `history_utils.py` (thin wrappers) | `"Proceed with Phase 4"` |
+| Phase 5 | Frontend chart persistence + retry logic | `"Proceed with Phase 5"` |
+| Phase 6 | Verification & hardening (regression + integration tests) | `"Proceed with Phase 6"` |
+
+### Backlog (Post-Refactor)
 1. **Oscillator pane polish** — toggle visibility per pane, persist visibility pref in settings.
 2. **Profile UX** — import/export profile JSON (round-trip with Export Config).
 3. **AI TradingContext hardening** — enforce strict Pydantic schema + size limits on `/api/v1/ai/ask`.
 4. **Risk Manager Panel** — currently a placeholder (`RiskManagerPanel.jsx`), needs implementation.
 5. **Calendar & Journal** — currently a placeholder (`CalendarJournalPanel.jsx`), needs implementation.
 6. **Comprehensive integration tests** — especially for SSID service, profile sync, and trading flow.
+7. **Alert Dispatcher Q2 improvements** — CHUNK_SIZE 1000→200, stale-data log throttling (per `Mutli_Feature_Implementaton_Plan_26-03-17.md`).

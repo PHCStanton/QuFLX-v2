@@ -1,4 +1,22 @@
-## Previous Conversation Condenced
+## LATEST TASK MESSAGE:
+The implementation plan has been compiled and saved to:
+
+__`v2_Dev_Docs/History_Handeling/Data_Collection_Persistence_Refactor_Plan_26-03-29.md`__
+
+The plan is a complete, phase-gated implementation document derived from the forensic report and all source code reviewed in this session. It covers 7 phases:
+
+- __Phase 0__ — Directory bootstrap for `data/supabase_migration_data/` (5 min, zero risk)
+- __Phase 1__ — New `backend/utils/data_store.py` as the Single Source of Truth, with full unit test suite (`test_data_store.py`) covering 18+ test cases including upsert deduplication, atomic writes, session logging, and timeframe conversion
+- __Phase 2__ — `history.py` refactored to in-process bootstrap via `asyncio.to_thread()` (eliminates the subprocess/Chrome log contention root cause), with session tracking and structured 503 when Chrome is not connected
+- __Phase 3__ — All 5 backend consumers (`indicators.py`, `ai.py`, `strategy.py`, `collector/main.py`, `history_collector.py`) updated to use `data_store` directly
+- __Phase 4__ — `history_utils.py` replaced with thin deprecation wrappers for backward compatibility
+- __Phase 5__ — Frontend chart persistence in `marketStore.js` (cache-hit path skips bootstrap on asset switch-back) and `useTickAggregation.js` (skip chart clear when cached data exists, improved timeout message with actionable user guidance)
+- __Phase 6__ — Full verification suite including regression tests, integration script, multi-asset sequential loading, and final multi-agent review per `PHASE_REVIEW_PROTOCOL.md`
+
+Each phase includes exact code snippets (FIND/REPLACE format), verification commands, and a mandatory @Reviewer gate before proceeding. No code changes are made until you issue an explicit `"Proceed with Phase 0"` command.
+
+
+## MORE CONTEXT ON CURRENT TASK
 <condense>
 <context>
 1. Previous Conversation:
@@ -176,353 +194,9 @@
 </condense>
 
 
-# 🔍 Forensic Investigation Report: History Candle Loading Failures
-**Date:** 2026-03-29 | **Delegated Agents:** @Investigator, @Debugger, @Backend_Specialist
 
----
 
-## Executive Summary
-
-The history candle loading pipeline has **significant architectural bottlenecks** that explain the intermittent failures you're experiencing. The core issue is that **every history load spawns a new subprocess** that must attach to Chrome via Selenium, intercept WebSocket frames, match the asset, parse candles, save CSV, and return — all within a tight timeout window. This is inherently fragile and explains why it works "1-2 times after restart" then fails.
-
-The previous forensic report (Jan 6) identified the race condition correctly, and the **frontend side was properly fixed** (bootstrap is now awaited, no more polling). However, the **backend subprocess architecture remains the fundamental bottleneck** and has not been addressed.
-
----
-
-## 🔴 CRITICAL FINDINGS
-
-### Finding 1: CRITICAL — Subprocess-per-Request Architecture is the Root Cause
-**Files:** `history.py:bootstrap_history()` → `runner.py` → `history_collector.py`
-
-**The Problem:**
-Every single history load request:
-1. Spawns a **new Python subprocess** (`subprocess.run()`)
-2. That subprocess imports Selenium, creates a new Chrome DevTools connection
-3. Attaches to Chrome via `debuggerAddress: 127.0.0.1:9222`
-4. Creates a `WebSocketInterceptor` that calls `driver.get_log('performance')`
-5. Polls for history events in a loop (every 0.5s)
-6. Parses, saves CSV, returns JSON via stdout
-
-**Why this fails intermittently:**
-- **Chrome performance logs are consumed destructively** — `driver.get_log('performance')` returns logs and **clears them**. If the main collector service is also running and consuming logs, the subprocess may get an empty buffer.
-- **Selenium connection contention** — Multiple Selenium sessions attached to the same Chrome instance via port 9222 compete for the DevTools protocol. The first connection after a restart gets clean logs; subsequent ones may get stale or empty buffers.
-- **Subprocess startup overhead** — Each subprocess takes 2-5 seconds just to import modules and attach to Chrome. With a `duration` of 1.5-3s (from settings `historyWaitTime`), the subprocess may timeout before it even starts intercepting.
-
-**Evidence from your symptoms:**
-- "Works 1-2 times after restart" → First subprocess gets fresh Chrome logs
-- "Then struggles" → Subsequent subprocesses find empty log buffers (already consumed)
-- "History load timeout - forcing isLoading(false)" → 10-second safety timeout in `useTickAggregation.js:156` fires because the subprocess never returns candles
-
-### Finding 2: HIGH — Performance Log Contention Between Collector and History Subprocess
-**Files:** `backend/services/collector/interceptor.py`, `capabilities_v2/history_collector.py`
-
-Both the **main collector service** (running continuously for live ticks) and the **history subprocess** (spawned per-request) create their own `WebSocketInterceptor` instances that call `driver.get_log('performance')`. 
-
-Chrome's performance log is a **single FIFO queue** — once consumed by one reader, those entries are gone. This means:
-- If the collector service reads the logs first → history subprocess gets nothing
-- If the history subprocess reads first → collector misses ticks temporarily
-- After a gateway restart, the collector may not be running yet → history subprocess gets the logs (explains "works after restart")
-
-### Finding 3: HIGH — CSV File Accumulation (190+ files for one asset)
-**Location:** `data/data_output/history/AUDNZDOTC/`
-
-There are **190+ CSV files** for a single asset, many created seconds apart. Each bootstrap attempt creates a new file. The `get_recent_history_file()` function must glob and sort all of these every time. This is:
-- A performance drag (filesystem I/O on every request)
-- A sign that the bootstrap is being called repeatedly (user retrying)
-- Wasted disk space
-
-### Finding 4: HIGH — History CSV Data is Reverse-Sorted (Newest First)
-**Location:** `data/data_output/history/AUDNZDOTC/AUDNZDOTC_otc_1m_2026_03_27_17_24_07.csv`
-
-The CSV timestamps go from `1774638900` (newest) down to `1774609500` (oldest). The data is **reverse chronological**. However:
-- `history.py:get_history()` uses `df.tail(limit)` which returns the **last N rows** — these are the OLDEST candles
-- `prepareChartData()` sorts by time ascending, so it will display correctly
-- But `df.tail(limit)` is semantically wrong — it should be `df.head(limit)` for reverse-sorted data, or the data should be sorted first
-
-This means you may be getting **stale candles** (the oldest ones) instead of the most recent ones when `limit < total_rows`.
-
-### Finding 5: MEDIUM — The `loadHistory` Quick-Check Path Works, But Bootstrap Path is Fragile
-**Location:** `marketStore.js:loadHistory()`
-
-The flow is:
-1. **Quick check** (`GET /history/{asset}`) — looks for existing CSV → ✅ Works reliably when CSV exists
-2. **Bootstrap** (`POST /bootstrap-history`) — spawns subprocess → ❌ Fragile due to Finding 1
-
-When you already have a CSV file for the asset, Step 1 succeeds immediately and the chart loads. The problem only manifests when:
-- No CSV exists yet (first time for an asset)
-- You want fresh data (but the system always uses the most recent existing CSV)
-
-### Finding 6: MEDIUM — Safety Timeout in useTickAggregation is a Symptom, Not the Cause
-**Location:** `useTickAggregation.js:155-161`
-
-```javascript
-// Safety timeout to prevent infinite loading state
-if (isLoading) {
-  timeoutId = setTimeout(() => {
-    console.warn('History load timeout - forcing isLoading(false)');
-    setIsLoading(false);
-  }, 10000);
-}
-```
-
-This 10-second timeout fires because:
-1. `setIsLoading(true)` is set when asset changes (line 35)
-2. The history load effect (line 44) waits for `historyCandles` and `historyStatus` to update
-3. If the bootstrap subprocess hangs or returns empty candles, `historyStatus` stays at `'loading'`
-4. After 10 seconds, the safety timeout forces `isLoading(false)` — this is the console message you see
-
----
-
-## 📊 Data Flow Analysis (Current State)
-
-```
-User clicks asset → setSelectedAsset()
-  ↓
-marketStore.loadHistory(asset)
-  ↓
-Step 1: GET /history/{asset} → get_recent_history_file() → glob 190+ CSVs → sort → read latest
-  ↓ (if 404)
-Step 2: POST /bootstrap-history → subprocess.run(runner.py history_collector)
-  ↓
-runner.py → Selenium attach to Chrome:9222 → WebSocketInterceptor
-  ↓
-interceptor.fetch_history_events() → driver.get_log('performance') ← CONTENTION POINT
-  ↓
-Parse candles → save CSV → return JSON via stdout
-  ↓
-parse_script_json(stdout) → return candles to frontend
-  ↓
-useTickAggregation → prepareChartData() → candleSeries.setData()
-```
-
----
-
-## 🛠️ Recommendations
-
-### Option A: **In-Process History Loading (RECOMMENDED — Eliminates Subprocess)**
-**Effort:** 4-6 hours | **Risk:** Low | **Impact:** Eliminates root cause
-
-Instead of spawning a subprocess, load history **in-process** within the gateway, similar to how `POST /api/v1/indicators` was refactored (OPT-1 from the indicator plan).
-
-**Changes:**
-1. **`history.py:bootstrap_history()`** — Replace `subprocess.run()` with direct `HistoryCollector` invocation via `asyncio.to_thread()` (same pattern as indicators route)
-2. **Share the Chrome driver** — The gateway already has access to Chrome via the collector service. Pass the existing driver reference instead of creating a new Selenium session
-3. **Dedicated history log buffer** — Instead of competing with the collector for `get_log('performance')`, use the collector's existing interceptor instance to fetch history events
-4. **CSV cleanup** — Add a retention policy (keep only last 5 CSVs per asset per timeframe)
-
-### Option B: **Gateway-Level History Cache with Collector Integration**
-**Effort:** 6-8 hours | **Risk:** Low-Medium | **Impact:** Most robust long-term
-
-Instead of intercepting WebSocket frames for history, leverage the fact that the **collector service is already running and intercepting all WebSocket traffic**.
-
-**Changes:**
-1. **Collector publishes history events to Redis** — When the interceptor sees a history payload, publish it to a Redis channel (`history:{asset}`)
-2. **Gateway subscribes to history channel** — When bootstrap is requested, gateway subscribes and waits for the history event
-3. **No subprocess needed** — The collector already has the Chrome connection and is already parsing logs
-4. **Frontend triggers asset click detection** — Gateway emits a Socket.IO event telling the collector to watch for a specific asset's history payload
-
-### Option C: **Quick Fixes (Stabilization Only)**
-**Effort:** 2-3 hours | **Risk:** Medium | **Impact:** Reduces failures but doesn't eliminate root cause
-
-1. **Increase `historyWaitTime` default** from 1.5s to 5s
-2. **Add retry logic** in `loadHistory()` — retry bootstrap up to 3 times with exponential backoff
-3. **Fix `df.tail()` bug** — Sort CSV data before taking tail, or use head for reverse-sorted data
-4. **Add CSV cleanup** — Delete old CSVs on successful bootstrap
-5. **Improve the safety timeout message** — Show a toast instead of just console.warn
-
----
-
-## 🎯 Recommended Implementation Plan (Option A + Quick Fixes)
-
-### Phase 1: Quick Stabilization (Immediate)
-1. Fix `df.tail()` → sort data before slicing
-2. Add retry with backoff in `loadHistory()`
-3. Improve loading state feedback (toast on timeout)
-4. CSV cleanup (keep last 5 per asset)
-
-### Phase 2: In-Process History Loading (Core Fix)
-1. Refactor `bootstrap_history()` to use in-process `HistoryCollector`
-2. Share Chrome driver from collector service context
-3. Use collector's existing interceptor (no log contention)
-4. Add proper timeout handling with structured error codes
-
-### Phase 3: Verification & Hardening
-1. Test with multiple assets in sequence
-2. Test after gateway restart
-3. Test with collector running simultaneously
-4. Verify CSV data ordering
-
----
-
-## One clarifying question: 
-Is the **collector service** (the one that streams live ticks) always running when you attempt history loading, or do you sometimes try to load history before starting the stream?
-
-ANSWER:
-Not always, but sometimes. I should be able to do both or have Warning notification popup to Infom the User of Correct Method.
-
-## USER PROMPT:
-Ok, I backedup the History Candles that are saved in @data\data_output\history and moved the files to my local disk. So it's not in the project's Root any more. 
-I would like to make provision from this point forward to save the data in an easy to migrate format that can be imported into supabase later when we move our data operations at a later stage of the project. But for now I still want it local
-So you can streamline the fetching process and structure the filling optimally for chart retrieval and fetching i.e. structure an optimal architechture for this process.
-
-Please redirect the data location to @data\supabase_migration_data where I created this folder. 
-We must also keepin mind that the streaming Tick need to somehow be linked to a specific payload of candles if at all possible when designing and creating this architechture.
-
-Provide some feedback on the above proposal and tell me your best suggestions.
-
-We can then continue with setting up a detailed report and implementation plan before making any modifications.
-
-## AGENT RECOMMENDATONS:
-
-
-# 🏗️ Architecture Proposal: Supabase-Ready History Data Pipeline
-
-Great decisions — moving to a structured, migration-ready format now will save enormous effort later. Here's my analysis and recommendations:
-
----
-
-## 📋 Feedback on Your Proposal
-
-### ✅ What's Excellent
-1. **`data/supabase_migration_data/`** — Clean separation from the old chaotic `data_output/history/` with its 190+ files per asset
-2. **Supabase-ready format** — Designing for migration now means zero data transformation later
-3. **Linking ticks to candle payloads** — This is the key insight for data integrity and is absolutely achievable
-
-### ⚠️ Considerations
-1. **Supabase uses PostgreSQL** — so our local format should mirror a relational schema (tables → CSV/JSON files that map 1:1 to future Supabase tables)
-2. **One file per asset per timeframe** (append model) vs. the current "new file every request" model — this is the single biggest improvement we can make
-3. **Tick-to-candle linkage** — We can achieve this via a `session_id` that groups a history payload capture with its subsequent tick stream
-
----
-
-## 🎯 Proposed Data Architecture
-
-### Directory Structure
-```
-data/supabase_migration_data/
-├── candles/                          # ← Maps to future `candles` Supabase table
-│   ├── AUDNZDOTC_1m.csv             # One file per asset+timeframe (append-only)
-│   ├── AUDNZDOTC_5m.csv
-│   ├── EURUSDOTC_1m.csv
-│   └── ...
-├── ticks/                            # ← Maps to future `ticks` Supabase table
-│   ├── AUDNZDOTC_2026-03-29.csv     # One file per asset per day (append-only)
-│   └── ...
-├── sessions/                         # ← Maps to future `collection_sessions` table
-│   └── sessions.jsonl                # JSONL (one JSON object per line, easy to import)
-└── _metadata/                        # ← Local-only operational metadata
-    └── schema_version.json           # Schema version for migration tooling
-```
-
-### Schema Design (Supabase-Ready)
-
-#### `candles` table (one CSV per asset+timeframe)
-```csv
-timestamp,open,high,low,close,volume,session_id,source,created_at
-1774638900,1.18412,1.18454,1.18366,1.18454,97,sess_abc123,history_capture,2026-03-27T17:24:07Z
-1774638960,1.18454,1.18470,1.18440,1.18465,12,sess_abc123,tick_aggregation,2026-03-27T17:25:07Z
-```
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| `timestamp` | int (unix seconds) | Candle open time — **PRIMARY KEY** (with asset+tf) |
-| `open/high/low/close` | float | OHLC prices |
-| `volume` | float | Tick volume |
-| `session_id` | string | Links to collection session (tick↔candle linkage) |
-| `source` | enum | `history_capture` / `tick_aggregation` / `manual_import` |
-| `created_at` | ISO8601 | When this row was written |
-
-**Key design decisions:**
-- **Append-only, deduplicated by timestamp** — If a candle with the same timestamp exists, update it (upsert semantics)
-- **Sorted ascending** (fixes the reverse-sort bug from the old format)
-- **One file = one future Supabase table partition** — `AUDNZDOTC_1m.csv` → `WHERE asset='AUDNZDOTC' AND timeframe='1m'`
-
-#### `ticks` table (one CSV per asset per day)
-```csv
-timestamp,price,session_id,source
-1774638901.234,1.18420,sess_abc123,live_stream
-1774638901.567,1.18422,sess_abc123,live_stream
-```
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| `timestamp` | float (unix seconds, ms precision) | Tick time |
-| `price` | float | Tick price |
-| `session_id` | string | Links to the candle session |
-| `source` | string | `live_stream` / `history_replay` |
-
-**Tick-to-candle linkage:** Both share the same `session_id`. When you load history candles, a session is created. All subsequent ticks for that asset inherit the session ID until a new history load occurs.
-
-#### `sessions` metadata (JSONL)
-```json
-{"session_id":"sess_abc123","asset":"AUDNZDOTC","timeframe":"1m","started_at":"2026-03-27T17:24:07Z","candle_count":100,"source":"history_capture","status":"complete"}
-```
-
-### Why This Design is Optimal
-
-1. **Chart retrieval is O(1)** — Read one file, `df.tail(200)`, done. No globbing 190+ files.
-2. **Supabase migration** — Each CSV maps directly to a `COPY FROM` import. The `session_id` column becomes a foreign key.
-3. **Tick linkage** — `session_id` connects ticks to their parent candle payload. You can query "show me all ticks that contributed to this candle session."
-4. **Append-only** — No file proliferation. One file grows over time, deduped by timestamp.
-5. **Day-partitioned ticks** — Prevents tick files from growing unbounded. Easy to archive old days.
-
----
-
-## 🔧 Implementation Plan Overview
-
-### Phase 1: Data Layer Foundation
-- Create `data/supabase_migration_data/` directory structure
-- Create `backend/utils/data_store.py` — **Single Source of Truth** for all data path resolution
-  - `get_candle_path(asset, timeframe)` → `data/supabase_migration_data/candles/AUDNZDOTC_1m.csv`
-  - `get_tick_path(asset, date)` → `data/supabase_migration_data/ticks/AUDNZDOTC_2026-03-29.csv`
-  - `get_session_path()` → `data/supabase_migration_data/sessions/sessions.jsonl`
-  - Upsert/append functions with deduplication
-  - Session ID generation
-
-### Phase 2: History Loading Refactor (Fixes the Core Bug)
-- Refactor `bootstrap_history()` to **in-process execution** (no subprocess)
-- History candles written to new `candles/` format (append + dedup)
-- `get_history()` reads from new single-file-per-asset format
-- Session tracking for tick-candle linkage
-
-### Phase 3: Update All Consumers
-- `history.py` — Use new `data_store` for read/write
-- `indicators.py` — Use new `data_store` for CSV path resolution
-- `ai.py` — Use new `data_store` for history file lookup
-- `strategy.py` — Use new `data_store` for history file lookup
-- `history_collector.py` — Use new `data_store` for CSV save
-- `history_utils.py` — Deprecate old functions, redirect to `data_store`
-
-### Phase 4: Frontend Stabilization
-- Add retry with exponential backoff in `loadHistory()`
-- Improve loading state feedback (toast on timeout instead of just console.warn)
-- Fix the safety timeout to show actionable user message
-
-### Phase 5: Tick Integration
-- Collector service writes ticks to `ticks/` directory with session linkage
-- `appendCandle()` uses new upsert logic
-- Tick files partitioned by day
-
----
-
-## 📊 Files That Need Modification
-
-| File | Change Type | Description |
-|------|------------|-------------|
-| `backend/utils/data_store.py` | **NEW** | Central data path resolution + read/write |
-| `backend/utils/history_utils.py` | **MODIFY** | Redirect to `data_store`, deprecate old functions |
-| `backend/services/gateway/routes/history.py` | **MODIFY** | In-process bootstrap, new data paths |
-| `backend/services/gateway/routes/indicators.py` | **MODIFY** | Use `data_store` for CSV lookup |
-| `backend/services/gateway/routes/ai.py` | **MODIFY** | Use `data_store` for CSV lookup |
-| `backend/services/gateway/routes/strategy.py` | **MODIFY** | Use `data_store` for CSV lookup |
-| `capabilities_v2/history_collector.py` | **MODIFY** | Use `data_store` for save path |
-| `gui/Dashboard/src/store/marketStore.js` | **MODIFY** | Add retry logic, improve error handling |
-| `gui/Dashboard/src/hooks/useTickAggregation.js` | **MODIFY** | Better timeout feedback |
-| `gui/Dashboard/src/components/ChartWorkspaceOverlays.jsx` | **MODIFY** | Show actionable error messages |
-
----
-
-## 🤔 Questions Before We Proceed
+## 🤔 AGENT Questions Before We Proceed
 
 1. **Tick storage priority** — Do you want tick-level storage from day one, or should we focus on candles first and add tick persistence in a follow-up phase? (Tick files can grow large quickly)
 
@@ -534,7 +208,7 @@ timestamp,price,session_id,source
 
 Once you confirm the direction and answer the questions above, I'll produce a detailed implementation plan document in `v2_Dev_Docs/` with exact code snippets for each phase. Then we can toggle to Act mode to implement.
 
-## ANSWERS:
+## USER'S ANSWERS:
 1. We can focus on candle collection first. The streaming collector is currently working fine. So if we can keep it opperational until the candle collection is stable and improved.
 
 **IMPORTANT NOTE!!**   
