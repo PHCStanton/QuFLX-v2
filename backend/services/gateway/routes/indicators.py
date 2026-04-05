@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
 
-from backend.utils.history_utils import get_recent_history_file
+from backend.utils.data_store import get_candle_path
 from backend.utils.asset_utils import normalize_asset
 from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
 
@@ -28,8 +28,8 @@ router = APIRouter()
 logger = logging.getLogger("gateway.indicators")
 
 # ── In-memory DataFrame cache ────────────────────────────────────────────────
-# Key: asset (str)  →  Value: (csv_path_str, params_hash, result_df)
-# Invalidated when csv_path OR pipeline_params change.
+# Key: asset (str)  →  Value: (cache_key, params_hash, result_df)
+# Invalidated when cache_key (csv_path + mtime) OR pipeline_params change.
 # Fix 1: params_hash ensures parameter changes (e.g. EMA 16→20) always trigger
 # a fresh calculation instead of returning stale cached results.
 _df_cache: Dict[str, Tuple[str, str, pd.DataFrame]] = {}
@@ -42,16 +42,26 @@ def _params_hash(pipeline_params: Dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def _get_cache_key(csv_path: Path) -> str:
+    """Generate a cache key based on file path and modification time."""
+    try:
+        mtime = csv_path.stat().st_mtime
+        return f"{csv_path}:{mtime}"
+    except FileNotFoundError:
+        return f"{csv_path}:0"
+
+
 def _get_cached_df(asset: str, csv_path: Path, params_hash: str) -> Optional[pd.DataFrame]:
-    """Return cached result_df if BOTH csv_path AND params_hash match, else None."""
+    """Return cached result_df if BOTH cache_key AND params_hash match, else None."""
     cached = _df_cache.get(asset)
-    if cached and cached[0] == str(csv_path) and cached[1] == params_hash:
+    cache_key = _get_cache_key(csv_path)
+    if cached and cached[0] == cache_key and cached[1] == params_hash:
         return cached[2]
     return None
 
 
 def _set_cached_df(asset: str, csv_path: Path, params_hash: str, df: pd.DataFrame) -> None:
-    _df_cache[asset] = (str(csv_path), params_hash, df)
+    _df_cache[asset] = (_get_cache_key(csv_path), params_hash, df)
 
 
 def _invalidate_cache(asset: str) -> None:
@@ -285,8 +295,8 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
             timeframe_min = max(1, int(tf))
 
     # ── Locate history CSV ────────────────────────────────────────────────────
-    csv_path = get_recent_history_file(asset, timeframe_min)
-    if not csv_path:
+    csv_path = get_candle_path(asset, f"{timeframe_min}m")
+    if not csv_path or not csv_path.exists():
         raise HTTPException(
             status_code=404,
             detail=f"History not found for {asset} @ {timeframe_min}m",

@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 from backend.services.collector.connection import ChromeConnectionManager
 from backend.services.collector.interceptor import WebSocketInterceptor
 from backend.infrastructure.redis_client import RedisPublisher
-from backend.utils.history_utils import persist_history_csv
+from backend.utils.data_store import upsert_candles
 from backend.utils.asset_utils import normalize_asset
 
 # Configure logging
@@ -206,7 +206,13 @@ class CollectorService:
             if not candles_out:
                 continue
             try:
-                persist_history_csv(asset, timeframe_min, candles_out)
+                upsert_candles(
+                    asset=normalize_asset(asset),
+                    timeframe_str=f"{timeframe_min}m",
+                    candles=candles_out,
+                    session_id="collector_intercept",
+                    source="collector_intercept"
+                )
             except Exception as e:
                 logger.error(f"Failed to persist history for {asset}: {e}")
 

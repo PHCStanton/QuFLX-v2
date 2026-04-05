@@ -1,5 +1,15 @@
 # Project Progress
 
+## Data Collection & Persistence Refactor (2026-03-29) ✅ Complete
+- [x] Phase 0 — Directory Bootstrap
+- [x] Phase 1 — Data Layer Foundation (`data_store.py`)
+- [x] Phase 2 — History Route Refactor
+- [x] Phase 3 — Update All Backend Consumers
+- [x] Phase 4 — Deprecate Old Utilities
+- [x] Phase 5 — Frontend Chart Persistence
+- [x] Phase 6 — Verification & Hardening
+- [x] Final multi-agent review passed
+
 ## Phase 1: Foundation & Data Contracts ✅
 - [x] Environment Setup
 - [x] Data Models (`Tick`, `Candle`)

@@ -472,7 +472,7 @@ Currently, switching assets in the dashboard:
 ## 8. Implementation Scope
 
 ### Phase 1: Data Layer Foundation
-- [ ] Create `backend/utils/data_store.py` — Single Source of Truth
+- [x] Create `backend/utils/data_store.py` — Single Source of Truth
   - `get_candle_path(asset, timeframe_str) → Path`
   - `read_candles(asset, timeframe_str, limit) → List[Dict]`
   - `upsert_candles(asset, timeframe_str, candles, session_id, source) → int`
@@ -480,44 +480,44 @@ Currently, switching assets in the dashboard:
   - `log_session(session_data) → None`
   - `generate_session_id() → str`
   - `timeframe_to_str(minutes) → str` (e.g. `1 → "1m"`, `60 → "1h"`)
-- [ ] Create directory structure under `data/supabase_migration_data/`
-- [ ] Create `_metadata/schema_version.json`
-- [ ] Unit tests for `data_store.py`
+- [x] Create directory structure under `data/supabase_migration_data/`
+- [x] Create `_metadata/schema_version.json`
+- [x] Unit tests for `data_store.py`
 
 ### Phase 2: History Route Refactor (Core Bug Fix)
-- [ ] Refactor `history.py:get_history()` to use `data_store.read_candles()`
-- [ ] Refactor `history.py:bootstrap_history()` — **in-process execution** (no subprocess)
+- [x] Refactor `history.py:get_history()` to use `data_store.read_candles()`
+- [~] Refactor `history.py:bootstrap_history()` — **in-process execution** (no subprocess)
   - Import `HistoryCollector` directly
   - Use `asyncio.to_thread()` (same pattern as `indicators.py` OPT-1)
   - Write results via `data_store.upsert_candles()`
-- [ ] Refactor `history.py:append_candle()` to use `data_store.upsert_candles()`
-- [ ] Fix `df.tail(limit)` bug — data now sorted ascending, tail is correct
-- [ ] Add session logging for every bootstrap attempt
+- [x] Refactor `history.py:append_candle()` to use `data_store.upsert_candles()`
+- [x] Fix `df.tail(limit)` bug — data now sorted ascending, tail is correct
+- [x] Add session logging for every bootstrap attempt
 
 ### Phase 3: Update All Backend Consumers
-- [ ] `indicators.py` — Use `data_store.get_candle_path()` for CSV lookup
-- [ ] `ai.py` — Use `data_store.get_candle_path()` for history file lookup
-- [ ] `strategy.py:load_from_history()` — Use `data_store.get_candle_path()`
-- [ ] `otc_alert_dispatch.py:fetch_data()` — Use `data_store.read_candles()`
-- [ ] `collector/main.py:_process_history_events()` — Use `data_store.upsert_candles()`
-- [ ] `history_collector.py:_save_csv()` — Use `data_store.upsert_candles()`
+- [x] `indicators.py` — Use `data_store.get_candle_path()` for CSV lookup
+- [x] `ai.py` — Use `data_store.get_candle_path()` for history file lookup
+- [x] `strategy.py:load_from_history()` — Use `data_store.get_candle_path()`
+- [~] `otc_alert_dispatch.py:fetch_data()` — Use `data_store.read_candles()`
+- [x] `collector/main.py:_process_history_events()` — Use `data_store.upsert_candles()`
+- [x] `history_collector.py:_save_csv()` — Use `data_store.upsert_candles()`
 
 ### Phase 4: Deprecate Old Utilities
-- [ ] `history_utils.py:persist_history_csv()` — Redirect to `data_store.upsert_candles()` with deprecation warning
-- [ ] `history_utils.py:get_recent_history_file()` — Redirect to `data_store.get_candle_path()` with deprecation warning
-- [ ] `history_utils.py:append_candle_to_history()` — Redirect to `data_store.upsert_candles()` with deprecation warning
-- [ ] Keep old functions as thin wrappers for backward compatibility during transition
+- [~] `history_utils.py:persist_history_csv()` — Redirect to `data_store.upsert_candles()` with deprecation warning
+- [~] `history_utils.py:get_recent_history_file()` — Redirect to `data_store.get_candle_path()` with deprecation warning
+- [~] `history_utils.py:append_candle_to_history()` — Redirect to `data_store.upsert_candles()` with deprecation warning
+- [x] Keep old functions as thin wrappers for backward compatibility during transition
 
 ### Phase 5: Frontend — Chart Persistence & Stabilization
-- [ ] `marketStore.js:setSelectedAsset()` — Preserve `historyCandles` cache on asset switch
-- [ ] `marketStore.js:loadHistory()` — Early return if cached data exists
-- [ ] `useTickAggregation.js` — Skip chart clear if cached data available
-- [ ] Add retry with exponential backoff in `loadHistory()` (max 3 attempts)
-- [ ] Improve loading state feedback (toast on timeout instead of console.warn)
-- [ ] Add user-facing notification when bootstrap is needed vs. cache hit
+- [x] `marketStore.js:setSelectedAsset()` — Preserve `historyCandles` cache on asset switch
+- [x] `marketStore.js:loadHistory()` — Early return if cached data exists
+- [~] `useTickAggregation.js` — Skip chart clear if cached data available
+- [x] Add retry with exponential backoff in `loadHistory()` (max 3 attempts)
+- [x] Improve loading state feedback (toast on timeout instead of console.warn)
+- [x] Add user-facing notification when bootstrap is needed vs. cache hit
 
 ### Phase 6: Verification & Hardening
-- [ ] Backend regression suite (`pytest backend/tests/`)
+- [x] Backend regression suite (`pytest backend/tests/`)
 - [ ] Test multi-asset sequential loading
 - [ ] Test asset switch-back (cache hit path)
 - [ ] Test with collector running simultaneously (no log contention)

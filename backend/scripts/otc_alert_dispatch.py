@@ -56,14 +56,16 @@ load_dotenv(dotenv_path=ENV_PATH)
 
 # QuFLX utilities
 try:
-    from backend.utils.history_utils import get_recent_history_file
+    from backend.utils.data_store import read_candles
     from backend.utils.asset_utils import normalize_asset
+    from backend.utils.history_utils import get_recent_history_file
 except ImportError:
     # Fallback if PYTHONPATH is not set correctly
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.append(str(PROJECT_ROOT))
-    from backend.utils.history_utils import get_recent_history_file
+    from backend.utils.data_store import read_candles
     from backend.utils.asset_utils import normalize_asset
+    from backend.utils.history_utils import get_recent_history_file
 
 # Logging Setup
 LOG_DIR = PROJECT_ROOT / "system_LOGS" / "alert_dispatch"
@@ -958,37 +960,50 @@ class OTCDispatcher:
 
     def scan_available_assets(self) -> List[str]:
         """Scans local history directory for assets, populating normalized mapping."""
-        history_dir = PROJECT_ROOT / "data" / "data_output" / "history"
-        if not history_dir.exists():
-            return []
-        
         found_normalized = []
         try:
             # Clear old mapping
             self.asset_folder_map.clear()
             
-            for item in history_dir.iterdir():
-                if item.is_dir():
-                    raw_name = item.name
+            # 1. Check new data store first
+            new_history_dir = PROJECT_ROOT / "data" / "supabase_migration_data" / "candles"
+            if new_history_dir.exists():
+                for item in new_history_dir.glob("*_1m.csv"):
+                    raw_name = item.stem.replace("_1m", "")
                     norm_name = normalize_asset(raw_name)
                     
-                    # Check if any .csv exists and ignore LEGACY
-                    csvs = [f for f in item.glob("*.csv") if "LEGACY" not in f.name]
-                    if not csvs:
-                        continue
-
-                    # Preference: Exact match wins over underscored variant if both exist on disk
-                    if norm_name in self.asset_folder_map:
-                        if raw_name == norm_name:
-                            # Exact match takes precedence — update to the better one
-                            self.asset_folder_map[norm_name] = raw_name
-                            logger.debug(f"Asset folder conflict resolved: {norm_name} → {raw_name} (exact match)")
-                        # else: keep existing entry (underscored variant already wins)
-                    else:
-                        self.asset_folder_map[norm_name] = raw_name
-
+                    self.asset_folder_map[norm_name] = raw_name
                     if norm_name not in found_normalized:
                         found_normalized.append(norm_name)
+            
+            # 2. Fallback to old directory
+            history_dir = PROJECT_ROOT / "data" / "data_output" / "history"
+            if history_dir.exists():
+                for item in history_dir.iterdir():
+                    if item.is_dir():
+                        raw_name = item.name
+                        norm_name = normalize_asset(raw_name)
+                        
+                        if norm_name in found_normalized:
+                            continue
+                            
+                        # Check if any .csv exists and ignore LEGACY
+                        csvs = [f for f in item.glob("*.csv") if "LEGACY" not in f.name]
+                        if not csvs:
+                            continue
+
+                        # Preference: Exact match wins over underscored variant if both exist on disk
+                        if norm_name in self.asset_folder_map:
+                            if raw_name == norm_name:
+                                # Exact match takes precedence — update to the better one
+                                self.asset_folder_map[norm_name] = raw_name
+                                logger.debug(f"Asset folder conflict resolved: {norm_name} → {raw_name} (exact match)")
+                            # else: keep existing entry (underscored variant already wins)
+                        else:
+                            self.asset_folder_map[norm_name] = raw_name
+
+                        if norm_name not in found_normalized:
+                            found_normalized.append(norm_name)
                         
         except Exception as e:
             logger.error(f"Asset Scan Error: {e}")
@@ -1011,37 +1026,44 @@ class OTCDispatcher:
         try:
             # 1. Look for local history file
             # timeframe 1 = 1m
-            # Use raw folder name from map if possible
-            folder_name = self.asset_folder_map.get(asset, asset)
-            csv_path = get_recent_history_file(folder_name, 1)
+            required_limit = max(200, self.candle_count)
+            candles = await asyncio.to_thread(read_candles, asset, "1m", required_limit)
             
-            if csv_path and csv_path.exists():
-                import pandas as pd
-                # Run blocking I/O in thread
-                df = await asyncio.to_thread(pd.read_csv, csv_path)
-                if not df.empty:
-                    # Rename 'timestamp' to 'time' if needed to match dispatcher expectation
-                    if 'timestamp' in df.columns and 'time' not in df.columns:
-                        df = df.rename(columns={'timestamp': 'time'})
-                    
-                    # Request enough for EMA-165
-                    required_limit = max(200, self.candle_count)
-                    candles = df.tail(required_limit).to_dict('records')
-                    
-                    # Data Recency Check — skip stale files to prevent phantom alerts
-                    STALE_THRESHOLD = int(os.getenv("STALE_DATA_THRESHOLD_SECONDS", "300"))  # 5 min default
-                    if candles:
-                        last_ts = candles[-1].get('time', 0)
-                        now_ts = int(datetime.now().timestamp())
-                        age = now_ts - last_ts
-                        if age > STALE_THRESHOLD:
-                            logger.warning(f"Data for {asset} is STALE ({age}s old). Skipping scan.")
-                            return []  # Return empty → process_asset() exits early, no phantom alerts
-                        else:
-                            logger.debug(f"Data for {asset} recency: {age}s")
+            if not candles:
+                # Fallback to old history file
+                try:
+                    folder_name = self.asset_folder_map.get(asset, asset)
+                    csv_path = get_recent_history_file(folder_name, 1)
+                    if csv_path and csv_path.exists():
+                        import pandas as pd
+                        df = await asyncio.to_thread(pd.read_csv, csv_path)
+                        if not df.empty:
+                            if 'timestamp' in df.columns and 'time' not in df.columns:
+                                df = df.rename(columns={'timestamp': 'time'})
+                            # Note: old CSVs are reverse sorted, so we use head instead of tail
+                            candles = df.head(required_limit).to_dict('records')
+                except Exception as e:
+                    logger.debug(f"Legacy fallback failed for {asset}: {e}")
 
-                    logger.info(f"Loaded {len(candles)} candles from local CSV for {asset}")
-                    return candles
+            if candles:
+                # Rename 'timestamp' to 'time' if needed to match dispatcher expectation
+                for c in candles:
+                    if 'timestamp' in c and 'time' not in c:
+                        c['time'] = c['timestamp']
+                
+                # Data Recency Check — skip stale files to prevent phantom alerts
+                STALE_THRESHOLD = int(os.getenv("STALE_DATA_THRESHOLD_SECONDS", "300"))  # 5 min default
+                last_ts = candles[-1].get('time', 0)
+                now_ts = int(datetime.now().timestamp())
+                age = now_ts - last_ts
+                if age > STALE_THRESHOLD:
+                    logger.warning(f"Data for {asset} is STALE ({age}s old). Skipping scan.")
+                    return []  # Return empty → process_asset() exits early, no phantom alerts
+                else:
+                    logger.debug(f"Data for {asset} recency: {age}s")
+
+                logger.info(f"Loaded {len(candles)} candles from local CSV for {asset}")
+                return candles
         except Exception as e:
             logger.error(f"Error reading local history for {asset}: {e}")
 

@@ -544,12 +544,12 @@ async def load_from_history(asset: str = Body(..., embed=True)):
         rows: Number of rows loaded
     """
     try:
-        from backend.utils.history_utils import get_recent_history_file
+        from backend.utils.data_store import get_candle_path
         
-        # Get most recent history file
-        history_file = get_recent_history_file(asset)
+        # Get most recent history file (default to 1m for strategy lab base)
+        history_file = get_candle_path(asset, "1m")
         
-        if history_file is None:
+        if not history_file or not history_file.exists():
             raise HTTPException(status_code=404, detail=f"No history found for {asset}")
         
         # Load and validate

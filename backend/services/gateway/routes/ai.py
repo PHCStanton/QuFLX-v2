@@ -248,12 +248,12 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
     import sys
     import json
     import asyncio
-    from backend.utils.history_utils import get_recent_history_file
+    from backend.utils.data_store import get_candle_path
     from backend.services.gateway.routes.common import parse_script_json
 
-    csv_path = get_recent_history_file(asset, tf_min)
+    csv_path = get_candle_path(asset, f"{tf_min}m")
     logger.info('Backend indicator injection: history file lookup for %s %dm -> %s', asset, tf_min, csv_path)
-    if not csv_path:
+    if not csv_path or not csv_path.exists():
         logger.warning('Backend indicator injection: no history file found for %s %dm', asset, tf_min)
         return
 

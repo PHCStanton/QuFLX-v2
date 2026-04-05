@@ -21,6 +21,7 @@ except ImportError:
     from capabilities_v2.base import Capability, Ctx, CapResult
 
 from backend.utils.asset_utils import normalize_asset
+from backend.utils.data_store import upsert_candles, generate_session_id, log_session
 
 logger = logging.getLogger(__name__)
 
@@ -485,41 +486,50 @@ class HistoryCollector(Capability):
         return Path(__file__).resolve().parents[1]
 
     def _save_csv(self, asset: str, timeframe: Any, candles: List[Candle], output_root: Optional[str]) -> str:
-        base_dir = Path(output_root).resolve() if output_root else self._project_root()
-        
-        # Use canonical normalization for directory name to match history.py
+        # Normalize asset name
         asset_clean = self._normalize_asset(asset)
-        
-        # Determine asset type (otc vs fx)
-        asset_type = "otc" if "otc" in asset.lower() else "fx"
-        
-        # Normalize asset name for filename (e.g., AEDCNY)
-        asset_base = normalize_asset(asset.split("(")[0])
         
         # Normalize timeframe string
         tf_str = str(timeframe).lower().strip()
         if tf_str.isdigit():
             tf_str = f"{tf_str}m"
+            
+        candles_dicts = []
+        for c in candles:
+            candles_dicts.append({
+                "timestamp": float(c.timestamp),
+                "open": float(c.open),
+                "high": float(c.high),
+                "low": float(c.low),
+                "close": float(c.close),
+                "volume": float(c.volume)
+            })
+            
+        session_id = generate_session_id()
         
-        # Generate timestamp
-        now_ts = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        log_data = {
+            "session_id": session_id,
+            "asset": asset_clean,
+            "timeframe": tf_str,
+            "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "candle_count": len(candles_dicts),
+            "source": "history_capture_subprocess",
+            "status": "complete"
+        }
+        log_session(log_data)
         
-        # Unified filename: AEDCNY_otc_1m_2025_09_30_20_28_50.csv
-        filename = f"{asset_base}_{asset_type}_{tf_str}_{now_ts}.csv"
+        upsert_candles(
+            asset=asset_clean,
+            timeframe_str=tf_str,
+            candles=candles_dicts,
+            session_id=session_id,
+            source="history_capture_subprocess"
+        )
         
-        save_dir = base_dir / "data" / "data_output" / "history" / asset_clean
-        save_dir.mkdir(parents=True, exist_ok=True)
-        filepath = save_dir / filename
-
-        # Unified format: timestamp,open,high,low,close,volume
-        # Always write to a NEW file (no appending) as requested
-        with filepath.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
-            for c in candles:
-                writer.writerow(c.to_csv_row())
-
-        return str(filepath)
+        # For compatibility with callers expecting a filepath string
+        # we return the logical filename that would have been used or the new data store path
+        from backend.utils.data_store import get_candle_path
+        return str(get_candle_path(asset_clean, tf_str))
 
     def _parse_timeframe_minutes(self, timeframe: Any) -> Optional[int]:
         if timeframe is None:

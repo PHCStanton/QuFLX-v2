@@ -25,17 +25,28 @@ const useTickAggregation = ({
   const currentCandleRef = useRef(null);
   const currentVolumeRef = useRef(0); // Track volume accumulation
 
+  const historyCandlesRef = useRef(historyCandles);
+  
+  // Update ref during render to avoid stale closure in asset change effect
+  historyCandlesRef.current = historyCandles;
+
   // Cleanup on Asset Change
   useEffect(() => {
     if (candleSeries) {
-      console.log(`Asset changed to: ${selectedAsset}, clearing chart`);
-      candleSeries.setData([]);
-      if (volumeSeries) volumeSeries.setData([]); // Clear volume
+      const candles = historyCandlesRef.current;
+      const hasCachedData = candles && selectedAsset && Array.isArray(candles[selectedAsset]) && candles[selectedAsset].length > 0;
+      if (!hasCachedData) {
+        console.log(`Asset changed to: ${selectedAsset}, no cache found, clearing chart`);
+        candleSeries.setData([]);
+        if (volumeSeries) volumeSeries.setData([]); // Clear volume
+      } else {
+        console.log(`Asset changed to: ${selectedAsset}, cache found, preserving chart data briefly`);
+      }
       currentCandleRef.current = null;
       currentVolumeRef.current = 0;
       setIsLoading(true);
     }
-  }, [selectedAsset, candleSeries, volumeSeries]);
+  }, [selectedAsset, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
 
   // Load Historical Data
   useEffect(() => {
@@ -157,11 +168,12 @@ const useTickAggregation = ({
         if (isLoading) {
           console.warn('History load timeout - forcing isLoading(false)');
           setIsLoading(false);
+          if (onError) onError('History load timed out. Please try again or check backend logs.');
         }
-      }, 10000);
+      }, 15000); // Increased to 15s to allow for bootstrap retries
     }
     return () => clearTimeout(timeoutId);
-  }, [isLoading]);
+  }, [isLoading, onError]);
 
   return { isLoading, setIsLoading, currentCandleRef };
 };

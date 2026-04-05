@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from .common import parse_script_json
 from backend.utils.history_utils import persist_history_csv, get_recent_history_file, append_candle_to_history
+from backend.utils.data_store import read_candles, upsert_candles, generate_session_id, log_session
 from backend.utils.asset_utils import normalize_asset
 from backend.models.errors import (
     HistoryErrorCode, 
@@ -46,52 +47,48 @@ def _json_error(code: HistoryErrorCode, message: str, details: Dict[str, Any] | 
 async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
     """
     Fetch historical candle data for a specific asset and timeframe from local CSV.
-    Supports both legacy {timeframe}.csv and new unified timestamp-based filenames.
     """
-    # Normalize asset to canonical internal format for consistent directory resolution
     asset = normalize_asset(asset)
+    target_tf_str = f"{int(timeframe)}m"
     logger.info(f"HISTORY: Fetching history for asset={asset}, timeframe={timeframe}")
-    csv_path = get_recent_history_file(asset, timeframe)
     
-    if not csv_path:
-        logger.warning(f"HISTORY: No history file found for {asset} @ {timeframe}m")
-        raise HTTPException(status_code=404, detail=f"No history found for {asset} @ {timeframe}m")
-
-    logger.info(f"HISTORY: Found history file: {csv_path}")
-
     try:
-        df = pd.read_csv(csv_path)
-        if df.empty:
-            return {
-                "ok": True,
-                "asset": asset,
-                "timeframe": int(timeframe),
-                "count": 0,
-                "candles": [],
-                "data": [],
-                "file_path": csv_path.name,
-                "file": csv_path.name,
-            }
-
-        # Take last N rows
-        rows = df.tail(limit).to_dict("records")
-        target_tf_str = f"{int(timeframe)}m"
-        for r in rows:
-            if "timeframe" not in r:
-                r["timeframe"] = target_tf_str
+        candles = read_candles(asset, target_tf_str, limit=limit)
+        
+        if not candles:
+            # Fallback to old utility if new store is empty (backward compatibility during transition)
+            csv_path = get_recent_history_file(asset, timeframe)
+            if not csv_path:
+                logger.warning(f"HISTORY: No history file found for {asset} @ {timeframe}m")
+                raise HTTPException(status_code=404, detail=f"No history found for {asset} @ {timeframe}m")
+                
+            df = pd.read_csv(csv_path)
+            if not df.empty:
+                # df.tail() gets OLD data in old CSVs because they are reverse-sorted
+                rows = df.head(limit).to_dict("records")
+                for r in rows:
+                    if "timeframe" not in r:
+                        r["timeframe"] = target_tf_str
+                candles = list(rows)
+            file_name = csv_path.name
+        else:
+            file_name = f"{asset}_{target_tf_str}.csv"
+            for r in candles:
+                if "timeframe" not in r:
+                    r["timeframe"] = target_tf_str
 
         return {
             "ok": True,
             "asset": asset,
             "timeframe": int(timeframe),
-            "count": len(rows),
-            "candles": list(rows),
-            "data": list(rows),
-            "file_path": csv_path.name,
-            "file": csv_path.name,
+            "count": len(candles),
+            "candles": candles,
+            "data": candles,
+            "file_path": file_name,
+            "file": file_name,
         }
     except Exception as e:
-        logger.error(f"Error reading history CSV {csv_path}: {e}")
+        logger.error(f"Error reading history for {asset}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bootstrap-history")
@@ -143,59 +140,92 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
         return _json_error(HistoryErrorCode.INVALID_DURATION, f"invalid duration: {duration_s}")
 
     try:
-        runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))
-        
-        env = dict(os.environ)
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUTF8"] = "1"
-        # Ensure project root is in PYTHONPATH for imports
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
-        # Add both root and v2 to PYTHONPATH to be absolutely sure
-        env["PYTHONPATH"] = project_root + os.pathsep + os.path.join(project_root, "v2")
+        def run_in_process():
+            import time
+            from capabilities_v2.history_collector import HistoryCollector
+            from capabilities_v2.base import Ctx
 
-        def run_subprocess():
+            def _get_shared_driver():
+                try:
+                    from backend.services.collector.connection import ChromeConnectionManager
+                    mgr = ChromeConnectionManager()
+                    return mgr.connect()
+                except Exception as e:
+                    logger.warning(f"_get_shared_driver: could not get shared driver: {e}")
+                    return None
+
+            driver = _get_shared_driver()
+            if driver is None:
+                return {"ok": False, "error": "Chrome browser not connected", "error_code": "chrome_not_connected"}
+
+            ctx = Ctx(
+                driver=driver,
+                artifacts_root=str(Path("data/artifacts").resolve()),
+                debug=True,
+                dry_run=False,
+                verbose=True
+            )
+            
+            # Use 'collect' action to prevent old CSV writing behavior.
+            cap = HistoryCollector()
             inputs = {
-                "action": "collect_and_save",
+                "action": "collect",
                 "asset": asset,
                 "timeframe": timeframe_min,
                 "duration": duration_s,
             }
-            return subprocess.run(
-                [
-                    sys.executable,
-                    runner_path,
-                    "history_collector",
-                    "--verbose",
-                    "--inputs",
-                    json.dumps(inputs),
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env,
-                timeout=duration_s + 15,
-            )
+            
+            session_start = datetime.now(timezone.utc)
+            start_ms = time.time()
+            
+            res = cap.run(ctx, inputs)
+            duration_ms = int((time.time() - start_ms) * 1000)
+            
+            if not res.ok:
+                return {
+                    "ok": False, 
+                    "error": res.error, 
+                    "error_code": getattr(res, "error_code", "unknown_error")
+                }
+                
+            candles = res.data.get("candles", [])
+            
+            # Persist using data_store
+            session_id = generate_session_id()
+            tf_str = f"{timeframe_min}m"
+            
+            log_data = {
+                "session_id": session_id,
+                "asset": normalize_asset(asset),
+                "timeframe": tf_str,
+                "started_at": session_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "candle_count": len(candles),
+                "source": "history_capture",
+                "status": "complete",
+                "duration_ms": duration_ms
+            }
+            log_session(log_data)
+            
+            if candles:
+                upsert_candles(
+                    asset=normalize_asset(asset),
+                    timeframe_str=tf_str,
+                    candles=candles,
+                    session_id=session_id,
+                    source="history_capture"
+                )
+                
+            return {
+                "ok": True,
+                "data": res.data,
+                "collection_time_ms": duration_ms
+            }
 
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            process = await loop.run_in_executor(executor, run_subprocess)
+        out = await asyncio.to_thread(run_in_process)
 
-        stdout = process.stdout
-        stderr = process.stderr
-
-        if process.returncode != 0:
-            err_msg = (stderr.decode(errors="replace") or "").strip()
-            logger.error(f"Bootstrap history subprocess failed: {err_msg}")
-            return _json_error(
-                HistoryErrorCode.SUBPROCESS_SPAWN_FAILED,
-                f"History collection subprocess failed: {err_msg}",
-                details={"asset": asset, "returncode": process.returncode},
-            )
-
-        output_str = (stdout.decode(errors="replace") or "").strip()
-        out = parse_script_json(output_str)
         if not out.get("ok"):
-            error_code_str = out.get("error_code") or out.get("data", {}).get("error_code") or "unknown_error"
-            error_msg = out.get("error") or "History collection failed"
+            error_code_str = out.get("error_code", "unknown_error")
+            error_msg = out.get("error", "History collection failed")
 
             try:
                 error_code = HistoryErrorCode(error_code_str)
@@ -219,17 +249,10 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
             "asset": asset,
             "timeframe": timeframe_min,
             "candles": candles,
-            "file_path": data.get("filepath"),
-            "collection_time_ms": None,
+            "file_path": None,
+            "collection_time_ms": out.get("collection_time_ms"),
         }
-        
-    except subprocess.TimeoutExpired as e:
-        logger.error(f"Bootstrap history timed out: {type(e).__name__}: {e}")
-        return _json_error(
-            HistoryErrorCode.CAPABILITY_TIMEOUT,
-            f"Bootstrap timed out: {type(e).__name__}: {str(e)}",
-            details={"asset": asset, "timeframe": timeframe_min, "duration": duration_s},
-        )
+
     except Exception as e:
         logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
         return _json_error(
@@ -241,7 +264,7 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
 @router.post("/append-candle")
 async def append_candle(payload: Dict[str, Any] = Body(...)):
     """
-    Append a newly formed candle to the most recent history CSV.
+    Append a newly formed candle to the history data store.
     Used for live streaming data persistence.
     """
     asset = payload.get("asset")
@@ -274,14 +297,30 @@ async def append_candle(payload: Dict[str, Any] = Body(...)):
     else:
         timeframe_min = int(timeframe)
 
+    norm_asset = normalize_asset(asset)
+    tf_str = f"{timeframe_min}m"
+    
+    # Try new data store first
+    try:
+        written = upsert_candles(
+            asset=norm_asset,
+            timeframe_str=tf_str,
+            candles=[candle],
+            session_id="stream_append",
+            source="tick_aggregation"
+        )
+        if written > 0:
+            return {"status": "success", "asset": asset, "timeframe": timeframe_min, "store": "new"}
+    except Exception as e:
+        logger.error(f"Error appending candle via new data store: {e}")
+
+    # Fallback to legacy
     success = append_candle_to_history(asset, timeframe_min, candle)
     
     if not success:
-        # If no history file found, maybe we should persist it as a new one?
-        # For now, just return 404
         raise HTTPException(status_code=404, detail=f"No recent history file found for {asset} @ {timeframe_min}m to append to.")
 
-    return {"status": "success", "asset": asset, "timeframe": timeframe_min}
+    return {"status": "success", "asset": asset, "timeframe": timeframe_min, "store": "legacy"}
 
 @router.post("/collect-history")
 async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):

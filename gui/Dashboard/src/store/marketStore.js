@@ -552,6 +552,14 @@ const createMarketSlice = (set, get) => ({
   loadHistory: async (asset) => {
     if (!asset) return;
 
+    const existingStatus = get().historyStatus[asset];
+    const existingCandles = get().historyCandles[asset];
+    
+    if (existingStatus === 'loaded' && Array.isArray(existingCandles) && existingCandles.length > 0) {
+      console.log(`[LoadHistory] Early return: Cache hit for ${asset}`);
+      return;
+    }
+
     set((state) => ({
       historyStatus: {
         ...state.historyStatus,
@@ -620,25 +628,48 @@ const createMarketSlice = (set, get) => ({
       console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
       console.log(`[LoadHistory] ⏳ Waiting for ${asset} data (Timeout: ${waitTime}s)`);
 
-      const bootstrapRes = await fetch(`${getApiBaseUrl()}/api/v1/history/bootstrap-history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          asset,
-          timeframe: timeframeMin,
-          duration: waitTime
-        })
-      });
+      let attempts = 0;
+      const maxAttempts = 3;
+      let lastErrorObj = null;
+      let result = null;
 
-      const result = await bootstrapRes.json();
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          const bootstrapRes = await fetch(`${getApiBaseUrl()}/api/v1/history/bootstrap-history`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              asset,
+              timeframe: timeframeMin,
+              duration: waitTime
+            })
+          });
+
+          result = await bootstrapRes.json();
+          if (result.ok) break;
+
+          lastErrorObj = result;
+          console.warn(`[LoadHistory] Bootstrap attempt ${attempts} failed:`, result);
+        } catch (err) {
+          lastErrorObj = { error_message: err.message };
+          console.warn(`[LoadHistory] Bootstrap attempt ${attempts} failed with network error:`, err);
+        }
+
+        if (attempts < maxAttempts) {
+          const backoff = Math.pow(2, attempts) * 1000;
+          console.log(`[LoadHistory] Retrying in ${backoff}ms...`);
+          await new Promise(r => setTimeout(r, backoff));
+        }
+      }
 
       // Step 3: Handle response (success or structured error)
-      if (!result.ok) {
+      if (!result || !result.ok) {
         // Structured error response from backend
-        const errorCode = result.error_code || 'unknown_error';
-        const userMessage = result.user_message || result.error_message || 'History collection failed';
+        const errorCode = lastErrorObj?.error_code || 'unknown_error';
+        const userMessage = lastErrorObj?.user_message || lastErrorObj?.error_message || lastErrorObj?.detail || 'History collection failed after retries';
 
-        console.error(`[LoadHistory] ✗ Bootstrap failed: ${errorCode}`, result);
+        console.error(`[LoadHistory] ✗ Bootstrap failed: ${errorCode}`, lastErrorObj);
 
         set((state) => ({
           historyCandles: { ...state.historyCandles, [asset]: [] },
