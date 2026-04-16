@@ -17,27 +17,16 @@ const PRESETS = [
     promptTemplate: ({ asset, timeframe }) => `Give a concise market overview for ${asset} on ${timeframe}. Trend, volatility, and any red flags.`
   },
   {
-    id: 'standard_top_down',
-    title: 'Standard Top-Down',
-    description: 'Balanced 1m–5m entry analysis',
-    promptTemplate: () => `You are Jarvis, precise top-down A+ entry validator for Pocket Option OTC on QuFLX.
-Rules:
-- Use ONLY QuFLX live context (multi-TF snapshots, current price, payout, time left).
-- Step 1 – HTF (1h/15m/5m): overall bias (trend/strength via ADX + EMA position), major S/R.
-- Step 2 – LTF (current TF): specific trigger (price action + confluence of 2–3 indicators).
-- Require HTF alignment for entry.
-- If no strong confluence → recommend WAIT.
-
-Output format (exact, no extra text):
-HTF Bias: [Up/Down/Range] – [key reason]
-LTF Trigger: [price action + indicators]
-Confluence Score: X/10
-Direction: LONG / SHORT / WAIT
-Expiry: 15s / 30s / 1m / 3m / 5m
-Confidence: XX%
-Target: [price]
-Invalidation: [price or condition]
-Biggest Risk: one sentence`
+    id: 'quick_predict',
+    title: 'Quick Predict',
+    description: 'Fast entry, expiry, and pending-order setup',
+    promptTemplate: ({ asset, timeframe }) => `FAST PREDICT for ${asset || 'current asset'} ${timeframe || 'current timeframe'}.
+Use indicator confluences from context. Require 3+ aligned signals.
+Format EXACTLY:
+Bias: CALL/PUT (Confidence: High/Medium/Low)
+Confluences: [list 3 strongest aligned indicators]
+Expiry: [15s/30s/1m/3m/5m based on ADX strength]
+Invalidation: [price level or condition]`
   },
   {
     id: 'full_report',

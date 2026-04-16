@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -11,6 +12,11 @@ from pydantic import BaseModel, Field, ValidationError, validator
 
 from backend.services.ai.service import AIService, AIServiceError
 from backend.services.gateway.request_context import request_id_var
+from backend.utils.asset_utils import normalize_asset
+from backend.utils.indicator_utils import (
+    build_indicator_snapshots,
+    calculate_indicators_for_asset,
+)
 
 
 router = APIRouter()
@@ -215,164 +221,87 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
 
 async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[str], timeframe: Optional[str]) -> None:
     """
-    Attempts to calculate default technical indicators on the backend and inject them 
-    into the context if the frontend did not provide any.
+    Supplement frontend snapshots with backend-computed indicators.
+    Frontend values keep precedence when the same display key already exists.
     """
-    # Skip if we already have indicators, or if asset/timeframe are missing
-    existing_snapshots = context.get('indicatorSnapshots')
-    logger.info('Backend indicator injection check: asset=%s, timeframe=%s, existing_snapshots=%s',
-                 asset, timeframe, bool(existing_snapshots and len(existing_snapshots) > 0))
-    
-    if (existing_snapshots and len(existing_snapshots) > 0) or not asset or not timeframe:
-        logger.info('Skipping backend indicator injection: existing_snapshots=%s, asset=%s, timeframe=%s',
-                     len(existing_snapshots) if existing_snapshots else 0, bool(asset), bool(timeframe))
+    if context.get('skipBackendIndicators'):
+        logger.info('Skipping backend indicator injection: disabled by context flag')
         return
 
-    # Determine timeframe in minutes
-    try:
-        if timeframe.endswith('m'):
-            tf_min = int(timeframe[:-1])
-        elif timeframe.endswith('h'):
-            tf_min = int(timeframe[:-1]) * 60
-        elif timeframe.isdigit():
-            tf_min = int(timeframe)
-        else:
-            logger.warning('Backend indicator injection: unsupported timeframe format: %s', timeframe)
-            return  # Unsupported timeframe format for backend calc
-    except Exception as e:
-        logger.warning('Backend indicator injection: timeframe parse error: %s, error: %s', timeframe, e)
-        return
-
-    # Dynamic import to avoid circular issues if any, though likely safe
-    import os
-    import sys
-    import json
-    import asyncio
-    from backend.utils.data_store import get_candle_path
-    from backend.services.gateway.routes.common import parse_script_json
-
-    csv_path = get_candle_path(asset, f"{tf_min}m")
-    logger.info('Backend indicator injection: history file lookup for %s %dm -> %s', asset, tf_min, csv_path)
-    if not csv_path or not csv_path.exists():
-        logger.warning('Backend indicator injection: no history file found for %s %dm', asset, tf_min)
-        return
-
-    # Default indicators to inject
-    defaults = [
-        {"type": "ema", "params": {"period": 20}},
-        {"type": "ema", "params": {"period": 50}},
-        {"type": "rsi", "params": {"period": 14}},
-        {"type": "macd", "params": {}},
-        {"type": "bollinger_bands", "params": {}}
-    ]
-
-    try:
-        runner_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py")
+    if not asset or not timeframe:
+        logger.info(
+            'Skipping backend indicator injection: asset_present=%s timeframe_present=%s',
+            bool(asset),
+            bool(timeframe),
         )
-        logger.info('Backend indicator injection: using runner at %s', runner_path)
-        
-        inputs = {
-            "csv_path": str(csv_path),
-            "asset": asset,
-            "timeframe": tf_min,
-            "indicators": defaults,
-            "params": {},
-            "current_candle": None
-        }
+        return
 
-        args = [
-            sys.executable,
-            runner_path,
-            "indicator_calculator",
-            "--inputs",
-            json.dumps(inputs),
-        ]
+    tf_min = _parse_timeframe_to_minutes(timeframe)
+    if tf_min is None:
+        logger.warning('Backend indicator injection: unsupported timeframe format: %s', timeframe)
+        return
 
-        env = dict(os.environ)
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUTF8"] = "1"
+    existing_snapshots = context.get('indicatorSnapshots') or {}
+    if not isinstance(existing_snapshots, dict):
+        logger.warning('Backend indicator injection: indicatorSnapshots is not an object, resetting it')
+        existing_snapshots = {}
 
-        # Use subprocess.run in a thread for Windows compatibility
-        # asyncio.create_subprocess_exec fails with NotImplementedError on Windows
-        import subprocess
-        
-        def run_indicator_calc():
-            return subprocess.run(
-                args,
-                capture_output=True,
-                env=env,
-                timeout=30
-            )
-        
-        result = await asyncio.to_thread(run_indicator_calc)
-        stdout = result.stdout
-        stderr = result.stderr
-        returncode = result.returncode
-        
-        logger.info('Backend indicator injection: subprocess returncode=%d, stdout_len=%d, stderr_len=%d',
-                     returncode, len(stdout), len(stderr))
-        
-        if returncode != 0:
-            logger.warning('Backend indicator injection: subprocess failed with code %d, stderr=%s',
-                           returncode, stderr.decode()[:500] if stderr else '')
-        
-        if returncode == 0:
-            out = parse_script_json(stdout.decode().strip())
-            logger.info('Backend indicator injection: parsed output ok=%s, data_keys=%s',
-                         out.get('ok'), list(out.get('data', {}).keys()) if 'data' in out else 'none')
+    # Extract UI mode for optimization
+    ui_mode = str(context.get('uiMode') or '').strip().lower()
+    
+    try:
+        normalized_asset = normalize_asset(asset)
+        result_df, row_count = await asyncio.to_thread(
+            calculate_indicators_for_asset,
+            normalized_asset,
+            tf_min,
+        )
+        # Optimize token usage by UI mode
+        tail_count = 5 if ui_mode == 'modal' else 50
             
-            # indicator_calculator returns 'series', not 'indicators'
-            if out.get('ok') and 'data' in out and 'series' in out['data']:
-                # Transform the {time, value} objects from calculator into 'indicatorSnapshots' format
-                # Calculator returns: { series: { "ema_16": [{"time": ..., "value": ...}, ...], ... } }
-                # Context expects: { "EMA 16": [{"time": ..., "value": ...}, ...], ... }
-                backend_data = out['data']['series']
-                snapshots = {}
-                
-                for key, series in backend_data.items():
-                    if series and isinstance(series, list) and len(series) > 0:
-                        # Map technical keys to readable names
-                        name = key.replace('_', ' ').upper()
-                        # Clean up names for common indicators
-                        if key.startswith('ema_'): 
-                            name = f"EMA {key.split('_')[-1]}"
-                        elif key.startswith('rsi_'): 
-                            name = f"RSI {key.split('_')[-1]}"
-                        elif key.startswith('atr_'): 
-                            name = f"ATR {key.split('_')[-1]}"
-                        elif key.startswith('sma_'): 
-                            name = f"SMA {key.split('_')[-1]}"
-                        elif key == 'adx': 
-                            name = "ADX"
-                        elif key.startswith('bb_'): 
-                            name = key.replace('bb_', 'BB ').upper()
-                        elif 'macd' in key.lower(): 
-                            name = key.replace('_', ' ').upper()
-                        elif key == 'supertrend':
-                            name = "Supertrend"
-                        elif key == 'cci':
-                            name = "CCI"
-                        elif key == 'demarker':
-                            name = "DeMarker"
-                        elif key == 'schaff_tc':
-                            name = "Schaff TC"
-                        
-                        # Keep last 50 points for context
-                        snapshots[name] = series[-50:]
+        backend_snapshots = build_indicator_snapshots(result_df, tail_count=tail_count)
+        if not backend_snapshots:
+            logger.warning(
+                'Backend indicator injection: pipeline returned no snapshots for %s @ %sm',
+                normalized_asset,
+                tf_min,
+            )
+            return
 
-                if snapshots:
-                    context['indicatorSnapshots'] = snapshots
-                    context['backendDataInjected'] = True
-                    logger.info('Injected backend indicators for %s %s: Keys=%s (count=%d)', 
-                                asset, timeframe, list(snapshots.keys()), len(snapshots))
-                else:
-                    logger.warning('Backend indicator injection: no snapshots generated from response')
-            else:
-                logger.warning('Backend indicator injection: response parsing issue, ok=%s, has_data=%s, has_series=%s',
-                               out.get('ok'), 'data' in out, 'series' in out.get('data', {}))
+        merged_snapshots = {**backend_snapshots, **existing_snapshots}
+        context['indicatorSnapshots'] = merged_snapshots
+        context['backendDataInjected'] = True
 
-    except Exception as e:
-        logger.warning('Failed to inject backend indicators: %s', e, exc_info=True)
+        logger.info(
+            'Injected backend indicators for %s %s: total=%d backend_added=%d frontend_kept=%d rows=%d',
+            normalized_asset,
+            timeframe,
+            len(merged_snapshots),
+            len(set(backend_snapshots) - set(existing_snapshots)),
+            len(existing_snapshots),
+            row_count,
+        )
+    except FileNotFoundError:
+        logger.info('Backend indicator injection: no history file found for %s @ %sm', asset, tf_min)
+    except Exception as exc:
+        logger.warning('Failed to inject backend indicators: %s', exc, exc_info=True)
+
+
+def _parse_timeframe_to_minutes(timeframe: str) -> Optional[int]:
+    try:
+        tf = str(timeframe).strip().lower()
+        if tf.endswith('m'):
+            return max(1, int(tf[:-1]))
+        if tf.endswith('h'):
+            return max(1, int(tf[:-1]) * 60)
+        if tf.endswith('d'):
+            return max(1, int(tf[:-1]) * 1440)
+        if tf.isdigit():
+            return max(1, int(tf))
+    except Exception as exc:
+        logger.debug('Failed to parse timeframe %r into minutes: %s', timeframe, exc)
+        return None
+    return None
+
 
 

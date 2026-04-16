@@ -549,6 +549,26 @@ const createMarketSlice = (set, get) => ({
   },
   historyCandles: {},
   historyStatus: {},
+  clearHistoryCache: (asset) => {
+    const assetKey = typeof asset === 'string' ? asset.trim() : '';
+    if (!assetKey) return;
+
+    const normalizedKey = normalizeAsset(assetKey);
+    const keysToClear = normalizedKey && normalizedKey !== assetKey
+      ? [assetKey, normalizedKey]
+      : [assetKey];
+
+    set((state) => ({
+      historyCandles: keysToClear.reduce((next, key) => {
+        next[key] = [];
+        return next;
+      }, { ...state.historyCandles }),
+      historyStatus: keysToClear.reduce((next, key) => {
+        next[key] = undefined;
+        return next;
+      }, { ...state.historyStatus }),
+    }));
+  },
   loadHistory: async (asset) => {
     if (!asset) return;
 

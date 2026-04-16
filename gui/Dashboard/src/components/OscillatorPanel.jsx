@@ -80,9 +80,10 @@ const OscillatorPanel = ({
       title="Oscillators"
       className="border-t border-gray-700/50 bg-dashboard-bg"
       bodyClassName="p-0 flex flex-col"
+      headerClassName="px-3 py-2"
     >
       <div
-        className={`h-2 cursor-row-resize flex items-center justify-center transition-colors duration-200 ${
+        className={`h-2 cursor-row-resize flex items-center justify-center transition-colors duration-200 mx-2 rounded ${
           isDragging ? 'bg-accent-primary/40' : 'bg-gray-800/80 hover:bg-gray-700'
         } border-b border-gray-700/50`}
         onMouseDown={handleDragStart}

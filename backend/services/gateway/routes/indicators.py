@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Body
 
 from backend.utils.data_store import get_candle_path
 from backend.utils.asset_utils import normalize_asset
-from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
+from backend.utils.indicator_utils import calculate_indicators_for_asset
 
 router = APIRouter()
 logger = logging.getLogger("gateway.indicators")
@@ -156,7 +156,6 @@ def _build_series(result_df: pd.DataFrame) -> Dict[str, list]:
 # ── CPU-bound calculation (runs in thread pool via asyncio.to_thread) ────────
 
 def _calculate_in_thread(
-    csv_path: Path,
     asset: str,
     pipeline_params: Dict[str, Any],
     current_candle: Optional[Dict[str, Any]],
@@ -170,34 +169,14 @@ def _calculate_in_thread(
     resamples to the correct grid (e.g. 5min for a 5m CSV) instead of always
     using the hardcoded 1min grid.
     """
-    df = pd.read_csv(csv_path)
-
-    # Append / update current candle if provided (real-time last bar)
-    if current_candle:
-        ts = current_candle.get("time") or current_candle.get("timestamp")
-        new_row = {
-            "timestamp": float(ts),
-            "open": float(current_candle.get("open")),
-            "high": float(current_candle.get("high")),
-            "low": float(current_candle.get("low")),
-            "close": float(current_candle.get("close")),
-        }
-        if not df.empty and float(df.iloc[-1]["timestamp"]) == float(ts):
-            for k, v in new_row.items():
-                df.loc[df.index[-1], k] = v
-        else:
-            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-
-    if df.empty:
-        raise ValueError(f"History file is empty: {csv_path}")
-
-    df.columns = [c.lower() for c in df.columns]
-
-    pipeline = TechnicalIndicatorsPipeline(config={"indicator_params": pipeline_params})
-    result_df = pipeline.calculate_indicators(df, timeframe_min=timeframe_min)
-
+    result_df, row_count = calculate_indicators_for_asset(
+        asset=asset,
+        timeframe_min=timeframe_min,
+        pipeline_params=pipeline_params,
+        current_candle=current_candle,
+    )
     series = _build_series(result_df)
-    return result_df, series, len(result_df)
+    return result_df, series, row_count
 
 
 # ── Parameter mapping (frontend key → pipeline key) ─────────────────────────
@@ -327,7 +306,6 @@ async def calculate_indicators(payload: Dict[str, Any] = Body(...)):
             logger.debug(f"Cache miss for {asset} @ {timeframe_min}m — running pipeline")
             result_df, series, row_count = await asyncio.to_thread(
                 _calculate_in_thread,
-                csv_path,
                 asset,
                 pipeline_params,
                 current_candle,

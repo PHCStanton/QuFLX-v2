@@ -26,7 +26,7 @@ const Dashboard = () => {
   const defaultRightPanelWidthPx = 420;
   const minRightPanelWidthPx = 210;
   const minChartWidthPx = 520;
-  const resizeHandleWidthPx = 10;
+  const resizeHandleWidthPx = 6;
 
   const getStoredRightPanelWidthPx = () => {
     if (typeof window === 'undefined') return null;
@@ -169,23 +169,15 @@ const Dashboard = () => {
                 tabIndex={0}
                 onMouseDown={handleResizeStart}
                 onDoubleClick={handleResizeReset}
-                className={`h-full w-[10px] cursor-col-resize select-none flex items-center justify-center group relative transition-all duration-300 ${isResizing ? 'bg-accent-green/10 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'hover:bg-white/5'}`}
+                className={`h-full w-[6px] cursor-col-resize select-none flex items-center justify-center group relative transition-all duration-200 ${isResizing ? 'bg-accent-green/10' : 'hover:bg-white/5'}`}
               >
                 {/* Visual Handle Bar */}
-                <div className={`h-16 w-[2px] rounded-full transition-all duration-500 relative overflow-hidden ${isResizing ? 'bg-accent-green scale-y-110 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-white/10 group-hover:bg-white/30 group-hover:scale-y-105'}`}>
-                  {/* Subtle moving shine effect when active */}
-                  {isResizing && (
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-transparent animate-[shimmer_1.5s_infinite]" />
-                  )}
-                </div>
-
-                {/* Left/Right arrow hints on hover */}
-                <div className={`absolute flex gap-4 transition-all duration-300 opacity-0 group-hover:opacity-40 ${isResizing ? 'scale-125' : 'scale-100'}`}>
-                  <div className="w-1 h-1 rounded-full bg-accent-green" />
-                  <div className="w-1 h-1 rounded-full bg-accent-green" />
+                <div className={`h-10 w-[1.5px] rounded-full transition-all duration-200 ${isResizing ? 'bg-accent-green' : 'bg-white/15 group-hover:bg-white/35'}`} />
+                <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
+                  <div className="w-0.5 h-6 rounded-full bg-white/5" />
                 </div>
               </div>
-              <div className="h-full min-h-0 pl-2 quflx-right-panel flex flex-col gap-2">
+              <div className="h-full min-h-0 pl-0 quflx-right-panel flex flex-col gap-2">
                 <GlobalControls
                   backendReady={Boolean(useMarketStore.getState().backendStatus && useMarketStore.getState().backendStatus.readyForAssets)}
                   autoRefresh={useMarketStore.getState().autoRefresh}
