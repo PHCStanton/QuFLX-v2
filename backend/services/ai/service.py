@@ -7,6 +7,8 @@ from typing import Any, Dict, Optional
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from .providers import ProviderSpec
+
 logger = logging.getLogger("AIService")
 
 
@@ -29,22 +31,13 @@ class AIServiceError(Exception):
 
 
 class AIService:
-    """Wrapper around the company AI API (xAI/Grok)."""
+    """AI Service client that works with any OpenAI-compatible provider."""
 
-    def __init__(self) -> None:
-        # Load configuration from environment
-        # Support both standard AI_API_KEY and provider-specific GROK_API_KEY
-        self.api_key = os.getenv("AI_API_KEY") or os.getenv("GROK_API_KEY")
+    def __init__(self, spec: ProviderSpec) -> None:
+        self.spec = spec
+        self.api_key = os.getenv(spec.api_key_env) if spec.api_key_env else None
         
-        # Handle model selection with smart defaults/mapping
-        raw_model = os.getenv("AI_MODEL", "grok-4-latest")
-        if raw_model == "Grok 4.1 Fast":
-            self.model = "grok-4-latest"  # Map display name to API ID
-        else:
-            self.model = raw_model
-
-        self.base_url = os.getenv("AI_BASE_URL", "https://api.x.ai/v1/chat/completions")
-
+        # Load timeout configuration
         try:
             default_timeout_seconds = float(os.getenv("AI_TIMEOUT_SECONDS", "75"))
         except Exception:
@@ -60,29 +53,44 @@ class AIService:
         except Exception:
             self.timeout_seconds_slow = default_timeout_seconds
         
-        self._enabled = bool(self.api_key)
+        self._enabled = bool(self.api_key) or spec.is_local
         self._client: Optional[httpx.AsyncClient] = None
         
         if self._enabled:
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            
             # Initialize persistent, pooled client
-            # max_keepalive_connections=10: keep 10 connections open for reuse
-            # max_connections=50: limit concurrency to prevent resource exhaustion
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout_seconds_slow, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=50),
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.api_key}',
-                }
+                headers=headers,
             )
         else:
-            logger.warning("AI_API_KEY not found in environment. AI Service disabled.")
+            logger.warning("Provider %s not enabled (missing credentials or disabled).", spec.key)
+
+    @property
+    def chat_url(self) -> str:
+        return f"{self.spec.base_url.rstrip('/')}/chat/completions"
+
+    async def probe(self) -> bool:
+        """Probe if this provider is reachable and healthy."""
+        if not self._enabled or not self._client:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as c:
+                headers = self._client.headers if self._client else {}
+                r = await c.get(f"{self.spec.base_url}/models", headers=headers)
+                return r.status_code == 200
+        except Exception:
+            return False
 
     async def close(self) -> None:
         """Close the persistent HTTP client. Call during app shutdown."""
         if self._client:
             await self._client.aclose()
-            logger.info("AIService HTTP client closed.")
+            logger.info("AIService HTTP client closed for provider: %s", self.spec.key)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -126,9 +134,10 @@ class AIService:
             )
 
         logger.info(
-            'AIService.ask request_id=%s model=%s asset=%s timeframe=%s conversation_id=%s image_present=%s prompt_len=%s',
+            'AIService.ask request_id=%s provider=%s model=%s asset=%s timeframe=%s conversation_id=%s image_present=%s prompt_len=%s',
             request_id,
-            self.model,
+            self.spec.key,
+            self.spec.model,
             asset or '-',
             timeframe or '-',
             conversation_id or '-',
@@ -232,18 +241,15 @@ class AIService:
 
         payload = {
             "messages": messages,
-            "model": self.model,
+            "model": self.spec.model,
             "stream": False,
             "temperature": 0,
             "max_tokens": max_tokens,
         }
 
         # 4. API CALL WITH CACHING HEADERS
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self.api_key}',
-        }
-        if conversation_id:
+        headers = {}
+        if conversation_id and not self.spec.is_local:
             # Grok-specific header for routing to same cache cluster
             headers['x-grok-conv-id'] = conversation_id
 
@@ -260,7 +266,7 @@ class AIService:
             # 4. API CALL WITH POOLED CLIENT AND RETRIES
             # Use per-request timeout override
             response = await self._post_with_retry(
-                self.base_url,
+                self.chat_url,
                 headers=headers,
                 json=payload,
                 timeout=timeout_seconds,
@@ -328,7 +334,8 @@ class AIService:
                 'answer': content,
                 'meta': {
                     'ok': True,
-                    'model': data.get('model', self.model),
+                    'provider': self.spec.key,
+                    'model': data.get('model', self.spec.model),
                     'usage': usage,
                     'cache': {
                         'hit_rate': hit_rate,

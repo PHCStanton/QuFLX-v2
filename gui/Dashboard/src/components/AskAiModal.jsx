@@ -6,6 +6,8 @@ import useVoiceAgent from '../hooks/useVoiceAgent';
 import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
 import useTextToSpeech from '../utils/useTextToSpeech';
 import useNaturalVoice from '../hooks/useNaturalVoice';
+import useAiProviders from '../hooks/useAiProviders';
+import AiModelSelector from './AiModelSelector';
 import NeomorphicSwitch from './NeomorphicSwitch';
 import askAiSubmitSound from '../assets/Sounds/UIAlert-Positive,_high-tech.mp3';
 
@@ -160,6 +162,9 @@ const AskAiModal = ({
   const [transcriptDraft, setTranscriptDraft] = useState('');
   const [readAnswerAloud, setReadAnswerAloud] = useState(false);
   const [conversationMode, setConversationMode] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(settings?.ai?.defaultModel || 'grok-4-fast');
+  
+  const { providers } = useAiProviders();
 
   const {
     supported: ttsSupported,
@@ -306,6 +311,7 @@ const AskAiModal = ({
       appendAiMessage({ role: 'user', content: prompt, meta: { asset, timeframe, imageSource: localImageSource } });
       const result = await onAsk({
         prompt,
+        model: selectedModel,
         imageSourceOverride: localImageSource,
         forceImageDataUrl,
         context: { customInstructions }
@@ -445,6 +451,12 @@ const AskAiModal = ({
             <div>
               <div className="flex items-center gap-2">
                 <div className={`text-lg font-semibold ${useWhiteModalSurface ? 'text-gray-900' : 'text-white'}`}>Ask AI</div>
+                <AiModelSelector
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  providers={providers}
+                  size="sm"
+                />
                 <button
                   type="button"
                   onClick={handleIntroduction}

@@ -32,7 +32,8 @@ if project_root_str not in sys.path:
 
 from backend.models.market_data import Candle, Tick
 from backend.models.events import SystemStatus
-from backend.services.ai.service import AIService
+from backend.services.ai.registry import AIProviderRegistry
+from backend.services.ai.local_process import LocalAIProcessManager
 from backend.services.gateway.routes import assets, timeframe, history, screenshots, indicators, settings, profiles, ai, ai_voice, asset_control, ops, dev_logs, alerts, strategy, trading
 from backend.services.gateway.socket_events import register_socket_events
 
@@ -127,7 +128,8 @@ access_logger = logging.getLogger('gateway.access')
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # AI Service
-ai_service = AIService()
+local_ai = LocalAIProcessManager()
+ai_registry: AIProviderRegistry | None = None
 
 # Global state
 redis_client = None
@@ -156,12 +158,17 @@ def validate_market_data(data: Dict[str, Any]) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Modern lifespan handler for startup/shutdown."""
-    global redis_client
+    global redis_client, ai_registry
     
     # === STARTUP ===
     logger.info("Starting API Gateway...")
     redis_client = redis.from_url(REDIS_URL, decode_responses=True)
     app.state.redis = redis_client
+    
+    # Start local AI (Gemma) BEFORE registry probes
+    await local_ai.start()
+    ai_registry = AIProviderRegistry()
+    app.state.ai_registry = ai_registry
     
     # Register Socket.IO events (delegated to socket_events.py)
     register_socket_events(sio, redis_client, system_state)
@@ -173,7 +180,9 @@ async def lifespan(app: FastAPI):
     
     # === SHUTDOWN ===
     logger.info("Shutting down API Gateway...")
-    await ai_service.close()
+    if ai_registry:
+        await ai_registry.close_all()
+    await local_ai.stop()
     if redis_client:
         await redis_client.close()
     if trading._shared_client and not trading._shared_client.is_closed:

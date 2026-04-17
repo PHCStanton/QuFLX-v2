@@ -1,5 +1,22 @@
 # Project Progress
 
+## AI Multi-Model Routing (2026-04-17) — In Progress
+- [x] Phase 0 — `.env` Harmonization (new vars: GROK_API_KEY, LOCAL_AI_BASE_URL, QFLX_LOCAL_AI_AUTOSTART, etc.)
+- [x] Phase 1 — Backend Provider Registry & AIService Refactor ✅ Complete
+  - [x] `backend/services/ai/providers.py` — ProviderSpec + 3 configs (grok-4, grok-4-fast, gemma-local)
+  - [x] `backend/services/ai/service.py` — AIService accepts ProviderSpec, probe() added, base_url as root
+  - [x] `backend/services/ai/registry.py` — AIProviderRegistry with get(), resolve_default(), probe_all(), close_all()
+  - [x] `backend/services/ai/local_process.py` — LocalAIProcessManager (asyncio.to_thread stop, log capture)
+  - [x] `backend/services/gateway/main.py` — lifespan wires registry + local_ai
+  - [x] `backend/services/gateway/routes/ai.py` — /providers endpoint, model field, provider-aware 413 enforcement
+  - [x] `backend/tests/test_ai_routing.py` — 22 tests
+  - [x] `backend/tests/test_ai_service.py` — 16 updated tests
+  - [x] `backend/tests/test_ai_routes.py` — 11 updated tests
+  - [x] `@Reviewer` Phase 1 sign-off (2026-04-17)
+  - [x] All 175 backend tests pass
+- [ ] Phase 2 — Frontend Model Selector UI (pending)
+- [ ] Phase 3 — Benchmark & Documentation (pending)
+
 ## Data Collection & Persistence Refactor (2026-03-29) ✅ Complete
 - [x] Phase 0 — Directory Bootstrap
 - [x] Phase 1 — Data Layer Foundation (`data_store.py`)
@@ -71,7 +88,8 @@
 - [x] Annotated screenshot persistence (cross-refresh, "Annotated" image source)
 - [x] AI Prefix Caching via `x-grok-conv-id` (~85% token savings)
 - [x] Persistent `aiohttp.ClientSession` with `TCPConnector` in AI Service
-- [ ] TradingContext contract enforcement (pydantic schema + size limits) — pending
+- [x] **Multi-Provider AI Routing** (Phase 1 complete 2026-04-17): `AIProviderRegistry`, `/providers`, `model` field, provider-aware context limits
+- [ ] TradingContext contract enforcement (strict pydantic schema + size limits) — pending
 
 ## Phase 5.3: Voice Agent ✅
 - [x] Backend voice WS relay to xAI realtime API
@@ -105,6 +123,7 @@
 - [x] FastAPI lifespan integration for managed AI service lifecycle
 - [x] Retries + robust error handling for external LLM calls
 - [x] Cache telemetry (cached tokens, savings) in AI service logs
+- [x] Multi-Provider refactor: `AIService` accepts `ProviderSpec`, `probe()` method, `AIProviderRegistry`
 
 ## Phase 5.7: Profile System ✅
 - [x] `backend/services/gateway/routes/profiles.py` — CRUD + active profile management
@@ -173,20 +192,19 @@
 - [x] MIN-2: Regime column mapping consolidated to `_ensure_regime_columns()` as single source of truth
 - [ ] OPT-3: Multi-oscillator shared-chart refactor (deferred; monitor-only recommendation)
 
-### Verification (14-03-2026)
-- [x] Backend regression suite: `conda run -n QuFLX-v2 python -m pytest backend/tests/ -q --tb=short` → **127/127 passed**
-- [x] Import smoke check: `from backend.services.gateway.routes.indicators import router` → **Import OK**
-
 ## Phase 6: Integration & Polish (In Progress)
 - [x] Architecture review checkpoint (14-03-2026): validated placeholder status for Risk Manager / Calendar Journal panels
 - [x] Architecture review checkpoint (14-03-2026): confirmed missing oscillator visibility persistence in `OscillatorPanel.jsx`
 - [x] Architecture review checkpoint (14-03-2026): confirmed missing profile JSON import action in `profileStore.js`
 - [x] Architecture review checkpoint (14-03-2026): confirmed `/api/v1/ai/ask` still uses flexible `context` object (schema hardening pending)
-- [ ] Oscillator pane visibility toggle persistence
-- [ ] Profile import from exported JSON (round-trip)
+- [x] AI Multi-Provider Routing Phase 1 (17-04-2026): all backend components implemented, 175/175 tests pass, @Reviewer sign-off
+- [ ] Oscillator pane visibility toggle persistence in settings
+- [ ] Profile import from exported JSON (round-trip with Export Config)
+- [ ] AI TradingContext contract enforcement (schema + size limits)
 - [ ] Risk Manager Panel (placeholder → implementation)
 - [ ] Calendar & Journal Panel (placeholder → implementation)
 - [ ] System orchestration and resilience testing
-- [ ] AI TradingContext contract enforcement (schema + size limits)
 - [ ] Comprehensive documentation & onboarding guides
 - [ ] Automated integration tests for SSID service, profile sync, trading flow
+- [ ] AI Multi-Provider Routing Phase 2 (Frontend model selector UI) — pending
+- [ ] AI Multi-Provider Routing Phase 3 (Benchmark + final review) — pending

@@ -86,6 +86,12 @@ const normalizeScreenshotSaveMode = (value) => {
   return 'full';
 };
 
+const normalizeAiModel = (value) => {
+  const v = String(value || '').toLowerCase();
+  const allowed = ['grok-4', 'grok-4-fast', 'gemma-local'];
+  return allowed.includes(v) ? v : 'grok-4-fast';
+};
+
 const AUTO_SAVE_DELAY_MS = 800;
 
 const defaultSettings = {
@@ -131,6 +137,8 @@ const defaultSettings = {
     voiceReadBackPitch: 1,
     voiceReadBackVoiceURI: null,
     customInstructions: '',
+    defaultModel: 'grok-4-fast',
+    alertDispatchModel: 'grok-4-fast',
   },
   screenshot: {
     defaultTool: 'arrow',
@@ -260,6 +268,8 @@ const normalizeSettings = (settings) => {
   merged.ai.voiceReadBackPitch = normalizeVoiceReadBackPitch(merged.ai.voiceReadBackPitch);
   merged.ai.voiceReadBackVoiceURI = normalizeVoiceUri(merged.ai.voiceReadBackVoiceURI);
   merged.ai.customInstructions = String(merged.ai.customInstructions || '');
+  merged.ai.defaultModel = normalizeAiModel(merged.ai.defaultModel);
+  merged.ai.alertDispatchModel = normalizeAiModel(merged.ai.alertDispatchModel);
 
 
   merged.screenshot = { ...(merged.screenshot || {}) };

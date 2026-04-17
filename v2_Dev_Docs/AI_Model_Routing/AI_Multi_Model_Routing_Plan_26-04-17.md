@@ -2,7 +2,7 @@
 **File:** `v2_Dev_Docs/AI_Model_Routing/AI_Multi_Model_Routing_Plan_26-04-17.md`
 **Date:** 2026-04-17
 **Authors:** 🏰 @Architect · ⚙️ @Engineer · 👀 @Reviewer
-**Status:** 📝 Plan — Awaiting user approval
+**Status:** ✅ Phase 1 Complete — Backend Provider Registry Implemented & Verified
 **Supersedes:** N/A (new subsystem)
 **Related:**
 - `ai_dev_docs/Gemma4_Local_Trading_Impact_Assessment_26-04-16.md`
@@ -516,103 +516,123 @@ curl -X POST http://127.0.0.1:8000/api/v1/ai/ask -H "Content-Type: application/j
 
 ---
 
-### ── Phase 2 — Frontend Model Selector UI (~4 h)
+---
 
-#### 2.1 Update `gui/Dashboard/src/store/settingsStore.js`
-Add to `defaultSettings.ai`:
-```js
-defaultModel: 'grok-4-fast',   // modal + insights
-alertDispatchModel: 'grok-4-fast',
-```
-Add normalizer:
-```js
-const normalizeAiModel = (v) => {
-  const allowed = ['grok-4', 'grok-4-fast', 'gemma-local'];
-  return allowed.includes(v) ? v : 'grok-4-fast';
-};
-```
-Apply to both fields in `normalizeSettings` and `sanitizeSettingsForBackend`.
+## ✅ Phase 2 Alignment Update (17-04-2026)
 
-#### 2.2 New hook: `gui/Dashboard/src/hooks/useAiProviders.js`
-```js
-import { useEffect, useState, useCallback } from 'react';
-import { getApiBaseUrl } from '../api/apiBase';
+**🔴 Scope drift detected.** Original Phase 2 was being reworked into a full Ask AI Modal visual redesign. Per **CORE_PRINCIPLE #7 (Stop Patching, Start Rewriting)** Phase 2 has been **split into two independent phase-gates**.
 
-export default function useAiProviders() {
-  const [providers, setProviders] = useState([]);
-  const [loading, setLoading] = useState(true);
+User decisions locked:
+1.  ✅ Retire `Full Confluence Report` preset; merge `15s/30s Blitz` into `Quick Predict`
+2.  ✅ Image source selector → moved to **Settings only** (removed from Modal UI)
+3.  ✅ Model selector chip placed **between title and Introduction button** in header
+4.  ✅ Dictation/Conversation toggle next to mic button; transcript renders inline in Response area
+5.  ✅ Execute **Phase 2A first**, then **Phase 2B** as separate phase-gate
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/ai/providers`);
-      if (!res.ok) throw new Error('providers endpoint returned ' + res.status);
-      const data = await res.json();
-      setProviders(Array.isArray(data.providers) ? data.providers : []);
-    } catch (e) {
-      console.error('useAiProviders: failed to load providers', e);
-      setProviders([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+---
 
-  useEffect(() => { refresh(); }, [refresh]);
-  return { providers, loading, refresh };
-}
-```
+### ── Phase 2A — Model Selector Wiring (SHIPS FIRST, ~2 h)
 
-#### 2.3 New component: `gui/Dashboard/src/components/AiModelSelector.jsx`
-Small IDE-style chip:
-```jsx
-// Props: value, onChange, providers, size='sm'|'md'
-// Renders a button showing current label; opens a popover with
-// a scroll list of providers (greyed if !available, tooltip with reason).
-```
-Re-used by:
-- `AskAiModal.jsx` (header next to the "Submit" row)
-- `AiInsightsPanel.jsx` (toolbar, next to Voice toggle)
+**Goal:** Expose Phase 1 backend routing to UI with minimal changes — no visual redesign.
 
-#### 2.4 Wire into `AskAiModal.jsx`
-```jsx
-const defaultModel = useSettingsStore(s => s.settings.ai.defaultModel);
-const [model, setModel] = useState(defaultModel);
-// include `model` in the POST body
-// When user picks gemma-local → trim context payload (drop extra fields);
-// route already enforces hard limit so this is just UX-nice.
+| File | Action | LOC est. |
+|---|---|---|
+| `gui/Dashboard/src/hooks/useAiProviders.js` | NEW — fetch `/api/v1/ai/providers` | ~50 |
+| `gui/Dashboard/src/components/AiModelSelector.jsx` | NEW — IDE-style chip dropdown | ~150 |
+| `gui/Dashboard/src/store/settingsStore.js` | MOD — add `defaultModel`, `alertDispatchModel` + normalizer | ~+30 |
+| `gui/Dashboard/src/components/AskAiModal.jsx` | MOD — insert chip in header; pass `model` to `onAsk` | ~+25 |
+| `gui/Dashboard/src/components/AiInsightsPanel.jsx` | MOD — insert chip in toolbar | ~+25 |
+| `gui/Dashboard/src/components/SettingsPanel.jsx` | MOD — AI tab gains 2 model selects | ~+60 |
+| `backend/scripts/otc_alert_dispatch.py` | MOD — read `QFLX_ALERT_AI_MODEL` from env | ~+20 |
+| `backend/services/gateway/main.py` (spawn helper) | MOD — inject env var to dispatcher subprocess | ~+5 |
+
+#### Updated Quick Predict Prompt (Blitz merged)
+```text
+FAST PREDICT for {asset} {timeframe}.
+Use indicator confluences from context. Require 3+ aligned signals.
+
+Format EXACTLY:
+Bias: CALL/PUT (Confidence: High/Medium/Low)
+Confluences: [list 3 strongest aligned indicators]
+Expiry: [15s/30s/1m/3m/5m based on ADX strength]
+Invalidation: [price level or condition]
+
+Blitz Check (15s/30s only):
+- If alignment is very strong AND momentum is immediate → "Blitz: CALL/PUT 15s" or "Blitz: CALL/PUT 30s"
+- Otherwise → "Blitz Entry Not Recommended"
 ```
 
-#### 2.5 Wire into `AiInsightsPanel.jsx`
-Same pattern. **Additionally:**
-- When `model === 'gemma-local'` AND `settings.ai.voiceReadBackMode === 'server'`,
-  show a non-blocking hint: *"Natural voice unavailable for local model — falling back to Browser TTS"*
-- Pass an override to `useNaturalVoice` to disable server voice for that call.
+**Phase 2A Verification Checklist:**
+- [ ] `/api/v1/ai/providers` endpoint consumed; chip shows 3 providers with availability indicator
+- [ ] Request body carries `model` field; backend honors it for all 3 providers
+- [ ] Unknown model → 400 Bad Request (already enforced)
+- [ ] `settings.ai.defaultModel` persists across refresh; chip pre-selects correctly
+- [ ] `settings.ai.alertDispatchModel` persists; dispatcher subprocess receives env var
+- [ ] Voice fallback hint shown for `gemma-local + server-voice` combination
+- [ ] **🔒 `@Reviewer` phase-gate sign-off required before Phase 2B begins**
 
-#### 2.6 `SettingsPanel.jsx` — new "AI Model" section
-Two selects under the existing "AI" tab:
-- **Default AI Model** (affects AskAi Modal + Insights default)
-- **Alert Dispatcher Model** (sends via `/api/v1/settings` → backend stores in settings.json → env injector passes `QFLX_ALERT_AI_MODEL` to dispatcher subprocess)
-- Shows green/red dot per provider (uses `useAiProviders`)
+---
 
-#### 2.7 Alert Dispatcher integration
-File: `backend/scripts/otc_alert_dispatch.py`
-- At startup, read `QFLX_ALERT_AI_MODEL` env
-- Use it as the provider key in a local `AIProviderRegistry` (the dispatcher already runs its own process — no cross-process sync needed)
-- Include `model` in Discord alert metadata + JSONL logs
+### ── Phase 2B — Ask AI Modal Full Rewrite (UI REFACTOR, ~8 h)
 
-Gateway: in the spawn helper that launches the dispatcher, pass the current setting:
-```python
-env = os.environ.copy()
-env["QFLX_ALERT_AI_MODEL"] = settings.ai.alertDispatchModel
+**Principle #7 Full Rewrite.** Original `AskAiModal.jsx` (700 LOC) is decomposed into focused components with **250 LOC max per file**.
+
+#### Component Tree
+```
+components/AskAi/
+├── AskAiModal.jsx                 (orchestrator only, ~180 LOC)
+│   ├── <AskAiHeader />            (title, model chip, intro, clear, close)
+│   ├── <PresetPanel />            (3 presets: QuickPredict, MarketOverview, ConfluenceSummary)
+│   ├── <ResponsePanel />          (scrollable answer + voice particles)
+│   │   ├── <VoiceParticleCluster /> (Canvas + Web Audio analyser)
+│   │   └── <NeoPlaybackControls /> (Play/Pause/Stop neumorphic)
+│   ├── <PromptInput />            (scrollable textarea, Ctrl+Enter)
+│   └── <VoiceControlsBar />       (bottom row: toggle, mic, buttons)
+└── hooks/
+    └── useVoiceAudioStream.js     (adapter returns MediaStream | null)
 ```
 
-**Phase 2 Verification:**
-- Open AskAi Modal → select Gemma → submit → see fast response from local server
-- Open Insights → select Grok 4 → speech read-back uses xAI voice
-- Open Insights → select Gemma → speech read-back silently falls back to Browser TTS + banner shown
-- Settings Panel → change Alert Dispatcher to Gemma → restart dispatcher → Discord alert metadata shows `model: gemma-local`
+#### Contracts & Behavior Guarantees
 
-**🔒 Phase-gate:** `@Reviewer` signs off.
+**VoiceParticleCluster**
+```ts
+Props: { audioStream: MediaStream | null; isActive: boolean; size?: number }
+Behavior:
+  - isActive=false → cancelAnimationFrame + close AudioContext (explicit cleanup)
+  - AudioContext unsupported → render static pulse dot (no throw, fail-fast)
+  - prefers-reduced-motion → static pulse fallback
+```
+
+**NeoPlaybackControls State Matrix**
+| Mode | Play | Pause | Stop |
+|---|---|---|---|
+| Browser TTS idle | enabled | disabled | disabled |
+| Browser TTS speaking | disabled | enabled | enabled |
+| xAI Server speaking | disabled | **HIDDEN** | enabled |
+| Realtime conversation | disabled | **HIDDEN** | enabled |
+
+**NeoMicButton State Matrix**
+| Voice Status | Ring Color | Icon | Action |
+|---|---|---|---|
+| off | gray | mic | connectVoice() |
+| connecting | amber pulse | mic | noop |
+| connected | blue | mic | startRecording() |
+| recording | red pulse | mic-off | stopRecording() |
+| error | red solid | mic-off | retry connect |
+
+**Phase 2B Verification Checklist:**
+- [ ] All new files ≤ 250 LOC
+- [ ] 3 presets only; `Quick Predict` returns both main + Blitz verdict
+- [ ] Image source dropdown removed from Modal UI; uses `settings.ai.imageSource` as default
+- [ ] Model selector chip in header, functional parity with Phase 2A
+- [ ] `useVoiceAudioStream` adapter works for all 3 voice modes
+- [ ] 10× open/close cycles → zero AudioContext leaks
+- [ ] Browser TTS: Pause/Resume works; xAI Server: Pause button hidden
+- [ ] Mic denied → non-blocking toast; modal remains functional
+- [ ] Dictation transcript renders inline in Response area
+- [ ] Conversation mode feeds AI audio stream into particle cluster
+- [ ] `Ctrl+Enter` submit + `Esc` close preserved
+- [ ] **🔒 `@Reviewer` phase-gate sign-off required before Phase 3 begins**
 
 ---
 
@@ -704,15 +724,26 @@ env["QFLX_ALERT_AI_MODEL"] = settings.ai.alertDispatchModel
 - [ ] `curl http://127.0.0.1:8080/v1/models` returns 200 (when user has Gemma up manually)
 
 ### Phase 1
-- [ ] `backend/services/ai/providers.py` exports 3 specs
-- [ ] `AIService` accepts `ProviderSpec`; chat URL correctly composed
-- [ ] `AIProviderRegistry.probe_all()` works
-- [ ] `LocalAIProcessManager.start()` starts + `stop()` kills subprocess
-- [ ] `GET /api/v1/ai/providers` returns array of 3 with availability
-- [ ] `POST /api/v1/ai/ask {model:"gemma-local"}` succeeds
-- [ ] `POST /api/v1/ai/ask {model:"invalid"}` returns 400
-- [ ] Context > 24KB to gemma-local → 413
-- [ ] `@Reviewer` signs off
+- [x] `backend/services/ai/providers.py` exports 3 specs
+- [x] `AIService` accepts `ProviderSpec`; chat URL correctly composed
+- [x] `AIProviderRegistry.probe_all()` works
+- [x] `LocalAIProcessManager.start()` starts + `stop()` kills subprocess
+- [x] `GET /api/v1/ai/providers` returns array of 3 with availability
+- [x] `POST /api/v1/ai/ask {model:"gemma-local"}` succeeds
+- [x] `POST /api/v1/ai/ask {model:"invalid"}` returns 400
+- [x] Context > 24KB to gemma-local → 413
+- [x] `@Reviewer` signs off ✅ (2026-04-17)
+
+**Test results:** 175/175 backend tests pass. Key new tests:
+- `test_ai_routing.py`: 22 passed (providers, registry, endpoint, context limits, local process)
+- `test_ai_service.py`: 16 passed (ask, errors, prompts, cache, probe)
+- `test_ai_routes.py`: 11 passed (success, validation, image, service errors, gemma limit)
+
+**Fixes applied during review:**
+- `local_process.py`: `stop()` uses `asyncio.to_thread()` to avoid blocking event loop
+- `local_process.py`: stdout/stderr captured to `system_LOGS/llama-server-{ts}.log`
+- `routes/ai.py`: replaced deprecated `parse_obj` with `model_validate` + JSON-serializable error conversion
+- `routes/ai.py`: moved context-size check to AFTER `_inject_backend_indicators()` call (Fail Fast after full context computed)
 
 ### Phase 2
 - [ ] `AiModelSelector` renders in Modal + Insights

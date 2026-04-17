@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError, validator
 
 from backend.services.ai.service import AIService, AIServiceError
+from backend.services.ai.registry import AIProviderRegistry
 from backend.services.gateway.request_context import request_id_var
 from backend.utils.asset_utils import normalize_asset
 from backend.utils.indicator_utils import (
@@ -31,6 +32,16 @@ class AiAskRequest(BaseModel):
     image_base64: Optional[str] = Field(default=None, max_length=12_000_000)
     image: Optional[str] = Field(default=None, max_length=12_000_000)
     conversation_id: Optional[str] = Field(default=None, alias='conversationId', max_length=128)
+    model: Optional[str] = Field(default=None, max_length=64, alias="model")
+
+    @validator("model", pre=True)
+    def _validate_model(cls, v):
+        if v is None or v == "":
+            return None
+        s = str(v).strip().lower()
+        if s not in {"grok-4", "grok-4-fast", "gemma-local"}:
+            raise ValueError(f"unknown model: {v}")
+        return s
 
     @validator('prompt', pre=True)
     def _normalize_prompt(cls, v: Any) -> str:
@@ -65,9 +76,10 @@ class AiAskRequest(BaseModel):
         return v
 
 
-@lru_cache(maxsize=1)
-def _get_ai_service() -> AIService:
-    return AIService()
+def _resolve_ai_service(request: Request, model_key: Optional[str]) -> AIService:
+    registry: AIProviderRegistry = request.app.state.ai_registry
+    key = model_key or registry.resolve_default(ui_context="modal")
+    return registry.get(key)
 
 
 def _normalize_image(image_base64: Optional[str], image: Optional[str]) -> Optional[str]:
@@ -115,13 +127,40 @@ def _normalize_image(image_base64: Optional[str], image: Optional[str]) -> Optio
     return f'data:image/png;base64,{candidate}'
 
 
-@router.post('/ask')
-async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, ai_service: AIService = Depends(_get_ai_service)):
-    request_id = request_id_var.get('-')
+@router.get('/providers')
+async def list_providers(request: Request):
+    reg: AIProviderRegistry = request.app.state.ai_registry
+    available = await reg.probe_all()
+    return {
+        "providers": [
+            {
+                "key": s.key,
+                "label": s.label,
+                "available": available.get(s.key, False),
+                "capabilities": {
+                    "vision": s.supports_vision,
+                    "voice_server": s.supports_voice_server,
+                    "is_local": s.is_local,
+                    "max_ctx_kb": s.max_ctx_kb,
+                },
+            }
+            for s in reg.specs.values()
+        ]
+    }
 
+
+@router.post('/ask')
+async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None):
+    request_id = request_id_var.get('-')
+    
     try:
-        parsed = AiAskRequest.parse_obj(payload)
+        parsed = AiAskRequest.model_validate(payload)
     except ValidationError as exc:
+        # exc.errors() returns Pydantic ErrorDetail objects — convert to plain dicts for JSON safety
+        errors_serializable = [
+            {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in e.items()}
+            for e in exc.errors()
+        ]
         return JSONResponse(
             status_code=400,
             content={
@@ -130,7 +169,7 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
                 'detail': 'Invalid AI request payload.',
                 'request_id': request_id,
                 'retryable': False,
-                'errors': exc.errors(),
+                'errors': errors_serializable,
             },
         )
 
@@ -139,6 +178,21 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
         context['asset'] = parsed.asset
     if parsed.timeframe:
         context['timeframe'] = parsed.timeframe
+
+    # Resolve AI service for requested model
+    try:
+        ai_service = _resolve_ai_service(request, parsed.model)
+    except (KeyError, RuntimeError) as exc:
+        return JSONResponse(
+            status_code=400,
+            content={
+                'ok': False,
+                'code': 'invalid_model',
+                'detail': str(exc),
+                'request_id': request_id,
+                'retryable': False,
+            },
+        )
 
     try:
         image = _normalize_image(parsed.image_base64, parsed.image)
@@ -174,7 +228,23 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None, a
 
     try:
         # Optimization: Inject backend indicators if missing from frontend
+        # (Must happen before context-size check so the guard reflects post-injection size)
         await _inject_backend_indicators(context, parsed.asset, parsed.timeframe)
+
+        # Enforce provider-specific context size limit AFTER injection (Fail Fast — Core Principle #9)
+        ctx_bytes = len(json.dumps(context, separators=(',', ':')).encode('utf-8'))
+        max_bytes = ai_service.spec.max_ctx_kb * 1024
+        if ctx_bytes > max_bytes:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    'ok': False,
+                    'code': 'context_too_large',
+                    'detail': f"Context ({ctx_bytes//1024}KB) exceeds {ai_service.spec.label} limit ({ai_service.spec.max_ctx_kb}KB).",
+                    'request_id': request_id,
+                    'retryable': False,
+                },
+            )
 
         result = await ai_service.ask(
             prompt=parsed.prompt,
