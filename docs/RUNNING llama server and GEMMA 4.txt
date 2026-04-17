@@ -1,0 +1,39 @@
+# RUNNING llama server and GEMMA 4
+
+The exact command to run the llama server with the Gemma 4 model for future reference is:
+
+```cmd
+llama-b8816-bin-win-cpu-x64\llama-server.exe -m models\gemma-4-E2B-it-Q4_K_M.gguf
+```
+
+### Common optional flags you can add:
+1.  `--host 0.0.0.0` to allow connections from other devices on your network
+2.  `--port 8081` to use a different port instead of the default 8080
+3.  `--threads 8` to specify a custom number of CPU threads to use
+4.  `--no-warmup` to skip the model warm-up step
+5.  `--verbose` to get detailed debug logging
+
+If you're working from a different directory, you'll need to provide full paths to both the executable and the model file, for example:
+```cmd
+C:\Ai_Local\Gemma4-frontuse\llama-b8816-bin-win-cpu-x64\llama-server.exe -m C:\Ai_Local\Gemma4-frontuse\models\gemma-4-E2B-it-Q4_K_M.gguf
+```
+
+There are two simple ways to stop the running llama server:
+
+1. **Clean shutdown (easiest method):**
+   Switch to the terminal window where the server is running and press `Ctrl + C` on your keyboard. This will gracefully shut down the server.
+
+2. **Force stop from another terminal:**
+   If you need to stop the server from a different terminal window, use these Windows commands:
+   - First find the running process ID:
+     ```cmd
+     tasklist | findstr llama-server.exe
+     ```
+   - Then kill the process using its PID:
+     ```cmd
+     taskkill /PID YOUR_PROCESS_ID_HERE /F
+     ```
+   - Or kill all running llama-server instances at once:
+     ```cmd
+     taskkill /IM llama-server.exe /F
+     ```
