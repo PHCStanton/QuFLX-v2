@@ -163,7 +163,12 @@ async def start_alerts(
             env["ENABLE_TICK_LOGGING"] = str(final_use_redis).lower()
             env["TICK_CHUNK_SIZE"] = str(alert_settings.get("tickChunkSize", 1000))
             env["TICK_LOG_DIR"] = alert_settings.get("tickLoggingDir", "data/ticks")
-            
+
+            # AI Model injection
+            ai_settings = settings.get("ai", {})
+            alert_model = ai_settings.get("alertDispatchModel", "grok-4-fast")
+            env["QFLX_ALERT_AI_MODEL"] = str(alert_model)
+
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(project_root),

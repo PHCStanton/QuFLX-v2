@@ -14,7 +14,19 @@
   - [x] `backend/tests/test_ai_routes.py` — 11 updated tests
   - [x] `@Reviewer` Phase 1 sign-off (2026-04-17)
   - [x] All 175 backend tests pass
-- [ ] Phase 2 — Frontend Model Selector UI (pending)
+- [x] Phase 2A — Frontend Model Selector Wiring ✅ COMPLETE ALL ITEMS
+  - [x] `gui/Dashboard/src/hooks/useAiProviders.js` — NEW hook, refresh(), error state, AbortController
+  - [x] `gui/Dashboard/src/components/AiModelSelector.jsx` — NEW chip UI, disabled placeholder on empty
+  - [x] `gui/Dashboard/src/store/settingsStore.js` — `defaultModel` + `alertDispatchModel` + normalizer
+  - [x] `gui/Dashboard/src/components/AskAiModal.jsx` — chip in header, `model` passed in `onAsk`
+  - [x] `gui/Dashboard/src/hooks/useAskAi.js` — `model` destructure + forward to `askAI()` (R-1 fix: removed out-of-scope `model` from deps 18-04)
+  - [x] `gui/Dashboard/src/api/aiClient.js` — `model` in POST body (conditional, backward compat)
+  - [x] `gui/Dashboard/src/components/AiInsightsPanel.jsx` — chip in toolbar, model passed to ask()
+  - [x] `gui/Dashboard/src/components/SettingsPanel.jsx` — 2 model selects added in AI tab
+  - [x] `backend/services/gateway/routes/alerts.py` — `QFLX_ALERT_AI_MODEL` env injection from settings
+  - [x] `@Reviewer` Phase 2A partial sign-off (2026-04-17) — 🔴→✅ after @Coder fixes
+  - [x] `@Reviewer` follow-up double-check (2026-04-18) — found R-1 regression, fixed immediately
+- [ ] Phase 2B — Ask AI Modal Full Rewrite (pending)
 - [ ] Phase 3 — Benchmark & Documentation (pending)
 
 ## Data Collection & Persistence Refactor (2026-03-29) ✅ Complete
@@ -198,6 +210,7 @@
 - [x] Architecture review checkpoint (14-03-2026): confirmed missing profile JSON import action in `profileStore.js`
 - [x] Architecture review checkpoint (14-03-2026): confirmed `/api/v1/ai/ask` still uses flexible `context` object (schema hardening pending)
 - [x] AI Multi-Provider Routing Phase 1 (17-04-2026): all backend components implemented, 175/175 tests pass, @Reviewer sign-off
+- [x] AI Multi-Provider Routing Phase 2A (18-04-2026): frontend model selector wiring complete, R-1 regression found & fixed
 - [ ] Oscillator pane visibility toggle persistence in settings
 - [ ] Profile import from exported JSON (round-trip with Export Config)
 - [ ] AI TradingContext contract enforcement (schema + size limits)
@@ -206,5 +219,6 @@
 - [ ] System orchestration and resilience testing
 - [ ] Comprehensive documentation & onboarding guides
 - [ ] Automated integration tests for SSID service, profile sync, trading flow
-- [ ] AI Multi-Provider Routing Phase 2 (Frontend model selector UI) — pending
-- [ ] AI Multi-Provider Routing Phase 3 (Benchmark + final review) — pending
+- [ ] AI Multi-Provider Routing Phase 2A remaining (AiInsightsPanel chip, SettingsPanel selects, Alert Dispatcher env)
+- [ ] AI Multi-Provider Routing Phase 2B (Ask AI Modal full rewrite)
+- [ ] AI Multi-Provider Routing Phase 3 (Benchmark + final review)

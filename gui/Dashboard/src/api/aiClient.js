@@ -1,6 +1,6 @@
 import { getApiBaseUrl } from './apiBase';
 
-export async function askAI({ prompt, context = {}, image = null }) {
+export async function askAI({ prompt, model, context = {}, image = null }) {
   if (!prompt || typeof prompt !== 'string') {
     throw new Error('prompt must be a non-empty string');
   }
@@ -10,18 +10,24 @@ export async function askAI({ prompt, context = {}, image = null }) {
   const asset = context?.asset || null;
   const timeframe = context?.timeframe || null;
 
+  // Only include model in body when non-null (backward compat)
+  const body = {
+    prompt,
+    context,
+    image_base64: image,
+    asset,
+    timeframe,
+  };
+  if (model != null) {
+    body.model = model;
+  }
+
   const res = await fetch(`${getApiBaseUrl()}/api/v1/ai/ask`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      prompt,
-      context,
-      image_base64: image,
-      asset,
-      timeframe,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

@@ -798,6 +798,30 @@ const SettingsPanel = () => {
             </>
           )}
 
+          <SettingRow label="Default AI Model" description="Default model used for Ask AI modal">
+            <DropdownInput
+              value={settings.ai.defaultModel}
+              options={[
+                { label: 'Grok 4.1 Fast', value: 'grok-4-fast' },
+                { label: 'Grok 4 (Thinking)', value: 'grok-4' },
+                { label: 'Gemma 4 E2B (Local)', value: 'gemma-local' }
+              ]}
+              onChange={(val) => updateSection('ai', { defaultModel: val })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Alert Dispatcher Model" description="Model used for automated alert analysis">
+            <DropdownInput
+              value={settings.ai.alertDispatchModel}
+              options={[
+                { label: 'Grok 4.1 Fast', value: 'grok-4-fast' },
+                { label: 'Grok 4 (Thinking)', value: 'grok-4' },
+                { label: 'Gemma 4 E2B (Local)', value: 'gemma-local' }
+              ]}
+              onChange={(val) => updateSection('ai', { alertDispatchModel: val })}
+            />
+          </SettingRow>
+
           <SettingRow label="Custom Instructions" description="System prompt override for specific trading rules">
             <textarea
               className="w-full h-24 bg-card-bg border border-border-primary rounded p-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-green"

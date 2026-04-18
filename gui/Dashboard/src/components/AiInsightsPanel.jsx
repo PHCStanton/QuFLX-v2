@@ -12,9 +12,13 @@ import { getAiImageSourceLabel, buildAiContext } from '../utils/aiContext';
 import useVoiceAgent from '../hooks/useVoiceAgent';
 import useTextToSpeech from '../utils/useTextToSpeech';
 import useNaturalVoice from '../hooks/useNaturalVoice';
+import useAiProviders from '../hooks/useAiProviders';
+import AiModelSelector from './AiModelSelector';
 
 const AiInsightsPanel = () => {
   const { settings } = useSettingsStore();
+  const [selectedModel, setSelectedModel] = useState(settings?.ai?.defaultModel || 'grok-4');
+  const { providers, error: providersError } = useAiProviders();
   const {
     aiMessages,
     appendAiMessage,
@@ -228,7 +232,7 @@ const AiInsightsPanel = () => {
     appendAiMessage({ role: 'user', content: prompt, meta: { asset: selectedAsset, timeframe: selectedTimeframe } });
     setAiDraftPrompt('');
 
-    const result = await ask({ prompt });
+    const result = await ask({ prompt, model: selectedModel });
     if (!result) return;
     appendAiMessage({ role: 'assistant', content: result.answer, meta: { asset: selectedAsset, timeframe: selectedTimeframe, provider: result.meta?.model || null } });
   };
@@ -259,6 +263,13 @@ const AiInsightsPanel = () => {
           <div className="flex items-center gap-2">
             <Volume2 className={isSpeaking ? "text-accent-primary animate-pulse" : "text-text-secondary"} size={18} />
             <h3 className="text-sm font-bold text-text-primary uppercase tracking-tight">AI Insights</h3>
+            <AiModelSelector
+              value={selectedModel}
+              onChange={setSelectedModel}
+              providers={providers}
+              error={providersError}
+              size="sm"
+            />
           </div>
         }
       >

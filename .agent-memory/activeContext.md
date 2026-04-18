@@ -1,9 +1,9 @@
 # Active Context
 
-- ## Current Focus (as of 17-04-2026)
-- **AI Multi-Model Routing Phase 1 (2026-04-17):** Backend implementation complete and verified. 175/175 tests passing. Phase 2 (Frontend) pending.
+- ## Current Focus (as of 18-04-2026)
+- **AI Multi-Model Routing Phase 2A (2026-04-18):** Frontend model selector wiring complete and verified. Phase 2B (Ask AI Modal full rewrite) ready to begin.
 - **Plan Location:** `v2_Dev_Docs/AI_Model_Routing/AI_Multi_Model_Routing_Plan_26-04-17.md`
-- **Status:** Phase 1 ✅ Complete — awaiting Phase 2 execution.
+- **Status:** Phase 1 ✅ Complete · Phase 2A ✅ Complete — awaiting Phase 2B execution.
 
 ### AI Multi-Model Routing — Phase 1 Summary (17-04-2026)
 **Root Cause:** Single AIService singleton used for all AI requests — no per-provider config, no model selection, no context size awareness per provider.
@@ -23,6 +23,27 @@
 - `x-grok-conv-id` header NOT attached for `is_local=True` providers
 - Context size guard fires AFTER `_inject_backend_indicators()` so the limit reflects the full post-injection payload
 - `local_process.py` stdout/stderr → `system_LOGS/llama-server-{timestamp}.log` (never swallowed)
+
+### AI Multi-Model Routing — Phase 2A Review (17-04 → 18-04-2026)
+**Result:** 🔴 BLOCKING → ✅ RESOLVED by @Coder → 🔴 Follow-up regression R-1 → ✅ FIXED (18-04)
+
+**@Reviewer findings (17-04-17):** 2 Critical, 3 High, 3 Medium, 4 Low. C-1 (model field silently dropped) + C-2 (stale handleAsk closure) were BLOCKING.
+
+**@Coder remediated (17-04-17):** 9 code changes across 5 files — model now propagates end-to-end through `useAskAi → aiClient → fetch POST body`.
+
+**Follow-up double-check (18-04-18):** Found regression R-1 — `model` added to `useCallback` deps array in `useAskAi.js` but `model` is an inner function argument, not in hook scope. Would cause `ReferenceError` on mount. Fixed by removing `model` from deps array.
+
+**Phase 2A items completed:**
+- `useAiProviders.js` — NEW hook with `refresh()`, `error` state, `AbortController`
+- `AiModelSelector.jsx` — NEW chip UI; disabled "No models" chip on empty/error
+- `settingsStore.js` — `defaultModel` + `alertDispatchModel` + `normalizeAiModel`
+- `AskAiModal.jsx` — chip in header, `model` passed in `onAsk`, deps fixed, error wired
+- `useAskAi.js` — `model` destructure + forward to `askAI()` (deps array corrected 18-04)
+- `aiClient.js` — `model` in POST body (conditional, backward compat)
+
+**Remaining Phase 2A items (deferred):** AiInsightsPanel toolbar chip, SettingsPanel AI tab selects, Alert Dispatcher `QFLX_ALERT_AI_MODEL` env injection.
+
+**Report:** `v2_Dev_Docs/AI_Model_Routing/Reviewer_Phase2A_26-04-17.md`
 
 ---
 
@@ -108,7 +129,10 @@
 
 ### AI Multi-Model Routing (In Progress)
 - [ ] **Phase 0**: `.env` harmonization — user to confirm `GROK_API_KEY`, `LOCAL_AI_BASE_URL`, `QFLX_LOCAL_AI_AUTOSTART=1`
-- [ ] **Phase 2**: Frontend model selector — `AiModelSelector.jsx`, `useAiProviders.js` hook, Settings Panel integration
+- [x] **Phase 1**: Backend Provider Registry — ✅ Complete (175/175 tests)
+- [x] **Phase 2A**: Frontend Model Selector Wiring — ✅ Complete (regression R-1 fixed 18-04)
+- [ ] **Phase 2A remaining**: AiInsightsPanel chip, SettingsPanel selects, Alert Dispatcher env injection
+- [ ] **Phase 2B**: Ask AI Modal Full Rewrite (UI refactor, ~8h)
 - [ ] **Phase 3**: Benchmark harness + final multi-agent review
 
 ### Backlog (Post-Multi-Model)

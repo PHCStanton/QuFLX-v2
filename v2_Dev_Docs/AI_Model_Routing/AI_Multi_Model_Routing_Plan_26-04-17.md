@@ -745,13 +745,15 @@ Behavior:
 - `routes/ai.py`: replaced deprecated `parse_obj` with `model_validate` + JSON-serializable error conversion
 - `routes/ai.py`: moved context-size check to AFTER `_inject_backend_indicators()` call (Fail Fast after full context computed)
 
-### Phase 2
-- [ ] `AiModelSelector` renders in Modal + Insights
-- [ ] Switching provider survives tab changes within the panel but resets on close
-- [ ] Settings Panel persists `defaultModel` + `alertDispatchModel`
-- [ ] Voice fallback banner shows for Gemma + Server-voice combo
-- [ ] Alert Dispatcher log shows `model` field after setting change + restart
-- [ ] `@Reviewer` signs off
+### Phase 2A
+- [x] `gui/Dashboard/src/hooks/useAiProviders.js` implemented
+- [x] `gui/Dashboard/src/components/AiModelSelector.jsx` implemented
+- [x] `settingsStore.js` — `defaultModel`, `alertDispatchModel` + normalizer added
+- [x] `AskAiModal.jsx` — chip wired in header, `model` field passed in request
+- [ ] Wire chip into AiInsightsPanel toolbar
+- [ ] Add 2 model selects to Settings Panel (AI tab)
+- [ ] Implement Alert Dispatcher env injection in gateway spawn helper
+- [ ] `@Reviewer` Phase 2A sign-off
 
 ### Phase 3
 - [ ] Benchmark report generated

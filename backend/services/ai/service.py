@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -5,7 +6,6 @@ import re
 from typing import Any, Dict, Optional
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .providers import ProviderSpec
 
@@ -47,6 +47,11 @@ class AIService:
             self.timeout_seconds_fast = float(os.getenv("AI_TIMEOUT_SECONDS_FAST", "30"))
         except Exception:
             self.timeout_seconds_fast = 30.0
+
+        try:
+            self.timeout_seconds_local = float(os.getenv("AI_TIMEOUT_SECONDS_LOCAL", "120"))
+        except Exception:
+            self.timeout_seconds_local = 120.0
 
         try:
             self.timeout_seconds_slow = float(os.getenv("AI_TIMEOUT_SECONDS_SLOW", str(default_timeout_seconds)))
@@ -92,14 +97,12 @@ class AIService:
             await self._client.aclose()
             logger.info("AIService HTTP client closed for provider: %s", self.spec.key)
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type(httpx.TimeoutException),
-        reraise=True
-    )
     async def _post_with_retry(self, url: str, **kwargs):
-        """Internal helper to execute POST with exponential backoff on timeouts."""
+        """Internal helper to execute POST with exponential backoff on timeouts.
+
+        For local providers (is_local=True), only 1 attempt is made to fail fast
+        instead of waiting ~90s for 3 retries on a dead server.
+        """
         if not self._client:
             raise AIServiceError(
                 code='client_not_initialized',
@@ -107,7 +110,18 @@ class AIService:
                 status_code=500,
                 retryable=False
             )
-        return await self._client.post(url, **kwargs)
+
+        max_attempts = 1 if self.spec.is_local else 3
+        wait_seconds = 1.0
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return await self._client.post(url, **kwargs)
+            except httpx.TimeoutException:
+                if attempt >= max_attempts:
+                    raise
+                await asyncio.sleep(wait_seconds)
+                wait_seconds = min(wait_seconds * 2, 10.0)
 
     async def ask(
         self,
@@ -179,7 +193,10 @@ class AIService:
         has_custom_instructions = context and bool(str(context.get('customInstructions') or '').strip())
 
         is_complex_request = has_custom_instructions or has_format_constraints or prompt_len >= 500 or bool(image)
-        timeout_seconds = self.timeout_seconds_slow if is_complex_request else self.timeout_seconds_fast
+        if self.spec.is_local:
+            timeout_seconds = self.timeout_seconds_local
+        else:
+            timeout_seconds = self.timeout_seconds_slow if is_complex_request else self.timeout_seconds_fast
 
         # Construct dynamic user instructions
         instruction_parts = []

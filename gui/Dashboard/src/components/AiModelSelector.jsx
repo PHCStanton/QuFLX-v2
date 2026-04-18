@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-export default function AiModelSelector({ value, onChange, providers, size = 'sm' }) {
+export default function AiModelSelector({ value, onChange, providers, size = 'sm', error = null }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -26,7 +26,24 @@ export default function AiModelSelector({ value, onChange, providers, size = 'sm
     setIsOpen(false);
   };
 
-  if (!providers.length) return null;
+  if (!providers.length) {
+    // Disabled placeholder chip — user sees "AI routing unavailable" instead of invisible chip
+    return (
+      <button
+        type="button"
+        disabled
+        className={`
+          flex items-center gap-1.5 px-2 py-1 rounded-lg border border-gray-700
+          bg-[#0f1419] text-gray-500 text-xs cursor-not-allowed
+          ${size === 'md' ? 'px-3 py-1.5 text-sm' : ''}
+        `}
+        title={error ? error : 'AI providers unavailable — check Gateway connection'}
+      >
+        <div className="w-2 h-2 rounded-full bg-gray-600" />
+        <span>No models</span>
+      </button>
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative inline-block">

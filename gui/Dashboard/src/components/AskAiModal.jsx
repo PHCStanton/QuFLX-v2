@@ -164,7 +164,7 @@ const AskAiModal = ({
   const [conversationMode, setConversationMode] = useState(false);
   const [selectedModel, setSelectedModel] = useState(settings?.ai?.defaultModel || 'grok-4-fast');
   
-  const { providers } = useAiProviders();
+  const { providers, error: providersError } = useAiProviders();
 
   const {
     supported: ttsSupported,
@@ -347,6 +347,7 @@ const AskAiModal = ({
     readBackEnabled,
     speakText,
     setError,
+    selectedModel,
     customInstructions,
   ]);
 
@@ -455,6 +456,7 @@ const AskAiModal = ({
                   value={selectedModel}
                   onChange={setSelectedModel}
                   providers={providers}
+                  error={providersError}
                   size="sm"
                 />
                 <button

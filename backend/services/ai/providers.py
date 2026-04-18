@@ -38,7 +38,7 @@ def build_provider_specs() -> Dict[str, ProviderSpec]:
             label="Grok 4.1 Fast",
             base_url=_env("XAI_BASE_URL", "https://api.x.ai/v1"),
             api_key_env="GROK_API_KEY",
-            model="grok-4-fast-latest",
+            model="grok-4-1-fast",
             supports_voice_server=True,
             supports_vision=True,
             max_ctx_kb=150,

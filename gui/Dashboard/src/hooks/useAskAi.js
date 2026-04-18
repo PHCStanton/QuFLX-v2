@@ -26,7 +26,7 @@ const useAskAi = ({
 }) => {
   const [isAsking, setIsAsking] = useState(false);
 
-  const ask = useCallback(async ({ prompt, imageSourceOverride, forceImageDataUrl } = {}) => {
+  const ask = useCallback(async ({ prompt, model, imageSourceOverride, forceImageDataUrl } = {}) => {
     const isTimeoutError = (err) => {
       const msg = getErrorMessage(err).toLowerCase();
       return msg.includes('code=timeout') || msg.includes('timed out') || msg.includes('timeout');
@@ -106,7 +106,7 @@ const useAskAi = ({
 
       const runRequest = async ({ requestContext, requestImageSource }) => {
         const image = await resolveImage(requestImageSource);
-        return askAI({ prompt: trimmedPrompt, context: requestContext, image });
+        return askAI({ prompt: trimmedPrompt, model, context: requestContext, image });
       };
 
       let response;
