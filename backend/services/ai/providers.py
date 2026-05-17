@@ -10,6 +10,7 @@ class ProviderSpec:
     base_url: str  # e.g. "https://api.x.ai/v1"
     api_key_env: Optional[str]  # None = no auth (local)
     model: str
+    reasoning_effort: str = "low"  # Grok 4.3 specific: "none" | "low" | "medium" | "high"
     supports_voice_server: bool  # xAI Realtime compatible
     supports_vision: bool
     max_ctx_kb: int  # safety cap on serialized context
@@ -24,10 +25,11 @@ def build_provider_specs() -> Dict[str, ProviderSpec]:
     return {
         "grok-4": ProviderSpec(
             key="grok-4",
-            label="Grok 4 (Thinking)",
+            label="Grok 4.3 (Reasoning)",
             base_url=_env("XAI_BASE_URL", "https://api.x.ai/v1"),
             api_key_env="GROK_API_KEY",
-            model="grok-4-latest",
+            model="grok-4.3",
+            reasoning_effort="low",
             supports_voice_server=True,
             supports_vision=True,
             max_ctx_kb=150,
@@ -35,10 +37,11 @@ def build_provider_specs() -> Dict[str, ProviderSpec]:
         ),
         "grok-4-fast": ProviderSpec(
             key="grok-4-fast",
-            label="Grok 4.1 Fast",
+            label="Grok 4.3 Fast (No Reasoning)",
             base_url=_env("XAI_BASE_URL", "https://api.x.ai/v1"),
             api_key_env="GROK_API_KEY",
-            model="grok-4-1-fast",
+            model="grok-4.3",
+            reasoning_effort="none",
             supports_voice_server=True,
             supports_vision=True,
             max_ctx_kb=150,
@@ -50,6 +53,7 @@ def build_provider_specs() -> Dict[str, ProviderSpec]:
             base_url=_env("LOCAL_AI_BASE_URL", "http://127.0.0.1:8080/v1"),
             api_key_env=None,
             model=_env("LOCAL_AI_MODEL", "gemma-4-2b-it-Q4_0"),
+            reasoning_effort="none",
             supports_voice_server=False,
             supports_vision=True,
             max_ctx_kb=24,
