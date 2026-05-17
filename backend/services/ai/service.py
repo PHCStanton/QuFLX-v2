@@ -238,6 +238,10 @@ class AIService:
             "max_tokens": max_tokens,
         }
 
+        # Grok 4.3 migration (May 15, 2026): explicit reasoning_effort for optimal speed/cost in OTC trading
+        if not self.spec.is_local:
+            payload["reasoning_effort"] = self.spec.reasoning_effort
+
         headers: Dict[str, str] = {}
         if conversation_id and not self.spec.is_local:
             headers['x-grok-conv-id'] = conversation_id
