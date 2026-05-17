@@ -619,7 +619,7 @@ class TechnicalIndicatorsPipeline:
         - Phase 4: zone bounds (resistance_zone_upper/lower, support_zone_upper/lower)
         """
         try:
-            n = self.params.get('support_resistance_period', 5)
+            n = self.params.get('support_resistance_period', 2)
             window = 2 * n + 1
 
             # ── 1. Identify fractal pivots (vectorized, center=True for full-window look) ──

@@ -6,10 +6,12 @@ import useVoiceAgent from '../hooks/useVoiceAgent';
 import { AI_INTRODUCTION_TEXT } from '../utils/aiIntroduction';
 import useTextToSpeech from '../utils/useTextToSpeech';
 import useNaturalVoice from '../hooks/useNaturalVoice';
-import useAiProviders from '../hooks/useAiProviders';
+import useAiProvidersStore from '../store/aiProvidersStore';
 import AiModelSelector from './AiModelSelector';
 import NeomorphicSwitch from './NeomorphicSwitch';
 import askAiSubmitSound from '../assets/Sounds/UIAlert-Positive,_high-tech.mp3';
+
+const askAiSubmitAudio = typeof Audio !== 'undefined' ? new Audio(askAiSubmitSound) : null;
 
 const PRESETS = [
   {
@@ -134,6 +136,7 @@ const AskAiModal = ({
   isOpen,
   onClose,
   onAsk,
+  onAbortAsk,
   asset,
   timeframe,
   forceImageDataUrl,
@@ -163,8 +166,9 @@ const AskAiModal = ({
   const [readAnswerAloud, setReadAnswerAloud] = useState(false);
   const [conversationMode, setConversationMode] = useState(false);
   const [selectedModel, setSelectedModel] = useState(settings?.ai?.defaultModel || 'grok-4-fast');
-  
-  const { providers, error: providersError } = useAiProviders();
+  const providers = useAiProvidersStore((state) => state.providers);
+  const providersError = useAiProvidersStore((state) => state.error);
+  const refreshAiProviders = useAiProvidersStore((state) => state.refresh);
 
   const {
     supported: ttsSupported,
@@ -221,6 +225,10 @@ const AskAiModal = ({
   }, [readBackMode, speakNatural, speakTts, ttsOptions]);
 
   const contextInstructions = useMemo(() => {
+    if (!conversationMode) {
+      return '';
+    }
+
     const custom = customInstructions;
     const ctx = buildAiContext({
       autoIncludeContext: true,
@@ -231,6 +239,7 @@ const AskAiModal = ({
       activeIndicators,
       selectedAsset: asset,
       selectedTimeframe: timeframe,
+      uiMode: 'modal',
     });
 
     const dataCtx = { ...ctx };
@@ -238,14 +247,14 @@ const AskAiModal = ({
     delete dataCtx.timeframe;
 
     let base = `You are analyzing ${asset || 'the market'} on ${timeframe || 'the chart'}.\n\n`;
-    base += `Current Market Data Context:\n${JSON.stringify(dataCtx, null, 2)}\n\n`;
+    base += `Current Market Data Context:\n${JSON.stringify(dataCtx)}\n\n`;
     base += `Respond concisely relative to the user's trading context. If the user asks for current price or indicators, refer to the data provided above. NEVER say you are using simulation data.`;
 
     if (custom) {
       base = `${custom}\n\n${base}`;
     }
     return base;
-  }, [asset, timeframe, customInstructions, marketData, historyCandles, selectedAssetKey, indicatorSeries, activeIndicators]);
+  }, [conversationMode, asset, timeframe, customInstructions, marketData, historyCandles, selectedAssetKey, indicatorSeries, activeIndicators]);
 
   const {
     status: voiceStatus,
@@ -291,9 +300,23 @@ const AskAiModal = ({
   }, [isOpen, settings?.ai?.imageSource]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    void refreshAiProviders();
+  }, [isOpen, refreshAiProviders]);
+
+  useEffect(() => {
     if (isOpen) return;
+    onAbortAsk?.();
     if (isSpeaking) stopSpeaking();
-  }, [isOpen, isSpeaking, stopSpeaking]);
+  }, [isOpen, isSpeaking, stopSpeaking, onAbortAsk]);
+
+  useEffect(() => () => {
+    onAbortAsk?.();
+  }, [onAbortAsk]);
+
+  useEffect(() => {
+    setSelectedModel(settings?.ai?.defaultModel || 'grok-4-fast');
+  }, [settings?.ai?.defaultModel]);
 
   const handleAsk = useCallback(async () => {
     if (!onAsk) return;
@@ -301,21 +324,30 @@ const AskAiModal = ({
     if (!prompt) return;
 
     // Play submit sound
-    const audio = new Audio(askAiSubmitSound);
-    audio.play().catch(() => { });
+    if (askAiSubmitAudio) {
+      askAiSubmitAudio.currentTime = 0;
+      askAiSubmitAudio.play().catch(() => {});
+    }
 
     if (isThinking) return;
 
     try {
       setIsThinking(true);
+      setAnswer('');
       appendAiMessage({ role: 'user', content: prompt, meta: { asset, timeframe, imageSource: localImageSource } });
       const result = await onAsk({
         prompt,
         model: selectedModel,
         imageSourceOverride: localImageSource,
         forceImageDataUrl,
-        context: { customInstructions }
+        context: { customInstructions },
+        onChunk: (nextAnswer) => {
+          setAnswer(nextAnswer);
+        },
       });
+      if (result?.aborted) {
+        return;
+      }
       if (!result) {
         setAnswer('⚠️ System Error: The AI request timed out or failed.\n\nPlease close and reopen this "Ask AI" modal, then try again.');
         return;

@@ -1,16 +1,19 @@
 import { getApiBaseUrl } from './apiBase';
 
-export async function askAI({ prompt, model, context = {}, image = null }) {
-  if (!prompt || typeof prompt !== 'string') {
-    throw new Error('prompt must be a non-empty string');
-  }
+const buildAiRequestError = ({ detail, status, code = null, requestId = null, retryable = null }) => {
+  const err = new Error(`AI request failed: ${detail}`);
+  err.name = 'AiRequestError';
+  err.status = status;
+  err.code = code;
+  err.requestId = requestId;
+  err.retryable = retryable;
+  return err;
+};
 
-  // Extract asset and timeframe from context to send as top-level params
-  // Backend requires these as top-level for indicator injection
+const buildRequestBody = ({ prompt, model, context = {}, image = null }) => {
   const asset = context?.asset || null;
   const timeframe = context?.timeframe || null;
 
-  // Only include model in body when non-null (backward compat)
   const body = {
     prompt,
     context,
@@ -21,6 +24,39 @@ export async function askAI({ prompt, model, context = {}, image = null }) {
   if (model != null) {
     body.model = model;
   }
+  return body;
+};
+
+const throwAiErrorResponse = async (res, logLabel) => {
+  let detail = `HTTP ${res.status}`;
+  let requestId = null;
+  let code = null;
+  let retryable = null;
+  try {
+    const data = await res.json();
+    if (data && typeof data.detail === 'string') detail = data.detail;
+    if (data && typeof data.request_id === 'string') requestId = data.request_id;
+    if (data && typeof data.code === 'string') code = data.code;
+    if (data && typeof data.retryable === 'boolean') retryable = data.retryable;
+  } catch (parseError) {
+    console.warn(`${logLabel}: failed to parse error response JSON`, parseError);
+  }
+
+  throw buildAiRequestError({
+    detail,
+    status: res.status,
+    code,
+    requestId,
+    retryable,
+  });
+};
+
+export async function askAI({ prompt, model, context = {}, image = null, signal = null }) {
+  if (!prompt || typeof prompt !== 'string') {
+    throw new Error('prompt must be a non-empty string');
+  }
+
+  const body = buildRequestBody({ prompt, model, context, image });
 
   const res = await fetch(`${getApiBaseUrl()}/api/v1/ai/ask`, {
     method: 'POST',
@@ -28,27 +64,81 @@ export async function askAI({ prompt, model, context = {}, image = null }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    let requestId = null;
-    let code = null;
-    try {
-      const data = await res.json();
-      if (data && typeof data.detail === 'string') detail = data.detail;
-      if (data && typeof data.request_id === 'string') requestId = data.request_id;
-      if (data && typeof data.code === 'string') code = data.code;
-    } catch {
-      // ignore JSON parse errors and use generic detail
-    }
-
-    const suffixParts = [];
-    if (code) suffixParts.push(`code=${code}`);
-    if (requestId) suffixParts.push(`req=${requestId}`);
-    const suffix = suffixParts.length ? ` (${suffixParts.join(' ')})` : '';
-    throw new Error(`AI request failed: ${detail}${suffix}`);
+    await throwAiErrorResponse(res, 'askAI');
   }
 
   return res.json();
+}
+
+export async function* askAIStream({ prompt, model, context = {}, image = null, signal = null }) {
+  if (!prompt || typeof prompt !== 'string') {
+    throw new Error('prompt must be a non-empty string');
+  }
+
+  const body = buildRequestBody({ prompt, model, context, image });
+  const res = await fetch(`${getApiBaseUrl()}/api/v1/ai/ask/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok) {
+    await throwAiErrorResponse(res, 'askAIStream');
+  }
+
+  if (!res.body) {
+    throw new Error('AI stream response body is missing.');
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      buffer += decoder.decode();
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() || '';
+
+    for (const event of events) {
+      const dataLine = event
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.startsWith('data:'));
+
+      if (!dataLine) {
+        continue;
+      }
+
+      const data = dataLine.slice(5).trim();
+      if (!data || data === '[DONE]') {
+        return;
+      }
+
+      const chunk = JSON.parse(data);
+      if (chunk?.type === 'error') {
+        throw buildAiRequestError({
+          detail: chunk.detail || 'AI stream failed.',
+          status: 502,
+          code: chunk.code || null,
+          requestId: chunk.request_id || null,
+          retryable: typeof chunk.retryable === 'boolean' ? chunk.retryable : null,
+        });
+      }
+
+      yield chunk;
+    }
+  }
 }

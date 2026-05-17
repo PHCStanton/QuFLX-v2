@@ -1,9 +1,26 @@
-import pandas as pd
+import json
+import time
+from threading import Lock
 from typing import Any, Dict, Optional, Tuple
+
+import pandas as pd
 
 from backend.services.strategy.indicators import TechnicalIndicatorsPipeline
 from backend.utils.asset_utils import normalize_asset
 from backend.utils.data_store import get_candle_path, timeframe_to_str
+
+_INDICATOR_CACHE_TTL_SECONDS = 5.0
+_INDICATOR_CACHE: Dict[Tuple[str, int, str], Tuple[float, float, pd.DataFrame, int]] = {}
+_INDICATOR_CACHE_LOCK = Lock()
+
+
+def _build_cache_key(
+    normalized_asset: str,
+    timeframe_min: int,
+    pipeline_params: Optional[Dict[str, Any]],
+) -> Tuple[str, int, str]:
+    params_signature = json.dumps(pipeline_params or {}, sort_keys=True, separators=(",", ":"), default=str)
+    return normalized_asset, timeframe_min, params_signature
 
 
 def calculate_indicators_for_asset(
@@ -17,9 +34,18 @@ def calculate_indicators_for_asset(
     Safe to call from asyncio.to_thread().
     """
     normalized_asset = normalize_asset(asset)
+    cache_key = _build_cache_key(normalized_asset, timeframe_min, pipeline_params)
     csv_path = get_candle_path(normalized_asset, timeframe_to_str(timeframe_min))
     if not csv_path or not csv_path.exists():
         raise FileNotFoundError(f"History not found for {normalized_asset} @ {timeframe_min}m")
+
+    if current_candle is None:
+        csv_mtime = float(csv_path.stat().st_mtime)
+        now = time.monotonic()
+        with _INDICATOR_CACHE_LOCK:
+            cached = _INDICATOR_CACHE.get(cache_key)
+            if cached and cached[0] == csv_mtime and (now - cached[1]) < _INDICATOR_CACHE_TTL_SECONDS:
+                return cached[2], cached[3]
 
     df = pd.read_csv(csv_path)
 
@@ -64,6 +90,16 @@ def calculate_indicators_for_asset(
     df.columns = [str(col).lower() for col in df.columns]
     pipeline = TechnicalIndicatorsPipeline(config={"indicator_params": pipeline_params or {}})
     result_df = pipeline.calculate_indicators(df, timeframe_min=timeframe_min)
+
+    if current_candle is None:
+        with _INDICATOR_CACHE_LOCK:
+            _INDICATOR_CACHE[cache_key] = (
+                csv_mtime,
+                time.monotonic(),
+                result_df,
+                len(result_df),
+            )
+
     return result_df, len(result_df)
 
 

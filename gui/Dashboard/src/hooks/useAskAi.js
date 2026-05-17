@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { resolveAiImage, buildAiContext } from '../utils/aiContext';
 
 const getErrorMessage = (err) => {
@@ -6,8 +6,24 @@ const getErrorMessage = (err) => {
   return String(err);
 };
 
+const isTimeoutError = (err) => {
+  if (!err) {
+    return false;
+  }
+
+  if (err.code === 'timeout') {
+    return true;
+  }
+
+  const msg = getErrorMessage(err).toLowerCase();
+  return msg.includes('timed out') || msg.includes('timeout');
+};
+
+const isAbortError = (err) => err?.name === 'AbortError';
+
 const useAskAi = ({
   askAI,
+  askAIStream,
   captureImage,
   lastAnnotatedImage,
   imageSource,
@@ -25,13 +41,20 @@ const useAskAi = ({
   onError,
 }) => {
   const [isAsking, setIsAsking] = useState(false);
+  const abortRef = useRef(null);
 
-  const ask = useCallback(async ({ prompt, model, imageSourceOverride, forceImageDataUrl } = {}) => {
-    const isTimeoutError = (err) => {
-      const msg = getErrorMessage(err).toLowerCase();
-      return msg.includes('code=timeout') || msg.includes('timed out') || msg.includes('timeout');
-    };
+  const abort = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+  }, []);
 
+  useEffect(() => () => {
+    abort();
+  }, [abort]);
+
+  const ask = useCallback(async ({ prompt, model, imageSourceOverride, forceImageDataUrl, onChunk } = {}) => {
     const shrinkContext = ({ context, level }) => {
       if (!context || typeof context !== 'object') return context;
       const next = { ...context };
@@ -69,6 +92,7 @@ const useAskAi = ({
       activeIndicators,
       selectedAsset,
       selectedTimeframe,
+      uiMode,
     });
 
     if (responseVerbosity) {
@@ -90,6 +114,8 @@ const useAskAi = ({
 
     const src = imageSourceOverride || imageSource;
     let usedImageSource = String(src || 'live');
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       setIsAsking(true);
@@ -106,7 +132,47 @@ const useAskAi = ({
 
       const runRequest = async ({ requestContext, requestImageSource }) => {
         const image = await resolveImage(requestImageSource);
-        return askAI({ prompt: trimmedPrompt, model, context: requestContext, image });
+        if (typeof onChunk === 'function' && typeof askAIStream === 'function') {
+          let streamedAnswer = '';
+          let streamedMeta = null;
+
+          for await (const chunk of askAIStream({
+            prompt: trimmedPrompt,
+            model,
+            context: requestContext,
+            image,
+            signal: controller.signal,
+          })) {
+            if (chunk?.type === 'delta') {
+              const delta = String(chunk.delta || '');
+              if (!delta) continue;
+              streamedAnswer += delta;
+              onChunk(streamedAnswer, delta);
+              continue;
+            }
+
+            if (chunk?.type === 'done') {
+              streamedMeta = chunk.meta || null;
+              if (typeof chunk.answer === 'string' && chunk.answer) {
+                streamedAnswer = chunk.answer;
+                onChunk(streamedAnswer, '');
+              }
+            }
+          }
+
+          return {
+            answer: streamedAnswer,
+            meta: streamedMeta,
+          };
+        }
+
+        return askAI({
+          prompt: trimmedPrompt,
+          model,
+          context: requestContext,
+          image,
+          signal: controller.signal,
+        });
       };
 
       let response;
@@ -137,14 +203,21 @@ const useAskAi = ({
         timeframe: selectedTimeframe,
       };
     } catch (err) {
+      if (isAbortError(err)) {
+        return { aborted: true };
+      }
       if (onError) onError(`Ask AI failed: ${getErrorMessage(err)}`);
       return null;
     } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       setIsAsking(false);
     }
   }, [
     isAsking,
     askAI,
+    askAIStream,
     captureImage,
     lastAnnotatedImage,
     imageSource,
@@ -162,7 +235,7 @@ const useAskAi = ({
     onError,
   ]);
 
-  return { isAsking, ask };
+  return { isAsking, ask, abort };
 };
 
 export default useAskAi;

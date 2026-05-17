@@ -12,7 +12,7 @@ import useAskAi from '../hooks/useAskAi';
 import useChartWorkspaceIndicators from '../hooks/useChartWorkspaceIndicators';
 import useChartWorkspaceHeaderControls from '../hooks/useChartWorkspaceHeaderControls';
 import { useStreamHealth } from '../hooks/useStreamHealth';
-import { askAI } from '../api/aiClient';
+import { askAI, askAIStream } from '../api/aiClient';
 import { saveChartScreenshot } from '../api/screenshotClient';
 import ScreenshotModal from './ScreenshotModal';
 import AskAiModal from './AskAiModal';
@@ -43,6 +43,7 @@ const ChartWorkspace = () => {
     updateIndicator,
     indicatorSeries,
     indicatorStatus,
+    setIndicatorSeries,
     loadIndicators,
     appendCandle,
     lastError, clearError,
@@ -77,8 +78,9 @@ const ChartWorkspace = () => {
     openScreenshot
   } = useScreenshotCapture({ onError: setError });
 
-  const { isAsking, ask } = useAskAi({
+  const { isAsking, ask, abort } = useAskAi({
     askAI,
+    askAIStream,
     captureImage: captureCompositeChart,
     lastAnnotatedImage: lastAnnotatedScreenshotDataUrl,
     imageSource: settings?.ai?.imageSource,
@@ -99,11 +101,19 @@ const ChartWorkspace = () => {
   const [askAiForceImageDataUrl, setAskAiForceImageDataUrl] = useState(null);
   const [settingsIndicator, setSettingsIndicator] = useState(null);
 
-  // REF button: bump this to force all indicator series to re-render unconditionally
+  // REF button: clears the current asset's cached indicator series then bumps refreshKey.
+  // Clearing the series forces a fresh backend fetch (bypasses frontend cache).
+  // The backend cache is mtime-keyed, so it auto-invalidates when the CSV changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const handleForceRefresh = useCallback(() => {
+    const key = `${selectedAsset}|${selectedTimeframe}`;
+    setIndicatorSeries((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [selectedAsset, selectedTimeframe, setIndicatorSeries]);
 
   // Suspend / resume a single indicator without removing it
   const handleIndicatorSuspend = useCallback((id) => {
@@ -313,6 +323,7 @@ const ChartWorkspace = () => {
     loadIndicators,
     appendCandle,
     refreshKey,
+    historyStatus,
   });
 
   useChartMarkers({
@@ -612,6 +623,7 @@ const ChartWorkspace = () => {
         isOpen={isAskAiOpen}
         onClose={handleAskAiClose}
         onAsk={ask}
+        onAbortAsk={abort}
         asset={selectedAsset}
         timeframe={selectedTimeframe}
         forceImageDataUrl={askAiForceImageDataUrl}

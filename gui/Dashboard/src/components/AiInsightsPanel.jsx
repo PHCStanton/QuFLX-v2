@@ -12,13 +12,15 @@ import { getAiImageSourceLabel, buildAiContext } from '../utils/aiContext';
 import useVoiceAgent from '../hooks/useVoiceAgent';
 import useTextToSpeech from '../utils/useTextToSpeech';
 import useNaturalVoice from '../hooks/useNaturalVoice';
-import useAiProviders from '../hooks/useAiProviders';
+import useAiProvidersStore from '../store/aiProvidersStore';
 import AiModelSelector from './AiModelSelector';
 
 const AiInsightsPanel = () => {
   const { settings } = useSettingsStore();
   const [selectedModel, setSelectedModel] = useState(settings?.ai?.defaultModel || 'grok-4');
-  const { providers, error: providersError } = useAiProviders();
+  const providers = useAiProvidersStore((state) => state.providers);
+  const providersError = useAiProvidersStore((state) => state.error);
+  const refreshAiProviders = useAiProvidersStore((state) => state.refresh);
   const {
     aiMessages,
     appendAiMessage,
@@ -149,6 +151,10 @@ const AiInsightsPanel = () => {
     }
   }, [aiMessages]);
 
+  useEffect(() => {
+    void refreshAiProviders();
+  }, [refreshAiProviders]);
+
 
   const contextInstructions = useMemo(() => {
     const custom = settings?.ai?.customInstructions;
@@ -161,6 +167,7 @@ const AiInsightsPanel = () => {
       activeIndicators,
       selectedAsset,
       selectedTimeframe,
+      uiMode: 'insights',
     });
 
     const dataCtx = { ...ctx };
@@ -233,6 +240,7 @@ const AiInsightsPanel = () => {
     setAiDraftPrompt('');
 
     const result = await ask({ prompt, model: selectedModel });
+    if (result?.aborted) return;
     if (!result) return;
     appendAiMessage({ role: 'assistant', content: result.answer, meta: { asset: selectedAsset, timeframe: selectedTimeframe, provider: result.meta?.model || null } });
   };

@@ -58,7 +58,24 @@ const INDICATOR_SNAPSHOT_MAP = [
   ['S/R Flip', 'sr_flip'],
 ];
 
-const buildIndicatorSnapshots = ({ seriesForKey, activeIndicators }) => {
+const getContextWindowSizes = (uiMode) => {
+  const mode = String(uiMode || '').toLowerCase();
+  if (mode === 'modal') {
+    return {
+      tickKeep: 5,
+      candleKeep: 10,
+      snapshotKeep: 5,
+    };
+  }
+
+  return {
+    tickKeep: 20,
+    candleKeep: 100,
+    snapshotKeep: 50,
+  };
+};
+
+const buildIndicatorSnapshots = ({ seriesForKey, activeIndicators, snapshotKeep }) => {
   const indicatorSnapshots = {};
 
   if (!seriesForKey || typeof seriesForKey !== 'object') {
@@ -68,7 +85,7 @@ const buildIndicatorSnapshots = ({ seriesForKey, activeIndicators }) => {
   INDICATOR_SNAPSHOT_MAP.forEach(([name, key]) => {
     const series = seriesForKey[key];
     if (!Array.isArray(series) || series.length === 0) return;
-    indicatorSnapshots[name] = series.slice(-50);
+    indicatorSnapshots[name] = series.slice(-snapshotKeep);
   });
 
   if (Array.isArray(activeIndicators)) {
@@ -77,7 +94,7 @@ const buildIndicatorSnapshots = ({ seriesForKey, activeIndicators }) => {
       const series = seriesForKey[ind.key];
       const name = ind.name || ind.key;
       if (!Array.isArray(series) || series.length === 0 || indicatorSnapshots[name]) return;
-      indicatorSnapshots[name] = series.slice(-50);
+      indicatorSnapshots[name] = series.slice(-snapshotKeep);
     });
   }
 
@@ -93,8 +110,10 @@ export const buildAiContext = ({
   activeIndicators,
   selectedAsset,
   selectedTimeframe,
+  uiMode = 'insights',
 }) => {
   const includeContext = autoIncludeContext !== false;
+  const { tickKeep, candleKeep, snapshotKeep } = getContextWindowSizes(uiMode);
 
   if (!includeContext) {
     return {
@@ -104,16 +123,15 @@ export const buildAiContext = ({
   }
 
   const recentTicks = (marketData && selectedAssetKey && marketData[selectedAssetKey])
-    ? marketData[selectedAssetKey].slice(-20)
+    ? marketData[selectedAssetKey].slice(-tickKeep)
     : [];
 
   const rawCandles = (historyCandles && selectedAsset && historyCandles[selectedAsset]) || [];
-  // Include last 100 candles for solid trend analysis
-  const recentCandles = Array.isArray(rawCandles) ? rawCandles.slice(-100) : [];
+  const recentCandles = Array.isArray(rawCandles) ? rawCandles.slice(-candleKeep) : [];
 
   const indicatorKey = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
   const seriesForKey = indicatorKey && indicatorSeries ? indicatorSeries[indicatorKey] : null;
-  const indicatorSnapshots = buildIndicatorSnapshots({ seriesForKey, activeIndicators });
+  const indicatorSnapshots = buildIndicatorSnapshots({ seriesForKey, activeIndicators, snapshotKeep });
 
   return {
     asset: selectedAsset,

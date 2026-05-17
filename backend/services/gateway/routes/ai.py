@@ -3,11 +3,10 @@ import base64
 import json
 import logging
 import re
-from functools import lru_cache
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, validator
 
 from backend.services.ai.service import AIService, AIServiceError
@@ -82,6 +81,30 @@ def _resolve_ai_service(request: Request, model_key: Optional[str]) -> AIService
     return registry.get(key)
 
 
+def _error_response(
+    *,
+    status_code: int,
+    code: str,
+    detail: str,
+    request_id: str,
+    retryable: bool,
+    provider_status: Optional[int] = None,
+    errors: Optional[list] = None,
+) -> JSONResponse:
+    content: Dict[str, Any] = {
+        'ok': False,
+        'code': code,
+        'detail': detail,
+        'request_id': request_id,
+        'retryable': retryable,
+    }
+    if provider_status is not None:
+        content['provider_status'] = provider_status
+    if errors is not None:
+        content['errors'] = errors
+    return JSONResponse(status_code=status_code, content=content)
+
+
 def _normalize_image(image_base64: Optional[str], image: Optional[str]) -> Optional[str]:
     raw = image_base64 or image
     if raw is None:
@@ -127,6 +150,66 @@ def _normalize_image(image_base64: Optional[str], image: Optional[str]) -> Optio
     return f'data:image/png;base64,{candidate}'
 
 
+def _prepare_ai_request(payload: Dict[str, Any], request: Request, request_id: str):
+    try:
+        parsed = AiAskRequest.model_validate(payload)
+    except ValidationError as exc:
+        errors_serializable = [
+            {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in e.items()}
+            for e in exc.errors()
+        ]
+        return None, _error_response(
+            status_code=400,
+            code='invalid_request',
+            detail='Invalid AI request payload.',
+            request_id=request_id,
+            retryable=False,
+            errors=errors_serializable,
+        )
+
+    context = dict(parsed.context or {})
+    if parsed.asset:
+        context['asset'] = parsed.asset
+    if parsed.timeframe:
+        context['timeframe'] = parsed.timeframe
+
+    try:
+        ai_service = _resolve_ai_service(request, parsed.model)
+    except (KeyError, RuntimeError) as exc:
+        return None, _error_response(
+            status_code=400,
+            code='invalid_model',
+            detail=str(exc),
+            request_id=request_id,
+            retryable=False,
+        )
+
+    try:
+        image = _normalize_image(parsed.image_base64, parsed.image)
+    except ValueError as exc:
+        return None, _error_response(
+            status_code=400,
+            code='invalid_image',
+            detail=str(exc),
+            request_id=request_id,
+            retryable=False,
+        )
+
+    conv_id = parsed.conversation_id or request.headers.get('X-Grok-Conv-ID')
+    if not conv_id:
+        import hashlib
+        key = f"quflx-v2-{parsed.asset or 'main'}-{parsed.timeframe or '1m'}"
+        conv_id = hashlib.sha256(key.encode()).hexdigest()[:24]
+
+    return {
+        'parsed': parsed,
+        'context': context,
+        'ai_service': ai_service,
+        'image': image,
+        'conversation_id': conv_id,
+    }, None
+
+
 @router.get('/providers')
 async def list_providers(request: Request):
     reg: AIProviderRegistry = request.app.state.ai_registry
@@ -152,69 +235,15 @@ async def list_providers(request: Request):
 @router.post('/ask')
 async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None):
     request_id = request_id_var.get('-')
-    
-    try:
-        parsed = AiAskRequest.model_validate(payload)
-    except ValidationError as exc:
-        # exc.errors() returns Pydantic ErrorDetail objects — convert to plain dicts for JSON safety
-        errors_serializable = [
-            {k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for k, v in e.items()}
-            for e in exc.errors()
-        ]
-        return JSONResponse(
-            status_code=400,
-            content={
-                'ok': False,
-                'code': 'invalid_request',
-                'detail': 'Invalid AI request payload.',
-                'request_id': request_id,
-                'retryable': False,
-                'errors': errors_serializable,
-            },
-        )
+    prepared, error_response = _prepare_ai_request(payload, request, request_id)
+    if error_response:
+        return error_response
 
-    context = dict(parsed.context or {})
-    if parsed.asset:
-        context['asset'] = parsed.asset
-    if parsed.timeframe:
-        context['timeframe'] = parsed.timeframe
-
-    # Resolve AI service for requested model
-    try:
-        ai_service = _resolve_ai_service(request, parsed.model)
-    except (KeyError, RuntimeError) as exc:
-        return JSONResponse(
-            status_code=400,
-            content={
-                'ok': False,
-                'code': 'invalid_model',
-                'detail': str(exc),
-                'request_id': request_id,
-                'retryable': False,
-            },
-        )
-
-    try:
-        image = _normalize_image(parsed.image_base64, parsed.image)
-    except ValueError as exc:
-        return JSONResponse(
-            status_code=400,
-            content={
-                'ok': False,
-                'code': 'invalid_image',
-                'detail': str(exc),
-                'request_id': request_id,
-                'retryable': False,
-            },
-        )
-
-    # Determine conversation_id: payload > request header > stable fallback
-    conv_id = parsed.conversation_id or request.headers.get('X-Grok-Conv-ID')
-    if not conv_id:
-        # Generate stable ID for the asset/timeframe pool to maximize cache reuse across users/sessions
-        import hashlib
-        key = f"quflx-v2-{parsed.asset or 'main'}-{parsed.timeframe or '1m'}"
-        conv_id = hashlib.sha256(key.encode()).hexdigest()[:24]
+    parsed = prepared['parsed']
+    context = prepared['context']
+    ai_service = prepared['ai_service']
+    image = prepared['image']
+    conv_id = prepared['conversation_id']
 
     logger.info(
         'AI ask request_id=%s asset=%s timeframe=%s conv_id=%s image_present=%s context_keys=%s',
@@ -229,21 +258,18 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None):
     try:
         # Optimization: Inject backend indicators if missing from frontend
         # (Must happen before context-size check so the guard reflects post-injection size)
-        await _inject_backend_indicators(context, parsed.asset, parsed.timeframe)
+        await _inject_backend_indicators(context, parsed.asset, parsed.timeframe, max_ctx_kb=ai_service.spec.max_ctx_kb)
 
         # Enforce provider-specific context size limit AFTER injection (Fail Fast — Core Principle #9)
         ctx_bytes = len(json.dumps(context, separators=(',', ':')).encode('utf-8'))
         max_bytes = ai_service.spec.max_ctx_kb * 1024
         if ctx_bytes > max_bytes:
-            return JSONResponse(
+            return _error_response(
                 status_code=413,
-                content={
-                    'ok': False,
-                    'code': 'context_too_large',
-                    'detail': f"Context ({ctx_bytes//1024}KB) exceeds {ai_service.spec.label} limit ({ai_service.spec.max_ctx_kb}KB).",
-                    'request_id': request_id,
-                    'retryable': False,
-                },
+                code='context_too_large',
+                detail=f"Context ({ctx_bytes//1024}KB) exceeds {ai_service.spec.label} limit ({ai_service.spec.max_ctx_kb}KB).",
+                request_id=request_id,
+                retryable=False,
             )
 
         result = await ai_service.ask(
@@ -263,33 +289,108 @@ async def ask_ai(payload: Dict[str, Any] = Body(...), request: Request = None):
         }
 
     except AIServiceError as exc:
-        return JSONResponse(
+        return _error_response(
             status_code=int(exc.status_code),
-            content={
-                'ok': False,
+            code=exc.code,
+            detail=exc.user_message,
+            request_id=request_id,
+            retryable=bool(exc.retryable),
+            provider_status=exc.provider_status,
+        )
+
+    except Exception:
+        logger.error('AI ask failed request_id=%s', request_id, exc_info=True)
+        return _error_response(
+            status_code=500,
+            code='internal_error',
+            detail='AI request failed',
+            request_id=request_id,
+            retryable=False,
+        )
+
+
+@router.post('/ask/stream')
+async def ask_ai_stream(payload: Dict[str, Any] = Body(...), request: Request = None):
+    request_id = request_id_var.get('-')
+    prepared, error_response = _prepare_ai_request(payload, request, request_id)
+    if error_response:
+        return error_response
+
+    parsed = prepared['parsed']
+    context = prepared['context']
+    ai_service = prepared['ai_service']
+    image = prepared['image']
+    conv_id = prepared['conversation_id']
+
+    logger.info(
+        'AI ask stream request_id=%s asset=%s timeframe=%s conv_id=%s image_present=%s context_keys=%s',
+        request_id,
+        parsed.asset or '-',
+        parsed.timeframe or '-',
+        conv_id,
+        bool(image),
+        len(context.keys()),
+    )
+
+    await _inject_backend_indicators(context, parsed.asset, parsed.timeframe, max_ctx_kb=ai_service.spec.max_ctx_kb)
+
+    ctx_bytes = len(json.dumps(context, separators=(',', ':')).encode('utf-8'))
+    max_bytes = ai_service.spec.max_ctx_kb * 1024
+    if ctx_bytes > max_bytes:
+        return _error_response(
+            status_code=413,
+            code='context_too_large',
+            detail=f"Context ({ctx_bytes//1024}KB) exceeds {ai_service.spec.label} limit ({ai_service.spec.max_ctx_kb}KB).",
+            request_id=request_id,
+            retryable=False,
+        )
+
+    async def event_stream():
+        try:
+            async for chunk in ai_service.ask_stream(
+                prompt=parsed.prompt,
+                context=context or None,
+                image=image,
+                request_id=request_id,
+                asset=parsed.asset,
+                timeframe=parsed.timeframe,
+                conversation_id=conv_id,
+            ):
+                yield f"data: {json.dumps(chunk, separators=(',', ':'))}\n\n"
+        except AIServiceError as exc:
+            error_chunk = {
+                'type': 'error',
                 'code': exc.code,
                 'detail': exc.user_message,
                 'request_id': request_id,
                 'retryable': bool(exc.retryable),
                 'provider_status': exc.provider_status,
-            },
-        )
-
-    except Exception:
-        logger.error('AI ask failed request_id=%s', request_id, exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={
-                'ok': False,
+            }
+            yield f"data: {json.dumps(error_chunk, separators=(',', ':'))}\n\n"
+        except Exception:
+            logger.error('AI ask stream failed request_id=%s', request_id, exc_info=True)
+            error_chunk = {
+                'type': 'error',
                 'code': 'internal_error',
                 'detail': 'AI request failed',
                 'request_id': request_id,
                 'retryable': False,
-            },
-        )
+            }
+            yield f"data: {json.dumps(error_chunk, separators=(',', ':'))}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        },
+    )
 
 
-async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[str], timeframe: Optional[str]) -> None:
+async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[str], timeframe: Optional[str], max_ctx_kb: Optional[int] = None) -> None:
     """
     Supplement frontend snapshots with backend-computed indicators.
     Frontend values keep precedence when the same display key already exists.
@@ -326,8 +427,10 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
             normalized_asset,
             tf_min,
         )
-        # Optimize token usage by UI mode
+        # Optimize token usage by UI mode and available context size
         tail_count = 5 if ui_mode == 'modal' else 50
+        if max_ctx_kb and max_ctx_kb <= 32 and ui_mode != 'modal':
+            tail_count = 10
             
         backend_snapshots = build_indicator_snapshots(result_df, tail_count=tail_count)
         if not backend_snapshots:
@@ -338,7 +441,10 @@ async def _inject_backend_indicators(context: Dict[str, Any], asset: Optional[st
             )
             return
 
-        merged_snapshots = {**backend_snapshots, **existing_snapshots}
+        if ui_mode == 'modal':
+            merged_snapshots = {**existing_snapshots, **backend_snapshots}
+        else:
+            merged_snapshots = {**backend_snapshots, **existing_snapshots}
         context['indicatorSnapshots'] = merged_snapshots
         context['backendDataInjected'] = True
 

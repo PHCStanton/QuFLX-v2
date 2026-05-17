@@ -266,7 +266,8 @@ const createMarketSlice = (set, get) => ({
       selectedAsset: asset,
       selectedAssetKey: nextAssetKey,
       selectedAssetLoading: true,
-      marketData: {} // Clear old data immediately
+      marketData: {},       // Clear old tick data immediately
+      indicatorSeries: {},  // Clear stale indicator data so old S/R lines don't linger
     });
 
     const { settings } = (await import('./settingsStore')).default.getState();

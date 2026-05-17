@@ -169,11 +169,12 @@ async def test_prompt_construction_modal_concise(ai_service_grok):
         args, kwargs = mock_post.call_args
         payload = kwargs["json"]
         system_msg = payload["messages"][0]["content"]
-        user_msg = payload["messages"][1]["content"][0]["text"]
+        session_msg = payload["messages"][1]["content"]
+        user_msg = payload["messages"][2]["content"][0]["text"]
         assert "QuFLX AI" in system_msg
-        assert "MODE: Quick Response" in user_msg
-        assert "STYLE: Concise" in user_msg
-        assert "USER PROMPT: Test prompt" in user_msg
+        assert "MODE: Quick Response" in session_msg
+        assert "STYLE: Concise" in session_msg
+        assert user_msg.endswith("USER PROMPT: Test prompt")
         assert payload["max_tokens"] <= 300
 
 
@@ -195,11 +196,45 @@ async def test_prompt_construction_insights_detailed(ai_service_grok):
         )
         args, kwargs = mock_post.call_args
         payload = kwargs["json"]
-        user_msg = payload["messages"][1]["content"][0]["text"]
-        assert "MODE: Deep Analysis" in user_msg
-        assert "STYLE: Detailed" in user_msg
-        assert "USER PROMPT: Deep dive" in user_msg
+        session_msg = payload["messages"][1]["content"]
+        user_msg = payload["messages"][2]["content"][0]["text"]
+        assert "MODE: Deep Analysis" in session_msg
+        assert "STYLE: Detailed" in session_msg
+        assert user_msg.endswith("USER PROMPT: Deep dive")
         assert payload["max_tokens"] == 900
+
+
+@pytest.mark.asyncio
+async def test_prompt_construction_moves_custom_instructions_to_session_system(ai_service_grok):
+    """Custom instructions live in the session system message; dynamic context stays in the user message."""
+    with patch.object(ai_service_grok._client, "post") as mock_post:
+        mock_post.return_value = AsyncMock(
+            status_code=200,
+            json=lambda: {
+                "choices": [{"message": {"content": "ok"}}],
+                "model": "grok-4-latest",
+                "usage": {"prompt_tokens": 100},
+            },
+        )
+        await ai_service_grok.ask(
+            prompt="Check trend",
+            context={
+                "uiMode": "modal",
+                "responseVerbosity": "concise",
+                "customInstructions": "Use only bullet points.",
+                "asset": "EURUSDOTC",
+                "timeframe": "1m",
+            },
+        )
+        payload = mock_post.call_args.kwargs["json"]
+        session_msg = payload["messages"][1]["content"]
+        user_msg = payload["messages"][2]["content"][0]["text"]
+
+        assert "CUSTOM INSTRUCTIONS:\nUse only bullet points." in session_msg
+        assert "TRADING_CONTEXT:" in user_msg
+        assert '"asset":"EURUSDOTC"' in user_msg
+        assert "customInstructions" not in user_msg
+        assert user_msg.endswith("USER PROMPT: Check trend")
 
 
 @pytest.mark.asyncio
@@ -246,14 +281,69 @@ async def test_cache_telemetry_local_skips_conv_header(ai_service_local):
 
 
 @pytest.mark.asyncio
+async def test_ask_stream_yields_delta_and_done(ai_service_grok):
+    """Streaming request yields delta chunks followed by a done event with meta."""
+    stream_response = MagicMock()
+    stream_response.status_code = 200
+
+    async def iter_lines():
+        yield 'data: {"choices":[{"delta":{"content":"Hello "}}],"model":"grok-4-latest"}'
+        yield 'data: {"choices":[{"delta":{"content":"world"}}],"model":"grok-4-latest","usage":{"prompt_tokens":100,"cached_tokens":80,"completion_tokens":2}}'
+        yield 'data: [DONE]'
+
+    stream_response.aiter_lines = iter_lines
+    stream_response.aread = AsyncMock(return_value=b'')
+
+    stream_cm = AsyncMock()
+    stream_cm.__aenter__.return_value = stream_response
+    stream_cm.__aexit__.return_value = False
+
+    with patch.object(ai_service_grok._client, "stream", return_value=stream_cm):
+        chunks = [chunk async for chunk in ai_service_grok.ask_stream(prompt="Hello")]
+
+    assert chunks == [
+        {"type": "delta", "delta": "Hello "},
+        {"type": "delta", "delta": "world"},
+        {
+            "type": "done",
+            "answer": "Hello world",
+            "meta": {
+                "ok": True,
+                "provider": "grok-4",
+                "model": "grok-4-latest",
+                "usage": {"prompt_tokens": 100, "cached_tokens": 80, "completion_tokens": 2},
+                "cache": {"hit_rate": 80.0, "cached_tokens": 80},
+                "conversation_id": None,
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ask_stream_provider_error(ai_service_grok):
+    """Non-200 streaming response raises provider_error."""
+    stream_response = MagicMock()
+    stream_response.status_code = 500
+    stream_response.aread = AsyncMock(return_value=b'provider exploded')
+    stream_response.aiter_lines = AsyncMock()
+
+    stream_cm = AsyncMock()
+    stream_cm.__aenter__.return_value = stream_response
+    stream_cm.__aexit__.return_value = False
+
+    with patch.object(ai_service_grok._client, "stream", return_value=stream_cm):
+        with pytest.raises(AIServiceError) as excinfo:
+            chunks = []
+            async for chunk in ai_service_grok.ask_stream(prompt="Hello"):
+                chunks.append(chunk)
+
+    assert excinfo.value.code == "provider_error"
+
+
+@pytest.mark.asyncio
 async def test_probe_grok_available(ai_service_grok):
     """probe() returns True when /models responds 200."""
-    with patch(
-        "backend.services.ai.service.httpx.AsyncClient"
-    ) as MockClient:
-        instance = AsyncMock()
-        instance.__aenter__.return_value.get.return_value = AsyncMock(status_code=200)
-        MockClient.return_value = instance
+    with patch.object(ai_service_grok._client, "get", new=AsyncMock(return_value=AsyncMock(status_code=200))):
         result = await ai_service_grok.probe()
         assert result is True
 
@@ -261,14 +351,63 @@ async def test_probe_grok_available(ai_service_grok):
 @pytest.mark.asyncio
 async def test_probe_grok_unavailable(ai_service_grok):
     """probe() returns False when /models throws."""
-    with patch(
-        "backend.services.ai.service.httpx.AsyncClient"
-    ) as MockClient:
-        instance = AsyncMock()
-        instance.__aenter__.return_value.get.side_effect = Exception("Network error")
-        MockClient.return_value = instance
+    with patch.object(
+        ai_service_grok._client,
+        "get",
+        new=AsyncMock(side_effect=httpx.RequestError("Network error")),
+    ):
         result = await ai_service_grok.probe()
         assert result is False
+
+
+@pytest.mark.asyncio
+async def test_probe_local_uses_health_fallback(ai_service_local):
+    """Local probe falls back to /health when /models is unavailable."""
+    with patch.object(
+        ai_service_local._client,
+        "get",
+        new=AsyncMock(
+            side_effect=[
+                httpx.RequestError("models unavailable"),
+                AsyncMock(status_code=200),
+            ]
+        ),
+    ) as mock_get:
+        result = await ai_service_local.probe()
+
+    assert result is True
+    assert mock_get.await_count == 2
+    requested_urls = [call.args[0] for call in mock_get.await_args_list]
+    assert requested_urls == [
+        "http://127.0.0.1:8080/v1/models",
+        "http://127.0.0.1:8080/v1/health",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_probe_local_uses_root_fallback(ai_service_local):
+    """Local probe accepts a reachable root endpoint after /models and /health fail."""
+    with patch.object(
+        ai_service_local._client,
+        "get",
+        new=AsyncMock(
+            side_effect=[
+                httpx.RequestError("models unavailable"),
+                httpx.RequestError("health unavailable"),
+                AsyncMock(status_code=404),
+            ]
+        ),
+    ) as mock_get:
+        result = await ai_service_local.probe()
+
+    assert result is True
+    assert mock_get.await_count == 3
+    requested_urls = [call.args[0] for call in mock_get.await_args_list]
+    assert requested_urls == [
+        "http://127.0.0.1:8080/v1/models",
+        "http://127.0.0.1:8080/v1/health",
+        "http://127.0.0.1:8080",
+    ]
 
 
 @pytest.mark.asyncio

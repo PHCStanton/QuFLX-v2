@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional
 
 import httpx
 
@@ -83,13 +83,27 @@ class AIService:
         """Probe if this provider is reachable and healthy."""
         if not self._enabled or not self._client:
             return False
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as c:
-                headers = self._client.headers if self._client else {}
-                r = await c.get(f"{self.spec.base_url}/models", headers=headers)
-                return r.status_code == 200
-        except Exception:
-            return False
+        base_url = self.spec.base_url.rstrip("/")
+        probe_urls = [f"{base_url}/models"]
+        if self.spec.is_local:
+            probe_urls.append(f"{base_url}/health")
+            if base_url.endswith("/v1"):
+                probe_urls.append(base_url[:-3])
+            else:
+                probe_urls.append(base_url)
+
+        for url in probe_urls:
+            try:
+                response = await self._client.get(url, timeout=2.0)
+                if self.spec.is_local:
+                    if response.status_code < 500:
+                        return True
+                elif response.status_code == 200:
+                    return True
+            except (httpx.TimeoutException, httpx.RequestError):
+                continue
+
+        return False
 
     async def close(self) -> None:
         """Close the persistent HTTP client. Call during app shutdown."""
@@ -122,6 +136,172 @@ class AIService:
                     raise
                 await asyncio.sleep(wait_seconds)
                 wait_seconds = min(wait_seconds * 2, 10.0)
+
+    def _prepare_chat_request(
+        self,
+        *,
+        prompt: str,
+        context: Optional[Dict[str, Any]],
+        image: Optional[str],
+        conversation_id: Optional[str],
+    ) -> tuple[Dict[str, Any], Dict[str, str], float, bool, str, str]:
+        verbosity = ''
+        ui_mode = ''
+        if context:
+            verbosity = str(context.get('responseVerbosity') or '').strip().lower()
+            ui_mode = str(context.get('uiMode') or '').strip().lower()
+
+        prompt_text = str(prompt or '')
+        prompt_len = len(prompt_text)
+        has_format_constraints = bool(re.search(r'\b(output\s*format|indicators\s*used|rating\s*:\s*\w|expiry\s*:)\b', prompt_text, flags=re.IGNORECASE))
+        has_custom_instructions = context and bool(str(context.get('customInstructions') or '').strip())
+
+        is_complex_request = has_custom_instructions or has_format_constraints or prompt_len >= 500 or bool(image)
+        if self.spec.is_local:
+            timeout_seconds = self.timeout_seconds_local
+        else:
+            timeout_seconds = self.timeout_seconds_slow if is_complex_request else self.timeout_seconds_fast
+
+        system_content = (
+            "You are QuFLX AI, a precision binary options OTC trading assistant.\n\n"
+            "CORE RULES:\n"
+            "- Use ONLY the provided TradingContext (ticks, candles, indicators).\n"
+            "- DO NOT use external sources, search, or recall cached prices.\n"
+            "- If data is insufficient, state so clearly — never guess.\n"
+            "- All decisions are CALL or PUT with expiry: 15s/30s/1m/3m/5m.\n\n"
+            "INDICATOR PRIORITY (for confluence):\n"
+            "1. ADX > 25 = trending (weight direction with +DI/-DI)\n"
+            "2. SuperTrend direction confirms trend bias\n"
+            "3. RSI extremes (<30 oversold, >70 overbought) for reversals\n"
+            "4. MACD histogram momentum (rising = bullish, falling = bearish)\n"
+            "5. BB %B position (>1 = overbought breakout, <0 = oversold breakout)\n"
+            "6. Support/Resistance proximity + freshness for entry timing\n"
+            "- Require 3+ confluent signals before recommending entry.\n"
+            "- Always state confidence (High/Medium/Low) and invalidation level."
+        )
+
+        session_directives = []
+        if ui_mode == 'modal':
+            session_directives.append("MODE: Quick Response. Be short, actionable, and skimmable.")
+        elif ui_mode == 'insights':
+            session_directives.append("MODE: Deep Analysis. Provide detailed reasoning and structured follow-ups.")
+
+        if verbosity == 'concise':
+            session_directives.append("STYLE: Concise. Max 6 bullets. One recommendation (Enter/Wait/Skip), one risk.")
+        elif verbosity == 'detailed':
+            session_directives.append("STYLE: Detailed. Use sections, assumptions, invalidation criteria, and next steps.")
+        else:
+            session_directives.append("STYLE: Balanced. Specific and practical.")
+
+        if has_custom_instructions:
+            instr = str(context.get('customInstructions')).strip()
+            session_directives.append(f"CUSTOM INSTRUCTIONS:\n{instr}")
+
+        session_directives_text = "\n\n".join(session_directives)
+
+        dynamic_parts = []
+        if context:
+            dump_ctx = dict(context)
+            dump_ctx.pop('customInstructions', None)
+            context_json = json.dumps(dump_ctx, separators=(',', ':'), sort_keys=True)
+            dynamic_parts.append(f"TRADING_CONTEXT:\n{context_json}")
+
+        dynamic_parts.append(f"USER PROMPT: {prompt_text}")
+        user_text = "\n\n---\n\n".join(dynamic_parts)
+
+        user_content = [{"type": "text", "text": user_text}]
+        if image:
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": image}
+            })
+
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "system", "content": session_directives_text},
+            {"role": "user", "content": user_content}
+        ]
+
+        max_tokens: int = 500
+        if verbosity == 'concise':
+            max_tokens = 250
+        elif verbosity == 'detailed':
+            max_tokens = 900
+        if ui_mode == 'modal':
+            max_tokens = min(max_tokens, 300)
+
+        payload = {
+            "messages": messages,
+            "model": self.spec.model,
+            "stream": False,
+            "temperature": 0,
+            "max_tokens": max_tokens,
+        }
+
+        headers: Dict[str, str] = {}
+        if conversation_id and not self.spec.is_local:
+            headers['x-grok-conv-id'] = conversation_id
+
+        return payload, headers, timeout_seconds, is_complex_request, ui_mode, verbosity
+
+    def _build_success_meta(
+        self,
+        *,
+        data: Dict[str, Any],
+        conversation_id: Optional[str],
+        request_id: str,
+    ) -> Dict[str, Any]:
+        usage = data.get('usage', {})
+        cached_tokens = usage.get('cached_tokens', 0)
+        if not cached_tokens and 'prompt_tokens_details' in usage:
+            cached_tokens = usage['prompt_tokens_details'].get('cached_tokens', 0)
+
+        total_prompt_tokens = usage.get('prompt_tokens', 0)
+        hit_rate = (cached_tokens / total_prompt_tokens * 100) if total_prompt_tokens > 0 else 0
+
+        logger.info(
+            'AIService metrics request_id=%s cached=%d total_input=%d hit_rate=%.1f%% output=%d',
+            request_id,
+            cached_tokens,
+            total_prompt_tokens,
+            hit_rate,
+            usage.get('completion_tokens', 0),
+        )
+
+        return {
+            'ok': True,
+            'provider': self.spec.key,
+            'model': data.get('model', self.spec.model),
+            'usage': usage,
+            'cache': {
+                'hit_rate': hit_rate,
+                'cached_tokens': cached_tokens,
+            },
+            'conversation_id': conversation_id,
+        }
+
+    def _extract_answer_content(self, data: Dict[str, Any]) -> str:
+        choices = data.get('choices')
+        if not isinstance(choices, list) or not choices:
+            raise AIServiceError(
+                code='invalid_provider_response',
+                user_message='AI provider response was invalid.',
+                status_code=502,
+                retryable=True,
+            )
+
+        message = choices[0].get('message', {})
+        content = message.get('content', '')
+
+        if not isinstance(content, str) or not content.strip():
+            raise AIServiceError(
+                code='invalid_provider_response',
+                user_message='AI provider response was missing content.',
+                status_code=502,
+                retryable=True,
+            )
+
+        return content
 
     async def ask(
         self,
@@ -159,116 +339,12 @@ class AIService:
             len(prompt or ''),
         )
 
-        # 1. OPTIMIZATION: SYSTEM PROMPT (Fixed Prefix)
-        # Keep this as stable as possible to allow for prefix caching.
-        system_content = (
-            "You are QuFLX AI, a precision binary options OTC trading assistant.\n\n"
-            "CORE RULES:\n"
-            "- Use ONLY the provided TradingContext (ticks, candles, indicators).\n"
-            "- DO NOT use external sources, search, or recall cached prices.\n"
-            "- If data is insufficient, state so clearly — never guess.\n"
-            "- All decisions are CALL or PUT with expiry: 15s/30s/1m/3m/5m.\n\n"
-            "INDICATOR PRIORITY (for confluence):\n"
-            "1. ADX > 25 = trending (weight direction with +DI/-DI)\n"
-            "2. SuperTrend direction confirms trend bias\n"
-            "3. RSI extremes (<30 oversold, >70 overbought) for reversals\n"
-            "4. MACD histogram momentum (rising = bullish, falling = bearish)\n"
-            "5. BB %B position (>1 = overbought breakout, <0 = oversold breakout)\n"
-            "6. Support/Resistance proximity + freshness for entry timing\n"
-            "- Require 3+ confluent signals before recommending entry.\n"
-            "- Always state confidence (High/Medium/Low) and invalidation level."
+        payload, headers, timeout_seconds, is_complex_request, ui_mode, verbosity = self._prepare_chat_request(
+            prompt=prompt,
+            context=context,
+            image=image,
+            conversation_id=conversation_id,
         )
-
-        # 2. DYNAMIC CONTENT (User Message)
-        # Dynamic instructions and data are moved here so they don't break the system prefix cache.
-        verbosity = ''
-        ui_mode = ''
-        if context:
-            verbosity = str(context.get('responseVerbosity') or '').strip().lower()
-            ui_mode = str(context.get('uiMode') or '').strip().lower()
-
-        prompt_text = str(prompt or '')
-        prompt_len = len(prompt_text)
-        has_format_constraints = bool(re.search(r'\b(output\s*format|indicators\s*used|rating\s*:\s*\w|expiry\s*:)\b', prompt_text, flags=re.IGNORECASE))
-        has_custom_instructions = context and bool(str(context.get('customInstructions') or '').strip())
-
-        is_complex_request = has_custom_instructions or has_format_constraints or prompt_len >= 500 or bool(image)
-        if self.spec.is_local:
-            timeout_seconds = self.timeout_seconds_local
-        else:
-            timeout_seconds = self.timeout_seconds_slow if is_complex_request else self.timeout_seconds_fast
-
-        # Construct dynamic user instructions
-        instruction_parts = []
-        
-        # UI Mode instructions
-        if ui_mode == 'modal':
-            instruction_parts.append("MODE: Quick Response. Be short, actionable, and skimmable.")
-        elif ui_mode == 'insights':
-            instruction_parts.append("MODE: Deep Analysis. Provide detailed reasoning and structured follow-ups.")
-            
-        # Verbosity instructions
-        if verbosity == 'concise':
-            instruction_parts.append("STYLE: Concise. Max 6 bullets. One recommendation (Enter/Wait/Skip), one risk.")
-        elif verbosity == 'detailed':
-            instruction_parts.append("STYLE: Detailed. Use sections, assumptions, invalidation criteria, and next steps.")
-        else:
-            instruction_parts.append("STYLE: Balanced. Specific and practical.")
-
-        # Custom instructions
-        if has_custom_instructions:
-            instr = str(context.get('customInstructions')).strip()
-            instruction_parts.append(f"CUSTOM INSTRUCTIONS:\n{instr}")
-
-        # Market Context
-        if context:
-            dump_ctx = dict(context)
-            dump_ctx.pop('customInstructions', None)
-            # Use JSON separators and sort_keys for consistent serialization (better for caching if prefix matches)
-            context_json = json.dumps(dump_ctx, separators=(',', ':'), sort_keys=True)
-            instruction_parts.append(f"TRADING CONTEXT:\n{context_json}")
-
-        # Final User Content Assembly
-        user_text = ""
-        if instruction_parts:
-            user_text = "\n\n".join(instruction_parts) + "\n\n---\n\n"
-        user_text += f"USER PROMPT: {prompt_text}"
-
-        user_content = [{"type": "text", "text": user_text}]
-        if image:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": image}
-            })
-
-        messages = [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": user_content}
-        ]
-
-        # 3. TOKEN LIMITS
-        max_tokens: int = 500
-        if verbosity == 'concise':
-            max_tokens = 250
-        elif verbosity == 'detailed':
-            max_tokens = 900
-            
-        if ui_mode == 'modal':
-            max_tokens = min(max_tokens, 300)
-
-        payload = {
-            "messages": messages,
-            "model": self.spec.model,
-            "stream": False,
-            "temperature": 0,
-            "max_tokens": max_tokens,
-        }
-
-        # 4. API CALL WITH CACHING HEADERS
-        headers = {}
-        if conversation_id and not self.spec.is_local:
-            # Grok-specific header for routing to same cache cluster
-            headers['x-grok-conv-id'] = conversation_id
 
         try:
             logger.info(
@@ -280,7 +356,7 @@ class AIService:
                 list((context or {}).keys()),
             )
 
-            # 4. API CALL WITH POOLED CLIENT AND RETRIES
+            # 6. API CALL WITH POOLED CLIENT AND RETRIES
             # Use per-request timeout override
             response = await self._post_with_retry(
                 self.chat_url,
@@ -309,57 +385,16 @@ class AIService:
             data = response.json()
             usage = data.get('usage', {})
             
-            # 5. TELEMETRY: CACHE MONITORING
-            # Grok usage fields: cached_tokens (or prompt_tokens_details.cached_tokens)
-            cached_tokens = usage.get('cached_tokens', 0)
-            if not cached_tokens and 'prompt_tokens_details' in usage:
-                cached_tokens = usage['prompt_tokens_details'].get('cached_tokens', 0)
-            
-            total_prompt_tokens = usage.get('prompt_tokens', 0)
-            hit_rate = (cached_tokens / total_prompt_tokens * 100) if total_prompt_tokens > 0 else 0
-
-            logger.info(
-                'AIService metrics request_id=%s cached=%d total_input=%d hit_rate=%.1f%% output=%d',
-                request_id,
-                cached_tokens,
-                total_prompt_tokens,
-                hit_rate,
-                usage.get('completion_tokens', 0),
+            meta = self._build_success_meta(
+                data=data,
+                conversation_id=conversation_id,
+                request_id=request_id,
             )
-
-            choices = data.get('choices')
-            if not isinstance(choices, list) or not choices:
-                raise AIServiceError(
-                    code='invalid_provider_response',
-                    user_message='AI provider response was invalid.',
-                    status_code=502,
-                    retryable=True,
-                )
-
-            message = choices[0].get('message', {})
-            content = message.get('content', '')
-            
-            if not isinstance(content, str) or not content.strip():
-                raise AIServiceError(
-                    code='invalid_provider_response',
-                    user_message='AI provider response was missing content.',
-                    status_code=502,
-                    retryable=True,
-                )
+            content = self._extract_answer_content(data)
 
             return {
                 'answer': content,
-                'meta': {
-                    'ok': True,
-                    'provider': self.spec.key,
-                    'model': data.get('model', self.spec.model),
-                    'usage': usage,
-                    'cache': {
-                        'hit_rate': hit_rate,
-                        'cached_tokens': cached_tokens,
-                    },
-                    'conversation_id': conversation_id,
-                },
+                'meta': meta,
             }
 
         except AIServiceError:
@@ -385,6 +420,174 @@ class AIService:
 
         except Exception:
             logger.error('AI request failed request_id=%s', request_id, exc_info=True)
+            raise AIServiceError(
+                code='internal_error',
+                user_message='An internal error occurred while contacting the AI service.',
+                status_code=500,
+                retryable=False,
+            )
+
+    async def ask_stream(
+        self,
+        *,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+        image: Optional[str] = None,
+        request_id: str = '-',
+        asset: Optional[str] = None,
+        timeframe: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        if not self._enabled or not self._client:
+            raise AIServiceError(
+                code='missing_api_key',
+                user_message='AI service is disabled (missing API key).',
+                status_code=503,
+                retryable=False,
+            )
+
+        logger.info(
+            'AIService.ask_stream request_id=%s provider=%s model=%s asset=%s timeframe=%s conversation_id=%s image_present=%s prompt_len=%s',
+            request_id,
+            self.spec.key,
+            self.spec.model,
+            asset or '-',
+            timeframe or '-',
+            conversation_id or '-',
+            bool(image),
+            len(prompt or ''),
+        )
+
+        payload, headers, timeout_seconds, is_complex_request, ui_mode, verbosity = self._prepare_chat_request(
+            prompt=prompt,
+            context=context,
+            image=image,
+            conversation_id=conversation_id,
+        )
+        payload['stream'] = True
+
+        logger.info(
+            'AIService.ask_stream request_id=%s call complex=%s ui=%s verbosity=%s context_keys=%s',
+            request_id,
+            is_complex_request,
+            ui_mode or '-',
+            verbosity or '-',
+            list((context or {}).keys()),
+        )
+
+        try:
+            async with self._client.stream(
+                "POST",
+                self.chat_url,
+                headers=headers,
+                json=payload,
+                timeout=timeout_seconds,
+            ) as response:
+                if response.status_code != 200:
+                    body = (await response.aread()).decode('utf-8', errors='ignore')
+                    retryable = response.status_code >= 500 or response.status_code == 429
+                    logger.error(
+                        'AI provider stream error request_id=%s status=%s retryable=%s body=%s',
+                        request_id,
+                        response.status_code,
+                        retryable,
+                        body[:500],
+                    )
+                    raise AIServiceError(
+                        code='provider_error',
+                        user_message='AI provider returned an error.',
+                        status_code=502,
+                        retryable=retryable,
+                        provider_status=response.status_code,
+                    )
+
+                answer_parts: list[str] = []
+                final_usage: Dict[str, Any] = {}
+                final_model = self.spec.model
+
+                async for raw_line in response.aiter_lines():
+                    line = (raw_line or '').strip()
+                    if not line or not line.startswith('data:'):
+                        continue
+
+                    data_str = line[5:].strip()
+                    if data_str == '[DONE]':
+                        break
+
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        logger.warning('AI stream parse warning request_id=%s line=%s', request_id, data_str[:200])
+                        continue
+
+                    if isinstance(chunk.get('error'), dict):
+                        error_message = str(chunk['error'].get('message') or 'AI provider returned an error.')
+                        raise AIServiceError(
+                            code='provider_error',
+                            user_message=error_message,
+                            status_code=502,
+                            retryable=True,
+                        )
+
+                    final_model = chunk.get('model', final_model)
+                    if isinstance(chunk.get('usage'), dict):
+                        final_usage = chunk['usage']
+
+                    choices = chunk.get('choices')
+                    if not isinstance(choices, list) or not choices:
+                        continue
+
+                    delta = choices[0].get('delta') or {}
+                    content = delta.get('content')
+                    if isinstance(content, str) and content:
+                        answer_parts.append(content)
+                        yield {
+                            'type': 'delta',
+                            'delta': content,
+                        }
+
+                answer = ''.join(answer_parts)
+                if not answer.strip():
+                    raise AIServiceError(
+                        code='invalid_provider_response',
+                        user_message='AI provider response was missing content.',
+                        status_code=502,
+                        retryable=True,
+                    )
+
+                meta = self._build_success_meta(
+                    data={
+                        'model': final_model,
+                        'usage': final_usage,
+                    },
+                    conversation_id=conversation_id,
+                    request_id=request_id,
+                )
+                yield {
+                    'type': 'done',
+                    'answer': answer,
+                    'meta': meta,
+                }
+        except AIServiceError:
+            raise
+        except httpx.TimeoutException:
+            logger.error('AI provider stream timeout request_id=%s', request_id)
+            raise AIServiceError(
+                code='timeout',
+                user_message='AI provider timed out.',
+                status_code=504,
+                retryable=True,
+            )
+        except httpx.RequestError:
+            logger.error('AI provider stream unreachable request_id=%s', request_id, exc_info=True)
+            raise AIServiceError(
+                code='provider_unreachable',
+                user_message='AI provider is unreachable.',
+                status_code=502,
+                retryable=True,
+            )
+        except Exception:
+            logger.error('AI stream request failed request_id=%s', request_id, exc_info=True)
             raise AIServiceError(
                 code='internal_error',
                 user_message='An internal error occurred while contacting the AI service.',

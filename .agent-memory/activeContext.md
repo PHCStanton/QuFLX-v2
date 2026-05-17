@@ -1,9 +1,15 @@
 # Active Context
 
-- ## Current Focus (as of 18-04-2026)
-- **AI Multi-Model Routing Phase 2A (2026-04-18):** Frontend model selector wiring complete and verified. Phase 2B (Ask AI Modal full rewrite) ready to begin.
-- **Plan Location:** `v2_Dev_Docs/AI_Model_Routing/AI_Multi_Model_Routing_Plan_26-04-17.md`
-- **Status:** Phase 1 ✅ Complete · Phase 2A ✅ Complete — awaiting Phase 2B execution.
+- ## Current Focus (as of 19-04-2026)
+- **Ask AI Performance Optimization (2026-04-18 → 19-04):** Phase A quick wins and Phase B targeted rewrites implemented and incrementally reviewed; Phase C benchmark harness/report path added.
+- **Plan Location:** `v2_Dev_Docs/AI_Model_Routing/Ask_AI_Performance_Optimization_Plan_26-04-18.md`
+- **Status:** Phase A ✅ Complete · Phase B ✅ Complete · Phase C harness/report ✅ Implemented · live benchmark execution pending reachable Gateway/providers.
+
+### Ask AI Performance Optimization — Implemented Summary (18-04 → 19-04-2026)
+- **Backend:** pooled provider probe reuse, local probe fallback, indicator TTL cache, cache-friendly 3-message prompt layout, shared request prep, new `/api/v1/ai/ask/stream`
+- **Frontend:** modal-only context shrinking, structured AI errors, request abort flow, shared `aiProvidersStore`, dead `useAiProviders.js` removed, modal SSE chunk rendering
+- **Validation:** backend AI suites green, frontend builds green after each batch, benchmark harness added at `backend/tests/perf_ask_ai_bench.py`
+- **Benchmark Report:** `v2_Dev_Docs/AI_Model_Routing/Reports/Ask_AI_Bench_26-04-18.md` (smoke run recorded connection failure; full live benchmark still pending)
 
 ### AI Multi-Model Routing — Phase 1 Summary (17-04-2026)
 **Root Cause:** Single AIService singleton used for all AI requests — no per-provider config, no model selection, no context size awareness per provider.
@@ -75,6 +81,9 @@
 - **AI Multi-Provider Registry** — 3 providers (grok-4, grok-4-fast, gemma-local) with `AIProviderRegistry`
 - **`/api/v1/ai/providers`** — health endpoint returning key/label/available/capabilities for all 3
 - **`/api/v1/ai/ask`** — `model` field, provider-aware 413 enforcement, `model_validate` + serializable errors
+- **`/api/v1/ai/ask/stream`** — SSE endpoint for incremental modal responses using shared request validation/prep
+- `AIService.ask_stream()` — streaming path sharing the same prompt construction and provider headers as sync ask
+- `backend/utils/indicator_utils.py` — 5s mtime-aware indicator TTL cache keyed by asset/timeframe/pipeline params
 - `LocalAIProcessManager` — Gemma auto-start/stop integrated into Gateway lifespan
 - Voice WS relay at `/api/v1/ai/voice/realtime`
 - Settings: `GET/PUT /api/v1/settings` + versioned `data/settings/settings.json`
@@ -85,7 +94,7 @@
 - `ChartWorkspace.jsx` modular (<250 LOC)
 - Overlay indicators: SuperTrend, Bollinger Bands, EMA Cross-Over, Support/Resistance
 - Oscillator panes: RSI, MACD, Stochastic, CCI — time-scale synchronized
-- Ask AI: Modal + AI Insights Panel
+- Ask AI: Modal + AI Insights Panel with shared provider store and modal SSE response streaming
 - Voice: dictation + TTS read-back (browser + xAI server modes)
 - Settings Panel: Save & Close, Export Config, SSID badges
 - Profile system UI: ProfileMenu, ProfilePicEditorModal
@@ -127,13 +136,12 @@
 
 ## Next Steps
 
-### AI Multi-Model Routing (In Progress)
-- [ ] **Phase 0**: `.env` harmonization — user to confirm `GROK_API_KEY`, `LOCAL_AI_BASE_URL`, `QFLX_LOCAL_AI_AUTOSTART=1`
-- [x] **Phase 1**: Backend Provider Registry — ✅ Complete (175/175 tests)
-- [x] **Phase 2A**: Frontend Model Selector Wiring — ✅ Complete (regression R-1 fixed 18-04)
-- [ ] **Phase 2A remaining**: AiInsightsPanel chip, SettingsPanel selects, Alert Dispatcher env injection
-- [ ] **Phase 2B**: Ask AI Modal Full Rewrite (UI refactor, ~8h)
-- [ ] **Phase 3**: Benchmark harness + final multi-agent review
+### Ask AI Performance Optimization (In Progress)
+- [x] **Phase A**: low-risk optimizations — ✅ Complete
+- [x] **Phase B**: targeted rewrites including SSE streaming — ✅ Complete
+- [x] **Phase C.1**: benchmark harness + smoke report — ✅ Implemented
+- [ ] **Phase C.2**: full live benchmark run against reachable Gateway/providers
+- [ ] **Phase C.3**: final multi-agent review and closeout
 
 ### Backlog (Post-Multi-Model)
 1. Oscillator pane visibility toggle persistence in settings

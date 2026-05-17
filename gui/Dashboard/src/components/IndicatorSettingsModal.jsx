@@ -78,8 +78,24 @@ const IndicatorSettingsModal = ({ isOpen, indicator, onClose, onSave }) => {
     onSave({ value: nextValue, params: sanitizedParams });
   };
 
+  // Enter key saves the modal, Escape closes it
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onKeyDown={handleKeyDown}
+      tabIndex={-1}
+    >
       <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-full max-w-md mx-4 flex flex-col">
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
           <div className="flex flex-col">

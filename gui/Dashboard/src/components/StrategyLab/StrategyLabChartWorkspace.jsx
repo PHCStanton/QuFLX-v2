@@ -11,7 +11,7 @@ import useMarketStore from '../../store/marketStore';
 import useSettingsStore from '../../store/settingsStore';
 import useScreenshotCapture from '../../hooks/useScreenshotCapture';
 import useAskAi from '../../hooks/useAskAi';
-import { askAI } from '../../api/aiClient';
+import { askAI, askAIStream } from '../../api/aiClient';
 import { saveChartScreenshot } from '../../api/screenshotClient';
 import AskAiModal from '../AskAiModal';
 import ScreenshotModal from '../ScreenshotModal';
@@ -66,8 +66,9 @@ const StrategyLabChartWorkspace = () => {
   } = useScreenshotCapture({ onError: setError });
 
   // Ask AI
-  const { isAsking, ask } = useAskAi({
+  const { isAsking, ask, abort } = useAskAi({
     askAI,
+    askAIStream,
     captureImage: captureCompositeChart,
     lastAnnotatedImage: lastAnnotatedScreenshotDataUrl,
     imageSource: settings?.ai?.imageSource,
@@ -274,6 +275,7 @@ const StrategyLabChartWorkspace = () => {
         isOpen={isAskAiOpen}
         onClose={handleAskAiClose}
         onAsk={ask}
+        onAbortAsk={abort}
         asset={labFile?.filename || selectedStrategyFileId}
         timeframe="Lab"
         forceImageDataUrl={askAiForceImageDataUrl}

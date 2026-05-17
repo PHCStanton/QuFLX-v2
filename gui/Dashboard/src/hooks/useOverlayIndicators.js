@@ -128,7 +128,30 @@ const useOverlayIndicators = ({
     overlayIndicators.forEach((ind) => {
       const key = seriesKeyProp || (selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null);
       const seriesForKey = key && indicatorSeries ? indicatorSeries[key] : null;
-      if (!seriesForKey) return;
+
+      // Fix 4: When indicatorSeries is cleared (e.g. asset switch via Fix 2), immediately
+      // wipe the chart series data so stale S/R lines from the previous asset don't linger.
+      // Reset lastDataHash so the series re-renders unconditionally when new data arrives.
+      if (!seriesForKey) {
+        const existing = overlaySeriesRef.current[ind.id];
+        if (existing) {
+          try {
+            if (existing.series) existing.series.setData([]);
+            if (existing.upSeries) existing.upSeries.setData([]);
+            if (existing.downSeries) existing.downSeries.setData([]);
+            if (existing.upper) existing.upper.setData([]);
+            if (existing.lower) existing.lower.setData([]);
+            if (existing.resZoneUpper) existing.resZoneUpper.setData([]);
+            if (existing.resZoneLower) existing.resZoneLower.setData([]);
+            if (existing.supZoneUpper) existing.supZoneUpper.setData([]);
+            if (existing.supZoneLower) existing.supZoneLower.setData([]);
+            existing.lastDataHash = ''; // force full re-render when new data arrives
+          } catch (err) {
+            if (onError) onError(`Overlay clear on asset switch failed: ${getErrorMessage(err)}`);
+          }
+        }
+        return;
+      }
 
       // --- Create chart series on first encounter ---
       if (!overlaySeriesRef.current[ind.id]) {

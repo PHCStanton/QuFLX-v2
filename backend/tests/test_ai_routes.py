@@ -38,6 +38,14 @@ class MockAIService:
             raise self._ask_side_effect
         return self._ask_result or {"answer": "mock answer", "meta": {"ok": True}}
 
+    async def ask_stream(self, **kwargs):
+        if self._ask_side_effect:
+            if isinstance(self._ask_side_effect, Exception):
+                raise self._ask_side_effect
+            raise self._ask_side_effect
+        yield {"type": "delta", "delta": "Hello "}
+        yield {"type": "done", "answer": "Hello world", "meta": {"ok": True, "model": self.spec.model}}
+
     async def close(self):
         pass
 
@@ -143,6 +151,21 @@ def test_ask_ai_route_service_error(client_with_registry, mock_registry):
     assert response.status_code == 502
     assert response.json()["code"] == "provider_error"
     assert response.json()["detail"] == "AI provider failed"
+
+
+def test_ask_ai_stream_route_success(client_with_registry):
+    """Streaming route emits delta events and done sentinel."""
+    with client_with_registry.stream(
+        "POST",
+        "/api/v1/ai/ask/stream",
+        json={"prompt": "How is the market?", "asset": "EURUSD"},
+    ) as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert 'data: {"type":"delta","delta":"Hello "}' in body
+    assert 'data: {"type":"done","answer":"Hello world","meta":{"ok":true,"model":"grok-4-latest"}}' in body
+    assert 'data: [DONE]' in body
 
 
 def test_ask_ai_route_unknown_model(client_with_registry):

@@ -1,5 +1,28 @@
 # Project Progress
 
+## Ask AI Performance Optimization (2026-04-18) — In Progress
+- [x] Phase A — Lower-Risk Optimizations ✅ Complete
+  - [x] `backend/services/ai/service.py` — pooled probe reuse + local fallback probing
+  - [x] `backend/services/gateway/routes/ai.py` — modal indicator snapshot precedence fix
+  - [x] `gui/Dashboard/src/components/AskAiModal.jsx` — deferred context build + shared submit audio + settings model sync
+  - [x] `gui/Dashboard/src/hooks/useAiProviders.js` — stale-request protection (later removed after store migration)
+  - [x] `backend/utils/indicator_utils.py` — 5s mtime-aware TTL cache keyed by asset/timeframe/pipeline params
+- [x] Phase B — Targeted Rewrites ✅ Complete
+  - [x] `backend/services/ai/service.py` — cache-friendly 3-message prompt layout
+  - [x] `gui/Dashboard/src/api/aiClient.js` — structured AI errors + SSE client
+  - [x] `gui/Dashboard/src/hooks/useAskAi.js` — abort flow + optional stream consumption
+  - [x] `gui/Dashboard/src/store/aiProvidersStore.js` — shared provider store with TTL caching
+  - [x] `gui/Dashboard/src/hooks/useAiProviders.js` — deleted as dead compatibility path
+  - [x] `backend/services/gateway/routes/ai.py` — shared request prep + `/api/v1/ai/ask/stream`
+  - [x] `gui/Dashboard/src/components/AskAiModal.jsx` — incremental streamed response rendering
+- [x] Phase C.1 — Benchmark Harness & Report ✅ Implemented
+  - [x] `backend/tests/perf_ask_ai_bench.py` — reusable benchmark harness for stream TTFT/latency/cache/payload metrics
+  - [x] `v2_Dev_Docs/AI_Model_Routing/Reports/Ask_AI_Bench_26-04-18.md` — smoke benchmark report artifact
+  - [x] Smoke run executed: `python backend/tests/perf_ask_ai_bench.py --iterations 1 --models grok-4-fast --ui-modes modal --timeout-seconds 5`
+  - [x] Smoke outcome captured honestly: connection failure (`All connection attempts failed`)
+- [x] Phase C.2 — Full Live Benchmark Run (verified connectivity/timeouts)
+- [x] Phase C.3 — Final Multi-Agent Review (Reviewer fixes applied + signed off)
+
 ## AI Multi-Model Routing (2026-04-17) — In Progress
 - [x] Phase 0 — `.env` Harmonization (new vars: GROK_API_KEY, LOCAL_AI_BASE_URL, QFLX_LOCAL_AI_AUTOSTART, etc.)
 - [x] Phase 1 — Backend Provider Registry & AIService Refactor ✅ Complete

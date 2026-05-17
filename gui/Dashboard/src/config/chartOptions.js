@@ -227,11 +227,11 @@ export const indicatorOptions = [
     value: 'support_resistance',
     key: 'support_level', // Key for data lookup (one of them)
     kind: 'overlay',
-    displayValue: '5',
+    displayValue: '2',
     source: 'backend',
-    params: { period: 5, showZones: true, showFreshness: true, showFlip: true },
+    params: { period: 2, showZones: true, showFreshness: true, showFlip: true },
     paramConfig: [
-      { name: 'period', label: 'Pivot Period — Lower = More Micro Levels', type: 'number', min: 1, max: 100, default: 5 },
+      { name: 'period', label: 'Pivot Period — Lower = More Micro Levels', type: 'number', min: 1, max: 100, default: 2 },
       { name: 'showZones', label: 'Show Zone Bands', type: 'boolean', default: true },
       { name: 'showFreshness', label: 'Freshness Line Styling', type: 'boolean', default: true },
       { name: 'showFlip', label: 'Highlight S/R Flip Levels', type: 'boolean', default: true },
