@@ -14,6 +14,7 @@ class ProviderSpec:
     supports_vision: bool
     max_ctx_kb: int  # safety cap on serialized context
     is_local: bool
+    reasoning_effort: Optional[str] = None  # xAI param post-May 2026 ("low", "none", etc.)
 
 
 def _env(key: str, default: str = "") -> str:
@@ -24,25 +25,27 @@ def build_provider_specs() -> Dict[str, ProviderSpec]:
     return {
         "grok-4": ProviderSpec(
             key="grok-4",
-            label="Grok 4 (Thinking)",
+            label="Grok 4.3 (Reasoning)",
             base_url=_env("XAI_BASE_URL", "https://api.x.ai/v1"),
             api_key_env="GROK_API_KEY",
-            model="grok-4-latest",
+            model="grok-4.3",
             supports_voice_server=True,
             supports_vision=True,
             max_ctx_kb=150,
             is_local=False,
+            reasoning_effort="low",
         ),
         "grok-4-fast": ProviderSpec(
             key="grok-4-fast",
-            label="Grok 4.1 Fast",
+            label="Grok 4.3 Fast (No Reasoning)",
             base_url=_env("XAI_BASE_URL", "https://api.x.ai/v1"),
             api_key_env="GROK_API_KEY",
-            model="grok-4-1-fast",
+            model="grok-4.3",
             supports_voice_server=True,
             supports_vision=True,
             max_ctx_kb=150,
             is_local=False,
+            reasoning_effort="none",
         ),
         "gemma-local": ProviderSpec(
             key="gemma-local",

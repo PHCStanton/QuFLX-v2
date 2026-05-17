@@ -230,13 +230,16 @@ class AIService:
         if ui_mode == 'modal':
             max_tokens = min(max_tokens, 300)
 
-        payload = {
+        reasoning_effort = getattr(self.spec, "reasoning_effort", None)
+        payload: Dict[str, Any] = {
             "messages": messages,
             "model": self.spec.model,
             "stream": False,
             "temperature": 0,
             "max_tokens": max_tokens,
         }
+        if reasoning_effort is not None:
+            payload["reasoning_effort"] = reasoning_effort  # official xAI param post-May 2026
 
         headers: Dict[str, str] = {}
         if conversation_id and not self.spec.is_local:
