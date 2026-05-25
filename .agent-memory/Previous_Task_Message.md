@@ -1,82 +1,258 @@
-__History Refresh / Asset Control Remediation Status — 2026-05-24__
+## Phase 3 Complete — Backend Freshness Signature Hardening
 
-The History Data Payload / Chart Rendering remediation has progressed beyond the 2026-05-23 blocking report. The remaining runtime blocker was isolated to Selenium-driven Pocket Option asset-panel detection in `backend/services/gateway/asset_control.py`; follow-up remediation has now been implemented and documented, with automated validation green. Final production closeout still requires live Chrome/Pocket Option validation.
+Implemented Phase 3 and stopped after review, as requested.
 
-__Plan document updated__
+### Files changed
 
-- `v2_Dev_Docs/History_Handeling/History_Data_Payload_Chart_Rendering_Fix_Plan_26-05-20.md`
-- Added Phase 6A / 6B / 6C remediation sections:
-  1. Phase 6A — Make clear-cache non-destructive.
-  2. Phase 6B — Harden `asset_control.py` selectors and panel-open detection.
-  3. Phase 6C — Final validation and closeout requirements.
-- Recorded final multi-agent review protocol:
-  - @Reviewer — ✅ Passed for correctness, maintainability, and plan alignment.
-  - @Debugger — ⚠️ Passed for automated/runtime guard coverage; live Pocket Option DOM validation still required.
-  - @Optimizer — ✅ Passed.
-  - @Code_Simplifier — ✅ Passed.
-  - @Team_Leader final verdict — implementation complete and automated validation green; production closeout pending live Chrome/Pocket Option workflow validation.
+- `backend/services/gateway/routes/history.py`
+- `backend/tests/test_history_delete_routes.py` *(workspace test file is ignored by `.gitignore`, but was updated locally and executed)*
 
-__Code changes completed__
+Existing Phase 2 frontend changes remain in the working tree:
 
-1. `gui/Dashboard/src/components/ChartHeader.jsx`
-   - Replaced the destructive clear-cache button flow with `reloadHistoryFromPayload(selectedAsset)`.
-   - Removed the direct `clearHistoryCache()` / `loadHistory()` path from the header button.
-   - Uses normalized `selectedAssetKey` for history loading-state checks.
-   - Updated tooltip from destructive clear-cache wording to `Refresh current asset history from payload`.
-   - Result: the refresh-history button now attempts fresh payload bootstrap without deleting existing backend/frontend history first.
+- `gui/Dashboard/src/store/marketStore.js`
+- `gui/Dashboard/src/hooks/useTickAggregation.js`
+- `gui/Dashboard/src/components/ChartWorkspace.jsx`
 
-2. `backend/services/gateway/asset_control.py`
-   - Removed stale favorite-star command/helper path and star-based panel detection assumptions.
-   - `_is_assets_panel_open()` now detects visible search inputs, asset rows, asset-list containers, and modern asset/pair class patterns instead of relying on old `fa-star` DOM markers.
-   - `_open_assets_dropdown()` now returns `bool`, uses 3 bounded retry rounds, clears stale cached elements on retry, expands selector coverage, and logs selector diagnostics when the panel cannot be opened.
-   - `_select_asset()` now waits longer for modern search/list DOM, logs candidate row counts, and logs visible candidate row text when a target asset is not found.
+---
 
-__Validation completed__
+## What Phase 3 changed
 
-Automated checks run successfully:
+### 1. Bootstrap freshness detection now hashes candle content
 
-```powershell
-conda run -n QuFLX-v2 python -m py_compile backend/services/gateway/asset_control.py
-conda run -n QuFLX-v2 python -m pytest backend/tests/test_history_delete_routes.py -v
-conda run -n QuFLX-v2 python -m pytest backend/tests -q --tb=short
-npm --prefix gui/Dashboard run build
-git diff --check -- v2_Dev_Docs/History_Handeling/History_Data_Payload_Chart_Rendering_Fix_Plan_26-05-20.md gui/Dashboard/src/components/ChartHeader.jsx backend/services/gateway/asset_control.py
+`backend/services/gateway/routes/history.py` previously identified fresh history by only:
+
+```python
+(count, latest_timestamp)
 ```
 
-Results:
+That could miss a valid fresh payload when Pocket Option returned the same ~100 timestamp window but with updated OHLC/volume values.
 
-- `asset_control.py` compile check ✅
-- Focused history route suite: `10 passed` ✅
-- Full backend suite: `197 passed, 7 warnings` ✅
-- Frontend production build ✅
-- `git diff --check` ✅
+The signature now includes candle count, latest timestamp, and a SHA-256 hash of normalized candle content: `timestamp`, `open`, `high`, `low`, `close`, `volume`, `created_at`, `session_id`, and `source`.
 
-__Current runtime behavior__
+### 2. Numeric values are normalized before hashing
 
-- `reloadHistoryFromPayload()` remains the preferred non-destructive refresh path.
-- The chart refresh button in `ChartHeader.jsx` now uses that same non-destructive path.
-- The old delete-path route bug remains fixed.
-- Backend bootstrap still follows the collector-owned polling model; no competing Chrome performance-log reader was reintroduced.
-- `asset_control.py` is now more observable: selector failures should include diagnostics instead of only `Failed to open assets panel`.
+Added `_signature_value()` so numeric strings and floats compare consistently before hashing. This prevents false “fresh” results from formatting-only differences like `1.2` vs `'1.200000'`.
 
-__Remaining live validation required__
+### 3. Same-window OHLC refresh is now treated as fresh
 
-Phase 6A/6B are implemented and reviewed, but should stay `[~]` rather than `[x]` until live validation confirms current Pocket Option DOM behavior.
+`_poll_for_fresh_candles()` still compares the current signature against the baseline signature, but because the signature now includes candle-content hash, this case is detected correctly:
 
-Required live checks:
+```txt
+same count + same latest timestamp + changed OHLC/volume => fresh
+```
 
-1. Start/attach Chrome + Pocket Option session.
-2. Start Gateway/collector as normal.
-3. Trigger `POST /api/v1/history/bootstrap-history` for at least one OTC asset.
-4. Confirm `asset_control.py` can open/detect the current asset panel.
-5. Confirm the target asset can be selected.
-6. Confirm collector-owned fresh history persists to CSV/data store.
-7. Confirm frontend chart refreshes from returned/persisted candles without deleting old history on failure.
+### 4. Regression coverage added
 
-__Related report__
+Added targeted tests covering:
 
-- `reports/reports_2026-05/asset_control_history_blocking_report_26-05-23.md`
+- `_history_signature()` detects same-timestamp OHLC refreshes.
+- `_poll_for_fresh_candles()` returns candles when only OHLC/volume values changed inside the same timestamp window.
 
-__Important note for next agent__
+---
 
-Do not mark Phase 6 fully `[x]` closed until live Chrome/Pocket Option validation passes or the user explicitly accepts the remaining live-validation risk.
+## Validation run
+
+Passed:
+
+```powershell
+conda run -n QuFLX-v2 python -m pytest backend/tests/test_history_delete_routes.py -v
+```
+
+Result:
+
+```txt
+12 passed in 256.41s (0:04:16)
+```
+
+Passed:
+
+```powershell
+git diff --check -- backend/services/gateway/routes/history.py backend/tests/test_history_delete_routes.py gui/Dashboard/src/store/marketStore.js gui/Dashboard/src/hooks/useTickAggregation.js gui/Dashboard/src/components/ChartWorkspace.jsx
+conda run -n QuFLX-v2 python -m pytest backend/tests/test_data_store.py -q
+```
+
+Result:
+
+```txt
+9 passed in 0.79s
+```
+
+`git diff --check` reported only the existing Windows line-ending warning for `backend/services/gateway/routes/history.py`; no whitespace errors were reported.
+
+---
+
+# Phase 3 Review Protocol Report
+
+**Delegation:** `Phase 3 completed. Perform full incremental review.`
+
+## Code Review
+
+**Verdict**: APPROVE
+**Confidence**: HIGH
+
+### Summary
+
+The Phase 3 backend patch fixes a concrete freshness-detection gap without changing the public API contract. Bootstrap polling can now distinguish a genuinely refreshed same-window payload from stale history, reducing false timeout/fallback behavior during deterministic ~100-candle refreshes.
+
+### Findings
+
+| Priority | Issue | Location |
+|----------|-------|----------|
+| — | No P0/P1/P2 findings introduced by this change. | — |
+
+### Review checks
+
+- Correctness: ✅ Freshness signature now detects same-count/same-latest-timestamp OHLC and volume changes.
+- Fail-fast validation: ✅ Invalid/non-numeric signature values are normalized predictably instead of causing signature failures.
+- Error handling: ✅ Existing structured bootstrap timeout/error behavior remains unchanged.
+- Maintainability: ✅ The change is localized to the signature helper and poll type annotation.
+- Separation of concerns: ✅ Gateway polling remains responsible only for detecting fresh data-store changes; no Chrome log reader was introduced.
+- Backward compatibility: ✅ Existing `/api/v1/history/bootstrap-history` response shape is unchanged.
+- Tests: ✅ Focused history route suite passed; data-store suite passed.
+- Diff hygiene: ✅ `git diff --check` passed with only a line-ending warning.
+
+### Recommendation
+
+Phase 3 is approved. Manual retest should focus on a payload refresh where the broker returns the same visible candle window but updates OHLC/volume values. Expected result: bootstrap polling recognizes the update as fresh instead of timing out as stale.
+
+**Review complete. Awaiting explicit command to proceed.**
+
+I have stopped before Phase 4.
+
+---
+
+## Phase 2 Complete — Timeout / Retry Alignment Hardening
+
+Implemented Phase 2 and stopped after review, as requested.
+
+### Files changed
+
+- `gui/Dashboard/src/store/marketStore.js`
+- `gui/Dashboard/src/hooks/useTickAggregation.js`
+- `gui/Dashboard/src/components/ChartWorkspace.jsx`
+
+---
+
+## What Phase 2 changed
+
+### 1. Frontend chart timeout now respects payload retry behavior
+
+`ChartWorkspace.jsx` now computes a `historyLoadTimeoutMs` based on the current automation settings:
+
+- `historyWaitTime`
+- `retryAttempts`
+- `retryDelay`
+- backend fallback collection minimum window
+- safety buffer
+
+This replaces the old fixed 15-second-only assumption in the chart loading guard.
+
+### 2. `useTickAggregation()` now accepts a dynamic timeout
+
+`useTickAggregation.js` now receives:
+
+```js
+historyLoadTimeoutMs
+```
+
+and uses that for the loading safety timeout instead of hard-coding `15000` ms.
+
+The timeout still has a safe floor of 15 seconds, but it can now grow when the user’s configured history wait/retry settings require more time.
+
+### 3. Timeout message is now softer and less misleading
+
+Old message implied a hard failure:
+
+```txt
+History load timed out. Please try again or check backend logs.
+```
+
+New message:
+
+```txt
+History load is taking longer than expected. Please retry or check backend logs.
+```
+
+This better reflects the manual broker-click/payload-capture reality.
+
+### 4. Terminal history states now clear the loading overlay more reliably
+
+`useTickAggregation.js` now recognizes these terminal states:
+
+```js
+['loaded', 'empty', 'not_found', 'error', 'skipped']
+```
+
+So `streaming_only` / skipped history modes and error states do not leave the chart loading forever.
+
+### 5. History settings are sanitized before use
+
+`marketStore.js` now clamps/sanitizes:
+
+- `historyWaitTime` minimum `0.5s`
+- `retryAttempts` minimum `1`
+- `retryDelay` minimum `0ms`
+
+This prevents invalid settings from making the retry loop silently skip or behave unpredictably.
+
+---
+
+## Validation run
+
+Passed:
+
+```powershell
+npm --prefix gui/Dashboard run build
+```
+
+Result: Vite production build completed successfully.
+
+Passed:
+
+```powershell
+git diff --check -- gui/Dashboard/src/store/marketStore.js gui/Dashboard/src/hooks/useTickAggregation.js gui/Dashboard/src/components/ChartWorkspace.jsx
+```
+
+Result: no whitespace/diff errors.
+
+Build produced the existing Vite dynamic/static import warnings for `settingsStore.js` and `tradingStore.js`; those are not introduced by this phase.
+
+---
+
+# Phase 2 Review Protocol Report
+
+**Delegation:** `Phase 2 completed. Perform full incremental review.`
+
+## Code Review
+
+**Verdict**: APPROVE
+**Confidence**: HIGH
+
+### Summary
+
+The Phase 2 patch aligns chart loading timeout behavior with the configured backend bootstrap/retry window and prevents premature frontend timeout messaging during slower manual payload capture. The changes are localized, explicit, and preserve existing history/streaming behavior.
+
+### Findings
+
+| Priority | Issue | Location |
+|----------|-------|----------|
+| — | No P0/P1/P2 findings introduced by this change. | — |
+
+### Review checks
+
+- Correctness: ✅ Timeout now scales with configured history wait/retry settings instead of firing at a fixed 15 seconds.
+- Fail-fast validation: ✅ Wait/retry values are converted and clamped before use.
+- Error handling: ✅ Timeout still surfaces a user-facing message; no silent failure introduced.
+- Maintainability: ✅ Timeout calculation is centralized in `ChartWorkspace.jsx` and passed into the hook as an explicit parameter.
+- Separation of concerns: ✅ Store handles bootstrap attempts; chart hook handles chart loading state only.
+- Backward compatibility: ✅ Default behavior remains safe with a minimum 15-second timeout floor.
+- Build: ✅ Frontend production build passed.
+- Diff hygiene: ✅ `git diff --check` passed.
+
+### Recommendation
+
+Phase 2 is approved. Manual retest should focus on a slow payload attempt where you intentionally wait longer before clicking/selecting in the broker UI. The expected behavior is that the frontend warning does **not** appear prematurely while the configured retry window is still active.
+
+**Review complete. Awaiting explicit command to proceed.**
+
+I have stopped before Phase 3.

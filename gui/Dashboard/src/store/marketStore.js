@@ -695,7 +695,8 @@ const createMarketSlice = (set, get) => ({
     const secondsRaw = tfRaw.endsWith('s') ? tfRaw.slice(0, -1) : null;
 
     const { settings } = (await import('./settingsStore')).default.getState();
-    const waitTime = settings.automation.historyWaitTime || 1.5;
+    const rawWaitTime = Number(settings.automation.historyWaitTime);
+    const waitTime = Number.isFinite(rawWaitTime) ? Math.max(0.5, rawWaitTime) : 1.5;
 
     if (tfRaw === 'ticks' || (secondsRaw && secondsRaw.match(/^\d+$/))) {
       throw new Error(`History is not available for ${timeframe}. Use Streaming Only or History + Streaming.`);
@@ -710,8 +711,10 @@ const createMarketSlice = (set, get) => ({
       timeframeMinutes = Math.max(1, parseInt(tfRaw, 10));
     }
 
-    const maxAttempts = settings.automation.retryAttempts !== undefined ? Number(settings.automation.retryAttempts) : 3;
-    const retryDelaySetting = settings.automation.retryDelay !== undefined ? Number(settings.automation.retryDelay) : 500;
+    const rawMaxAttempts = settings.automation.retryAttempts !== undefined ? Number(settings.automation.retryAttempts) : 3;
+    const rawRetryDelay = settings.automation.retryDelay !== undefined ? Number(settings.automation.retryDelay) : 500;
+    const maxAttempts = Number.isFinite(rawMaxAttempts) ? Math.max(1, Math.floor(rawMaxAttempts)) : 3;
+    const retryDelaySetting = Number.isFinite(rawRetryDelay) ? Math.max(0, rawRetryDelay) : 500;
     let attempts = 0;
     let lastErrorObj = null;
     let result = null;
@@ -773,9 +776,12 @@ const createMarketSlice = (set, get) => ({
           lastError: userMessage
         }));
       } else {
-        const fallbackStatus = previousStatus || (Array.isArray(previousCandles) && previousCandles.length > 0 ? 'loaded' : 'error');
+        const hasPreviousCandles = Array.isArray(previousCandles) && previousCandles.length > 0;
+        const safePreviousStatus = previousStatus && previousStatus !== 'loading' ? previousStatus : null;
+        const fallbackStatus = hasPreviousCandles ? 'loaded' : (safePreviousStatus || 'error');
         set((state) => ({
-          historyStatus: { ...state.historyStatus, [historyKey]: fallbackStatus }
+          historyStatus: { ...state.historyStatus, [historyKey]: fallbackStatus },
+          lastError: userMessage
         }));
       }
 
@@ -812,9 +818,26 @@ const createMarketSlice = (set, get) => ({
       // preserving the current chart/cache if the payload refresh fails.
       await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: true, num_candles: 100, timeframe });
     } catch (err) {
-      set({ lastError: `Fresh payload reload failed; keeping existing history. ${getErrorMessage(err)}` });
+      set((state) => {
+        const existingCandles = state.historyCandles && state.historyCandles[historyKey];
+        const recoveredStatus = Array.isArray(existingCandles) && existingCandles.length > 0 ? 'loaded' : 'error';
+        return {
+          historyStatus: { ...state.historyStatus, [historyKey]: recoveredStatus },
+          lastError: `Fresh payload reload failed; keeping existing history. ${getErrorMessage(err)}`
+        };
+      });
     } finally {
-      set({ selectedAssetLoading: false });
+      set((state) => {
+        const existingCandles = state.historyCandles && state.historyCandles[historyKey];
+        const currentStatus = state.historyStatus && state.historyStatus[historyKey];
+        const recoveredStatus = Array.isArray(existingCandles) && existingCandles.length > 0 ? 'loaded' : 'error';
+        return {
+          selectedAssetLoading: false,
+          historyStatus: currentStatus === 'loading'
+            ? { ...state.historyStatus, [historyKey]: recoveredStatus }
+            : state.historyStatus
+        };
+      });
     }
   },
   payoutAssets: [],

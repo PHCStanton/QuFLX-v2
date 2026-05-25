@@ -62,6 +62,27 @@ const ChartWorkspace = () => {
   const enableStreaming = dataSourceMode !== 'history_only';
   const showChartWatermark = settings?.analysis?.showChartWatermark !== false;
   const showChartTooltip = settings?.analysis?.showChartTooltip !== false;
+  const historyLoadTimeoutMs = useMemo(() => {
+    const automation = settings && settings.automation ? settings.automation : {};
+    const waitSeconds = Number(automation.historyWaitTime);
+    const retryAttempts = Number(automation.retryAttempts);
+    const retryDelay = Number(automation.retryDelay);
+
+    const waitMs = Number.isFinite(waitSeconds) ? Math.max(500, waitSeconds * 1000) : 1500;
+    const attempts = Number.isFinite(retryAttempts) ? Math.max(1, Math.floor(retryAttempts)) : 2;
+    const retryDelayMs = Number.isFinite(retryDelay) ? Math.max(0, retryDelay) : 500;
+    const backendFallbackMs = Math.max(5000, waitMs);
+    const retryWindowMs = Array.from({ length: Math.max(0, attempts - 1) }, (_, idx) => {
+      const attemptNumber = idx + 1;
+      return retryDelayMs > 0 ? retryDelayMs : Math.pow(2, attemptNumber) * 1000;
+    }).reduce((total, delayMs) => total + delayMs, 0);
+
+    return Math.max(15000, (attempts * (waitMs + backendFallbackMs)) + retryWindowMs + 5000);
+  }, [
+    settings && settings.automation ? settings.automation.historyWaitTime : undefined,
+    settings && settings.automation ? settings.automation.retryAttempts : undefined,
+    settings && settings.automation ? settings.automation.retryDelay : undefined
+  ]);
   const [candleSeries, setCandleSeries] = useState(null);
   const [mainChart, setMainChart] = useState(null);
   const chartWrapperRef = useRef(null); // Ref for tooltip positioning bounds
@@ -357,7 +378,8 @@ const ChartWorkspace = () => {
     selectedAsset,
     onError: setError,
     onNewCandle,
-    enableStreaming
+    enableStreaming,
+    historyLoadTimeoutMs
   });
 
   // Right-click handler — builds context menu items based on active indicators

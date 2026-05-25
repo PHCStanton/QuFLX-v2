@@ -9,6 +9,8 @@ const normalizeEpochSeconds = (value) => {
   return Number.isFinite(seconds) ? seconds : null;
 };
 
+const TERMINAL_HISTORY_STATUSES = ['loaded', 'empty', 'not_found', 'error', 'skipped'];
+
 const useTickAggregation = ({
   marketData,
   selectedAssetKey,
@@ -20,11 +22,15 @@ const useTickAggregation = ({
   selectedAsset,
   onNewCandle,
   onError,
-  enableStreaming = true
+  enableStreaming = true,
+  historyLoadTimeoutMs = 15000
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const currentCandleRef = useRef(null);
   const currentVolumeRef = useRef(0); // Track volume accumulation
+  const safeHistoryLoadTimeoutMs = Number.isFinite(Number(historyLoadTimeoutMs))
+    ? Math.max(15000, Number(historyLoadTimeoutMs))
+    : 15000;
 
   const historyCandlesRef = useRef(historyCandles);
   
@@ -67,10 +73,15 @@ const useTickAggregation = ({
     const status = historyStatus && historyKey ? historyStatus[historyKey] : undefined;
     const candles = historyCandles && historyKey ? historyCandles[historyKey] : undefined;
 
-    if (!Array.isArray(candles)) return;
+    if (!Array.isArray(candles)) {
+      if (TERMINAL_HISTORY_STATUSES.includes(status)) {
+        setIsLoading(false);
+      }
+      return;
+    }
 
     if (candles.length === 0) {
-      if (['loaded', 'empty', 'not_found', 'error'].includes(status)) {
+      if (TERMINAL_HISTORY_STATUSES.includes(status)) {
         setIsLoading(false);
       }
       return;
@@ -172,20 +183,24 @@ const useTickAggregation = ({
     marketData, selectedAssetKey, selectedTimeframe, candleSeries, volumeSeries, enableStreaming, onNewCandle, onError
   ]);
 
-  // Safety timeout to prevent infinite loading state
+  // Safety timeout to prevent infinite loading state. This must be longer than
+  // the configured backend bootstrap wait + retry window, otherwise manual
+  // broker selection can still be in progress when the chart declares failure.
   useEffect(() => {
     let timeoutId;
     if (isLoading) {
       timeoutId = setTimeout(() => {
-        if (isLoading) {
-          console.warn('History load timeout - forcing isLoading(false)');
+        const historyKey = getHistoryKey(selectedAssetKey, selectedTimeframe);
+        const status = historyStatus && historyKey ? historyStatus[historyKey] : undefined;
+        if (isLoading && (status === 'loading' || status === undefined)) {
+          console.warn(`History load timeout after ${Math.round(safeHistoryLoadTimeoutMs / 1000)}s - forcing isLoading(false)`);
           setIsLoading(false);
-          if (onError) onError('History load timed out. Please try again or check backend logs.');
+          if (onError) onError('History load is taking longer than expected. Please retry or check backend logs.');
         }
-      }, 15000); // Increased to 15s to allow for bootstrap retries
+      }, safeHistoryLoadTimeoutMs);
     }
     return () => clearTimeout(timeoutId);
-  }, [isLoading, onError]);
+  }, [isLoading, onError, historyStatus, selectedAssetKey, selectedTimeframe, safeHistoryLoadTimeoutMs]);
 
   return { isLoading, setIsLoading, currentCandleRef };
 };

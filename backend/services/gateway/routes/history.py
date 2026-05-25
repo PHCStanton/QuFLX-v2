@@ -3,6 +3,7 @@ import sys
 import json
 import asyncio
 import logging
+import hashlib
 import pandas as pd
 import subprocess
 from typing import Dict, Any, List, Optional, Tuple
@@ -65,11 +66,25 @@ def _json_error(code: HistoryErrorCode, message: str, details: Dict[str, Any] | 
     return JSONResponse(status_code=_error_status_for_code(code), content=resp.model_dump())
 
 
-def _history_signature(candles: List[Dict[str, Any]]) -> Tuple[int, Optional[float]]:
+def _signature_value(value: Any) -> Any:
+    """Normalize candle values before hashing so numeric strings and floats compare consistently."""
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+        if pd.isna(numeric):
+            return None
+        return round(numeric, 10)
+    except (TypeError, ValueError):
+        return str(value).strip()
+
+
+def _history_signature(candles: List[Dict[str, Any]]) -> Tuple[int, Optional[float], str]:
     if not candles:
-        return (0, None)
+        return (0, None, "")
 
     latest_ts: Optional[float] = None
+    signature_rows: List[Dict[str, Any]] = []
     for candle in candles:
         ts = candle.get("timestamp", candle.get("time"))
         if ts is None:
@@ -81,7 +96,27 @@ def _history_signature(candles: List[Dict[str, Any]]) -> Tuple[int, Optional[flo
         if latest_ts is None or ts_val > latest_ts:
             latest_ts = ts_val
 
-    return (len(candles), latest_ts)
+        signature_rows.append(
+            {
+                "timestamp": _signature_value(ts_val),
+                "open": _signature_value(candle.get("open")),
+                "high": _signature_value(candle.get("high")),
+                "low": _signature_value(candle.get("low")),
+                "close": _signature_value(candle.get("close")),
+                "volume": _signature_value(candle.get("volume")),
+                # Metadata changes when a fresh payload rewrites the same candle window.
+                # Including it avoids treating a successful same-timestamp refresh as stale.
+                "created_at": _signature_value(candle.get("created_at")),
+                "session_id": _signature_value(candle.get("session_id")),
+                "source": _signature_value(candle.get("source")),
+            }
+        )
+
+    signature_rows.sort(key=lambda row: (row.get("timestamp") is None, row.get("timestamp")))
+    signature_payload = json.dumps(signature_rows, sort_keys=True, separators=(",", ":"))
+    signature_hash = hashlib.sha256(signature_payload.encode("utf-8")).hexdigest()
+
+    return (len(candles), latest_ts, signature_hash)
 
 
 async def _select_asset_in_ui(asset: str) -> Dict[str, Any]:
@@ -153,7 +188,7 @@ async def _poll_for_fresh_candles(
     asset: str,
     timeframe_str: str,
     *,
-    baseline_signature: Tuple[int, Optional[float]],
+    baseline_signature: Tuple[int, Optional[float], str],
     timeout_s: float,
     limit: int = 100,
     poll_interval_s: float = 0.25,
