@@ -6,6 +6,7 @@ import NeoSyncButton from './NeoSyncButton';
 import syncClickSound from '../assets/Sounds/Click_TF_Sync_Button1.mp3';
 import useMarketStore from '../store/marketStore';
 import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
+import { getHistoryKey } from '../utils/historyKey';
 
 const ChartHeader = ({
   selectedAsset,
@@ -32,6 +33,7 @@ const ChartHeader = ({
   const { strategyLabFiles, selectedStrategyFileId, setSelectedStrategyFileId } = useMarketStore();
   const { historyStatus, reloadHistoryFromPayload } = useMarketStore();
   const selectedAssetKey = normalizeAsset(selectedAsset);
+  const selectedHistoryKey = getHistoryKey(selectedAssetKey, selectedTimeframe);
   const [syncClicked, setSyncClicked] = useState(false);
   const [duplicateMsg, setDuplicateMsg] = useState('');
   const [cacheClicked, setCacheClicked] = useState(false);
@@ -62,7 +64,7 @@ const ChartHeader = ({
   const handleClearCacheClick = async () => {
     if (!selectedAsset) return;
 
-    const status = historyStatus?.[selectedAssetKey];
+    const status = historyStatus?.[selectedHistoryKey];
     if (status === 'loading') return;
 
     const audio = new Audio(syncClickSound);
@@ -187,7 +189,7 @@ const ChartHeader = ({
           type="button"
           className="group flex items-center justify-center h-8 w-8 rounded border border-border-primary bg-section-bg/70 text-gray-400 transition-all duration-150 hover:text-yellow-300 hover:border-yellow-500/50 hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={handleClearCacheClick}
-          disabled={!selectedAsset || historyStatus?.[selectedAssetKey] === 'loading'}
+          disabled={!selectedAsset || historyStatus?.[selectedHistoryKey] === 'loading'}
           title="Refresh current asset history from payload"
         >
           <RefreshHistoryPayloadIcon size={13} className={cacheClicked ? 'animate-pulse text-yellow-300' : ''} />

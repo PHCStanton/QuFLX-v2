@@ -28,6 +28,7 @@ import { ZonePrimitive } from '../utils/zonePrimitive';
 import { HistogramSeries } from 'lightweight-charts';
 import { timeframeOptions, csvOptions, indicatorOptions } from '../config/chartOptions';
 import IndicatorTimeframeWarning from './IndicatorTimeframeWarning';
+import { getHistoryKey } from '../utils/historyKey';
 
 const ChartWorkspace = () => {
   const { settings } = useSettingsStore();
@@ -154,7 +155,8 @@ const ChartWorkspace = () => {
   useEffect(() => {
     if (!selectedAsset || !selectedAssetKey || !selectedTimeframe) return;
 
-    const status = historyStatus[selectedAssetKey];
+    const historyKey = getHistoryKey(selectedAssetKey, selectedTimeframe);
+    const status = historyStatus[historyKey];
     // Only load if we haven't loaded/attempted yet
     if (!status) {
       loadHistory(selectedAsset, 100).catch((err) => {

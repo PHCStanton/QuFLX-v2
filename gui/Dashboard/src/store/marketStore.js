@@ -5,6 +5,7 @@ import { withQuFLXPersist, QFLX_PERSIST_KEYS } from './persistMiddleware';
 import { getApiBaseUrl } from '../api/apiBase';
 import { normalizeTimestamp } from '../utils/time';
 import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
+import { getHistoryKey, getLegacyHistoryKeys } from '../utils/historyKey';
 import alertSignalSound from '../assets/Sounds/TopGun_Clip_Music_Voice.mp3';
 
 const LAST_ANNOTATED_SCREENSHOT_STORAGE_KEY = 'quflx:lastAnnotatedScreenshotDataUrl';
@@ -281,9 +282,10 @@ const createMarketSlice = (set, get) => ({
         set({ lastError: `Failed to load history: ${getErrorMessage(err)}` });
       }
     } else {
+      const historyKey = getHistoryKey(nextAssetKey, get().selectedTimeframe);
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [asset]: [] },
-        historyStatus: { ...state.historyStatus, [asset]: 'skipped' }
+        historyCandles: { ...state.historyCandles, [historyKey]: [] },
+        historyStatus: { ...state.historyStatus, [historyKey]: 'skipped' }
       }));
     }
 
@@ -436,8 +438,9 @@ const createMarketSlice = (set, get) => ({
     }
 
     const { historyStatus, historyCandles } = get();
-    const historyState = historyStatus && historyStatus[asset];
-    const candles = historyCandles && historyCandles[asset];
+    const historyKey = getHistoryKey(asset, timeframe);
+    const historyState = historyStatus && historyStatus[historyKey];
+    const candles = historyCandles && historyCandles[historyKey];
     const hasHistoryCandles = Array.isArray(candles) && candles.length > 0;
 
     if (historyState === 'not_found' || historyState === 'error' || historyState === 'empty') {
@@ -550,46 +553,57 @@ const createMarketSlice = (set, get) => ({
   },
   historyCandles: {},
   historyStatus: {},
-  clearHistoryCache: (asset) => {
+  clearHistoryCache: (asset, timeframe = null) => {
     const assetKey = typeof asset === 'string' ? asset.trim() : '';
     if (!assetKey) return;
 
     const normalizedKey = normalizeAsset(assetKey);
-    const keysToClear = normalizedKey && normalizedKey !== assetKey
-      ? [assetKey, normalizedKey]
-      : [assetKey];
 
     set((state) => ({
-      historyCandles: keysToClear.reduce((next, key) => {
-        next[key] = [];
+      historyCandles: Object.keys(state.historyCandles || {}).reduce((next, key) => {
+        const shouldClear = timeframe
+          ? key === getHistoryKey(normalizedKey, timeframe)
+          : key === assetKey || key === normalizedKey || key.startsWith(`${normalizedKey}|`);
+        if (shouldClear) {
+          next[key] = [];
+        }
         return next;
       }, { ...state.historyCandles }),
-      historyStatus: keysToClear.reduce((next, key) => {
+      historyStatus: Object.keys(state.historyStatus || {}).reduce((next, key) => {
+        const shouldClear = timeframe
+          ? key === getHistoryKey(normalizedKey, timeframe)
+          : key === assetKey || key === normalizedKey || key.startsWith(`${normalizedKey}|`);
+        if (shouldClear) {
+          next[key] = undefined;
+        }
+        return next;
+      }, getLegacyHistoryKeys(assetKey).reduce((next, key) => {
         next[key] = undefined;
         return next;
-      }, { ...state.historyStatus }),
+      }, { ...state.historyStatus })),
     }));
   },
   loadHistory: async (asset, numCandles = 100) => {
     if (!asset) return;
 
     const assetKey = normalizeAsset(asset);
-    const existingStatus = get().historyStatus[assetKey];
-    const existingCandles = get().historyCandles[assetKey];
+    const timeframe = get().selectedTimeframe || '1m';
+    const historyKey = getHistoryKey(assetKey, timeframe);
+    const existingStatus = get().historyStatus[historyKey];
+    const existingCandles = get().historyCandles[historyKey];
     
     if (existingStatus === 'loaded' && Array.isArray(existingCandles) && existingCandles.length > 0) {
-      console.log(`[LoadHistory] Early return: Cache hit for ${assetKey}`);
+      console.log(`[LoadHistory] Early return: Cache hit for ${historyKey}`);
       return;
     }
 
     set((state) => ({
       historyStatus: {
         ...state.historyStatus,
-        [assetKey]: 'loading'
+        [historyKey]: 'loading'
       }
     }));
 
-    const timeframe = get().selectedTimeframe || '1m';
     const tfRaw = String(timeframe).trim().toLowerCase();
     const tfNumberMatch = tfRaw.match(/^\d+$/);
     const minutesRaw = tfRaw.endsWith('m') ? tfRaw.slice(0, -1) : null;
@@ -598,14 +612,13 @@ const createMarketSlice = (set, get) => ({
 
     // Get dynamic wait time from settings
     const { settings } = (await import('./settingsStore')).default.getState();
-    const waitTime = settings.automation.historyWaitTime || 1.5;
     const dataSourceMode = settings.analysis?.dataSourceMode || 'history_and_streaming';
 
     if (tfRaw === 'ticks' || (secondsRaw && secondsRaw.match(/^\d+$/))) {
       const msg = `History is not available for ${timeframe}. Use Streaming Only or History + Streaming.`;
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [assetKey]: [] },
-        historyStatus: { ...state.historyStatus, [assetKey]: 'skipped' },
+        historyCandles: { ...state.historyCandles, [historyKey]: [] },
+        historyStatus: { ...state.historyStatus, [historyKey]: 'skipped' },
         lastError: dataSourceMode === 'history_only' ? msg : state.lastError
       }));
       return;
@@ -624,7 +637,7 @@ const createMarketSlice = (set, get) => ({
 
     try {
       // Step 1: Quick check for existing CSV file
-      console.log(`[LoadHistory] Checking for existing history: ${assetKey} @ ${timeframe}`);
+      console.log(`[LoadHistory] Checking for existing history: ${historyKey}`);
       const checkRes = await fetch(
         `${getApiBaseUrl()}/api/v1/history/${encodeURIComponent(assetKey)}?timeframe=${timeframeMin}&num_candles=${numCandles}&limit=${numCandles}`
       );
@@ -636,24 +649,24 @@ const createMarketSlice = (set, get) => ({
           : (Array.isArray(hist.data) ? hist.data : []);
 
         if (candles.length > 0) {
-          console.log(`[LoadHistory] ✓ Found existing history: ${candles.length} candles`);
+          console.log(`[LoadHistory] ✓ Found existing history: ${candles.length} candles for ${historyKey}`);
           set((state) => ({
-            historyCandles: { ...state.historyCandles, [assetKey]: candles },
-            historyStatus: { ...state.historyStatus, [assetKey]: 'loaded' }
+            historyCandles: { ...state.historyCandles, [historyKey]: candles },
+            historyStatus: { ...state.historyStatus, [historyKey]: 'loaded' }
           }));
           return;
         }
       }
 
       // Step 2: No existing data - Bootstrap collection
-      console.log(`[LoadHistory] No existing data. Starting bootstrap for ${assetKey}...`);
-      await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: false, num_candles: numCandles });
+      console.log(`[LoadHistory] No existing data. Starting bootstrap for ${historyKey}...`);
+      await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: false, num_candles: numCandles, timeframe });
 
     } catch (err) {
       console.error('[LoadHistory] Failed to load history:', err);
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [assetKey]: [] },
-        historyStatus: { ...state.historyStatus, [assetKey]: 'error' },
+        historyCandles: { ...state.historyCandles, [historyKey]: [] },
+        historyStatus: { ...state.historyStatus, [historyKey]: 'error' },
         lastError: err.message || 'Failed to load history data'
       }));
       throw err;
@@ -668,9 +681,13 @@ const createMarketSlice = (set, get) => ({
     const {
       preserveExistingOnError = false,
       num_candles = 100,
+      timeframe: requestedTimeframe = get().selectedTimeframe || '1m',
     } = options;
 
-    const timeframe = get().selectedTimeframe || '1m';
+    const timeframe = requestedTimeframe || '1m';
+    const historyKey = getHistoryKey(assetKey, timeframe);
+    const previousStatus = get().historyStatus[historyKey];
+    const previousCandles = get().historyCandles[historyKey];
     const tfRaw = String(timeframe).trim().toLowerCase();
     const tfNumberMatch = tfRaw.match(/^\d+$/);
     const minutesRaw = tfRaw.endsWith('m') ? tfRaw.slice(0, -1) : null;
@@ -698,6 +715,13 @@ const createMarketSlice = (set, get) => ({
     let attempts = 0;
     let lastErrorObj = null;
     let result = null;
+
+    set((state) => ({
+      historyStatus: {
+        ...state.historyStatus,
+        [historyKey]: 'loading'
+      }
+    }));
 
     while (attempts < maxAttempts) {
       attempts++;
@@ -744,9 +768,14 @@ const createMarketSlice = (set, get) => ({
 
       if (!preserveExistingOnError) {
         set((state) => ({
-          historyCandles: { ...state.historyCandles, [assetKey]: [] },
-          historyStatus: { ...state.historyStatus, [assetKey]: 'error' },
+          historyCandles: { ...state.historyCandles, [historyKey]: [] },
+          historyStatus: { ...state.historyStatus, [historyKey]: 'error' },
           lastError: userMessage
+        }));
+      } else {
+        const fallbackStatus = previousStatus || (Array.isArray(previousCandles) && previousCandles.length > 0 ? 'loaded' : 'error');
+        set((state) => ({
+          historyStatus: { ...state.historyStatus, [historyKey]: fallbackStatus }
         }));
       }
 
@@ -757,8 +786,8 @@ const createMarketSlice = (set, get) => ({
     console.log(`[LoadHistory] ✓ Bootstrap SUCCESS: Received ${candles.length} candles for ${assetKey}`);
 
     set((state) => ({
-      historyCandles: { ...state.historyCandles, [assetKey]: candles },
-      historyStatus: { ...state.historyStatus, [assetKey]: 'loaded' }
+      historyCandles: { ...state.historyCandles, [historyKey]: candles },
+      historyStatus: { ...state.historyStatus, [historyKey]: 'loaded' }
     }));
 
     return candles;
@@ -766,19 +795,22 @@ const createMarketSlice = (set, get) => ({
   reloadHistoryFromPayload: async (asset) => {
     if (!asset) return;
     const assetKey = normalizeAsset(asset);
+    const timeframe = get().selectedTimeframe || '1m';
+    const historyKey = getHistoryKey(assetKey, timeframe);
 
-    set({
+    set((state) => ({
       selectedAsset: asset,
       selectedAssetKey: assetKey,
       selectedAssetLoading: true,
       marketData: {},       // Clear old tick data immediately
       indicatorSeries: {},  // Clear stale indicator data
-    });
+      historyStatus: { ...state.historyStatus, [historyKey]: 'loading' }
+    }));
 
     try {
       // Do NOT DELETE existing CSV first - force a fresh bootstrap attempt while
       // preserving the current chart/cache if the payload refresh fails.
-      await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: true, num_candles: 100 });
+      await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: true, num_candles: 100, timeframe });
     } catch (err) {
       set({ lastError: `Fresh payload reload failed; keeping existing history. ${getErrorMessage(err)}` });
     } finally {
@@ -824,12 +856,11 @@ const createMarketSlice = (set, get) => ({
     const toLeave = subscribedAssetKeys.filter((k) => !normalized.includes(k));
 
     toLeave.forEach((assetKey) => {
-      socket.emit('leave_room', `market_data:${assetKey}`);
+      socket.emit('unsubscribe_asset', assetKey);
     });
 
     toJoin.forEach((assetKey) => {
       socket.emit('subscribe_asset', assetKey);
-      socket.emit('join_room', `market_data:${assetKey}`);
     });
 
     set({ subscribedAssetKeys: normalized });
@@ -1215,10 +1246,24 @@ const createConnectionSlice = (set, get) => ({
     }
   },
   connectSocket: () => {
+    const existingSocket = get().socket;
+    if (existingSocket) {
+      const managerState = existingSocket.io && typeof existingSocket.io === 'object'
+        ? existingSocket.io._readyState
+        : null;
+      if (existingSocket.connected || existingSocket.active || managerState === 'opening') {
+        return existingSocket;
+      }
+      existingSocket.removeAllListeners();
+      existingSocket.disconnect();
+    }
+
     const socket = io(getApiBaseUrl(), {
       transports: ['websocket', 'polling'],
       autoConnect: true
     });
+
+    set({ socket, wsStatus: 'connecting' });
 
     socket.on('connect', () => {
       console.log('Socket connected');
@@ -1345,10 +1390,13 @@ const createConnectionSlice = (set, get) => ({
         ssidStatus: data.ssid_service_available ? 'connected' : 'disconnected'
       });
     });
+
+    return socket;
   },
   disconnectSocket: () => {
     const { socket } = get();
     if (socket) {
+      socket.removeAllListeners();
       socket.disconnect();
     }
     set({

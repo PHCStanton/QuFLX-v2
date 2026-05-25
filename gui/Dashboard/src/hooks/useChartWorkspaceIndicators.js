@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { getHistoryKey } from '../utils/historyKey';
 
 
 // Known indicator type identifiers — used to recover the type from ind.id
@@ -75,14 +76,15 @@ const useChartWorkspaceIndicators = ({
   // FIX: Derive a stable boolean so the effect re-fires the moment history becomes
   // available after an asset switch (historyStatus was previously not in deps,
   // causing a race condition where loadIndicators silently bailed every time).
-  const assetHistoryLoaded = historyStatus?.[selectedAssetKey] === 'loaded';
+  const historyKey = getHistoryKey(selectedAssetKey, selectedTimeframe);
+  const assetHistoryLoaded = historyStatus?.[historyKey] === 'loaded';
 
   useEffect(() => {
     if (!selectedAsset || !selectedAssetKey || !selectedTimeframe) return;
     if (!indicatorRequest.indicators.length) return;
 
     // Wait for history to be ready before requesting indicators.
-    // This fires automatically when historyStatus[selectedAssetKey] transitions to 'loaded'.
+    // This fires automatically when historyStatus[asset|timeframe] transitions to 'loaded'.
     if (!assetHistoryLoaded) return;
 
     const tfRaw = String(selectedTimeframe || '').trim().toLowerCase();

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { prepareChartData } from '../utils/chartData';
+import { getHistoryKey } from '../utils/historyKey';
 
 const normalizeEpochSeconds = (value) => {
   const numeric = typeof value === 'number' ? value : Number(value);
@@ -34,10 +35,11 @@ const useTickAggregation = ({
   useEffect(() => {
     if (candleSeries) {
       const candles = historyCandlesRef.current;
+      const historyKey = getHistoryKey(selectedAssetKey, selectedTimeframe);
       const hasCachedData = candles
-        && selectedAssetKey
-        && Array.isArray(candles[selectedAssetKey])
-        && candles[selectedAssetKey].length > 0;
+        && historyKey
+        && Array.isArray(candles[historyKey])
+        && candles[historyKey].length > 0;
 
       currentCandleRef.current = null;
       currentVolumeRef.current = 0;
@@ -55,14 +57,15 @@ const useTickAggregation = ({
         setIsLoading(true);
       }
     }
-  }, [selectedAsset, selectedAssetKey, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
+  }, [selectedAsset, selectedAssetKey, selectedTimeframe, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
 
   // Load Historical Data
   useEffect(() => {
     if (!candleSeries || !selectedAssetKey) return;
 
-    const status = historyStatus && selectedAssetKey ? historyStatus[selectedAssetKey] : undefined;
-    const candles = historyCandles && selectedAssetKey ? historyCandles[selectedAssetKey] : undefined;
+    const historyKey = getHistoryKey(selectedAssetKey, selectedTimeframe);
+    const status = historyStatus && historyKey ? historyStatus[historyKey] : undefined;
+    const candles = historyCandles && historyKey ? historyCandles[historyKey] : undefined;
 
     if (!Array.isArray(candles)) return;
 
@@ -100,7 +103,7 @@ const useTickAggregation = ({
     }
 
     setIsLoading(false);
-  }, [historyCandles, historyStatus, selectedAssetKey, candleSeries, volumeSeries]);
+  }, [historyCandles, historyStatus, selectedAssetKey, selectedTimeframe, candleSeries, volumeSeries]);
 
   // Handle Tick Aggregation
   useEffect(() => {

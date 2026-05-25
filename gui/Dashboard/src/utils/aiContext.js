@@ -1,3 +1,5 @@
+import { getHistoryKey } from './historyKey';
+
 export const getAiImageSourceLabel = ({ imageSource, lastAnnotatedImage }) => {
   const src = String(imageSource || '').toLowerCase();
   const hasAnnotated = typeof lastAnnotatedImage === 'string' && lastAnnotatedImage.trim();
@@ -74,7 +76,6 @@ const getContextWindowSizes = (uiMode) => {
     snapshotKeep: 50,
   };
 };
-
 const buildIndicatorSnapshots = ({ seriesForKey, activeIndicators, snapshotKeep }) => {
   const indicatorSnapshots = {};
 
@@ -126,7 +127,8 @@ export const buildAiContext = ({
     ? marketData[selectedAssetKey].slice(-tickKeep)
     : [];
 
-  const rawCandles = (historyCandles && selectedAsset && historyCandles[selectedAsset]) || [];
+  const historyKey = getHistoryKey(selectedAssetKey || selectedAsset, selectedTimeframe);
+  const rawCandles = (historyCandles && historyKey && historyCandles[historyKey]) || [];
   const recentCandles = Array.isArray(rawCandles) ? rawCandles.slice(-candleKeep) : [];
 
   const indicatorKey = selectedAsset && selectedTimeframe ? `${selectedAsset}|${selectedTimeframe}` : null;
@@ -143,4 +145,3 @@ export const buildAiContext = ({
     indicatorSnapshots,
   };
 };
-
