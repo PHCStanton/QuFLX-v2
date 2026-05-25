@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import { CollapsibleCard } from './Card';
 import TickerTape from './TickerTape';
 import NeomorphicSwitch from './NeomorphicSwitch';
-import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap, Star } from 'lucide-react';
-
+import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap } from 'lucide-react';
+import useMarketStore from '../store/marketStore';
 import { normalizeSpecificAsset } from '../utils/assetUtils';
 
 const AssetListView = ({
@@ -21,14 +21,15 @@ const AssetListView = ({
   onRemoveFromIgnore,
   isAssetIncluded,
   isAssetIgnored,
-  quotesByAssetKey,
   tickerAssets,
   assetSearchQuery,
   onSearchQueryChange,
   onUseForTrade,
-  favorites = [],
-  onToggleFavorite
+  onReloadAndSelectAsset,
 }) => {
+  // Subscribe directly — only this component re-renders on tick updates,
+  // keeping the parent AssetPayoutPanel stable.
+  const quotesByAssetKey = useMarketStore((state) => state.quotesByAssetKey);
   const filteredPayoutAssets = useMemo(() => {
     const source = Array.isArray(payoutAssets) ? payoutAssets : [];
     const q = String(assetSearchQuery || '').trim().toLowerCase();
@@ -43,19 +44,7 @@ const AssetListView = ({
     });
   }, [payoutAssets, assetSearchQuery]);
 
-  const easyAccessAssets = useMemo(() => {
-    if (!Array.isArray(favorites)) return [];
-    // Only show favorites that are NOT in the current payout list to avoid duplication if we want separate section?
-    // Or just show all favorites.
-    // If I show a separate section, I should probably filter them out of the main list or just duplicate them.
-    // Duplication is fine for "Easy Access".
-    return favorites;
-  }, [favorites]);
 
-  const isFavorite = (asset) => {
-    if (!favorites) return false;
-    return favorites.includes(asset);
-  };
 
   const count = Array.isArray(payoutAssets) ? payoutAssets.length : 0;
 
@@ -110,54 +99,7 @@ const AssetListView = ({
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
-                
-                {/* Easy Access Section */}
-                {easyAccessAssets.length > 0 && !assetSearchQuery && (
-                  <div className="mb-2 pb-2 border-b border-border-primary/50">
-                    <div className="px-2 mb-1 text-[10px] font-bold text-accent-blue uppercase tracking-widest flex items-center gap-1">
-                      <Star size={10} className="fill-accent-blue" />
-                      Easy Access
-                    </div>
-                    {easyAccessAssets.map((asset) => (
-                       <div
-                       key={`fav-${asset}`}
-                       onClick={() => !selectedAssetLoading && onSelectAsset(asset)}
-                       className={`p-1.5 rounded flex justify-between items-center transition-colors ${selectedAsset === asset
-                         ? 'bg-accent-green/20 text-accent-green border border-accent-green/50'
-                         : 'hover:bg-section-bg/50 text-text-secondary'
-                         } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
-                     >
-                       <div className="flex items-center gap-2">
-                         <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggleFavorite && onToggleFavorite(asset);
-                            }}
-                            className="w-4 h-4 flex items-center justify-center rounded-full text-accent-blue hover:bg-accent-blue/20 transition-colors"
-                            title="Remove from Easy Access"
-                         >
-                           <Star size={10} className="fill-accent-blue" />
-                         </button>
-                         <span className="font-medium text-sm">{normalizeSpecificAsset(asset)}</span>
-                         {onUseForTrade && (
-                           <button
-                             type="button"
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               onUseForTrade(asset);
-                             }}
-                             className="p-1 rounded bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/30 transition-all ml-1"
-                             title="Use for Live Trade"
-                           >
-                             <Zap size={10} />
-                           </button>
-                         )}
-                       </div>
-                     </div>
-                    ))}
-                  </div>
-                )}
+
 
                 {filteredPayoutAssets.length === 0 ? (
                   <div className="p-2 text-[11px] text-text-secondary text-center border border-dashed border-border-primary rounded">
@@ -174,17 +116,6 @@ const AssetListView = ({
                         } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleFavorite && onToggleFavorite(asset);
-                          }}
-                          className={`w-4 h-4 flex items-center justify-center rounded-full border border-border-primary hover:bg-white/10 transition-colors ${isFavorite(asset) ? 'text-accent-blue border-accent-blue' : 'text-text-secondary'}`}
-                          title={isFavorite(asset) ? "Remove from Easy Access" : "Add to Easy Access"}
-                        >
-                          <Star size={10} className={isFavorite(asset) ? "fill-accent-blue" : ""} />
-                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -276,7 +207,13 @@ const AssetListView = ({
             </>
           ) : (
             <div className="flex-1 min-h-0 bg-black/20 rounded overflow-hidden">
-              <TickerTape assets={tickerAssets} quotesByAssetKey={quotesByAssetKey} />
+               <TickerTape
+                 assets={tickerAssets}
+                 quotesByAssetKey={quotesByAssetKey}
+                 selectedAsset={selectedAsset}
+                 selectedAssetLoading={selectedAssetLoading}
+                 onReloadAndSelectAsset={onReloadAndSelectAsset}
+               />
             </div>
           )}
     </CollapsibleCard>

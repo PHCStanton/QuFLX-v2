@@ -3,6 +3,8 @@ import { CollapsibleCard } from './Card';
 import { RefreshCw, Database, Radio, Power, Lock, Unlock } from 'lucide-react';
 import clickSound from '../assets/Sounds/UIClick-Short_soft click.mp3';
 import snapshotSound from '../assets/Sounds/UIClick-Camera_snapshot.mp3';
+import useMarketStore from '../store/marketStore';
+import useSettingsStore from '../store/settingsStore';
 import useTradingStore from '../store/tradingStore';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -119,21 +121,37 @@ const fmt = {
   },
 };
 
-const GlobalControls = ({
-  backendReady,
-  autoRefresh,
-  onToggleAutoRefresh,
-  otcOnly,
-  onToggleOtcOnly,
-  onGetAssets,
-  isBusyRefreshing,
-  alertsStatus,
-  onStartAlerts,
-  onStopAlerts,
-  enableTickLogging,
-  onToggleTickLogging,
-}) => {
+const GlobalControls = () => {
   const toggleAudioRef = useRef(null);
+  const {
+    backendReady,
+    autoRefresh,
+    assetFilterState,
+    alertsStatus,
+    payoutAssets,
+    enableTickLogging,
+    toggleAutoRefresh,
+    setAssetFilterState,
+    refreshAssets,
+    startAlerts,
+    stopAlerts,
+    toggleTickLogging,
+  } = useMarketStore(useShallow((state) => ({
+    backendReady: Boolean(state.backendStatus?.readyForAssets),
+    autoRefresh: state.autoRefresh,
+    assetFilterState: state.assetFilterState,
+    alertsStatus: state.alertsStatus,
+    payoutAssets: state.payoutAssets,
+    enableTickLogging: state.enableTickLogging,
+    toggleAutoRefresh: state.toggleAutoRefresh,
+    setAssetFilterState: state.setAssetFilterState,
+    refreshAssets: state.refreshAssets,
+    startAlerts: state.startAlerts,
+    stopAlerts: state.stopAlerts,
+    toggleTickLogging: state.toggleTickLogging,
+  })));
+  const settingsTickLoggingEnabled = useSettingsStore((state) => state.settings.alerts?.enableTickLogging);
+  const updateSettingsSection = useSettingsStore((state) => state.updateSection);
 
   const {
     isConnected,
@@ -198,6 +216,44 @@ const GlobalControls = ({
   }, [isConnecting, isSwitchingMode, isDemoMode, isConnected, switchMode, disconnect, setDemoMode]);
 
   const isBusySession = isConnecting || isSwitchingMode;
+  const otcOnly = assetFilterState?.filterMode === 'otc';
+  const isBusyRefreshing = autoRefresh;
+
+  const handleToggleOtcOnly = useCallback(() => {
+    setAssetFilterState({
+      ...(assetFilterState || {}),
+      filterMode: otcOnly ? null : 'otc',
+    });
+  }, [assetFilterState, otcOnly, setAssetFilterState]);
+
+  const handleGetAssets = useCallback(() => {
+    const options = {
+      min_pct: assetFilterState?.minPayout || 92,
+      max_assets: assetFilterState?.maxAssets || 5,
+      include_assets: (assetFilterState?.includeAssets || '').split(',').map((asset) => asset.trim()).filter(Boolean),
+      ignore_assets: (assetFilterState?.ignoreAssets || '').split(',').map((asset) => asset.trim()).filter(Boolean),
+      filter_mode: assetFilterState?.filterMode,
+    };
+    refreshAssets(options);
+  }, [assetFilterState, refreshAssets]);
+
+  const handleToggleTickLogging = useCallback(() => {
+    const nextValue = !settingsTickLoggingEnabled;
+    updateSettingsSection('alerts', { enableTickLogging: nextValue });
+    toggleTickLogging();
+  }, [settingsTickLoggingEnabled, updateSettingsSection, toggleTickLogging]);
+
+  const handleToggleAlerts = useCallback(() => {
+    if (alertsStatus?.running) {
+      stopAlerts();
+      return;
+    }
+
+    if (!enableTickLogging) {
+      handleToggleTickLogging();
+    }
+    startAlerts(payoutAssets);
+  }, [alertsStatus, stopAlerts, enableTickLogging, handleToggleTickLogging, startAlerts, payoutAssets]);
 
   return (
     <CollapsibleCard
@@ -382,7 +438,7 @@ const GlobalControls = ({
         <NeoButton
           icon={RefreshCw}
           label="Refresh"
-          onClick={onGetAssets}
+          onClick={handleGetAssets}
           disabled={isBusyRefreshing}
           active={isBusyRefreshing}
           tooltip="Fetch latest asset list"
@@ -392,7 +448,7 @@ const GlobalControls = ({
           icon={AutoRefreshIcon}
           label="Auto"
           active={autoRefresh}
-          onClick={onToggleAutoRefresh}
+          onClick={toggleAutoRefresh}
           tooltip="Auto Refresh List"
           accentColor="#a855f7"
         />
@@ -400,7 +456,7 @@ const GlobalControls = ({
           icon={Radio}
           label="OTC"
           active={otcOnly}
-          onClick={onToggleOtcOnly}
+          onClick={handleToggleOtcOnly}
           tooltip="Toggle OTC Assets"
           accentColor="#22c55e"
         />
@@ -408,7 +464,7 @@ const GlobalControls = ({
           icon={Database}
           label="Ticks"
           active={enableTickLogging}
-          onClick={onToggleTickLogging}
+          onClick={handleToggleTickLogging}
           tooltip="Tick Logging"
           accentColor="#00d4ff"
         />
@@ -416,14 +472,7 @@ const GlobalControls = ({
           icon={Power}
           label={alertsStatus?.running ? "Stop" : "Alerts"}
           active={alertsStatus?.running}
-          onClick={() => {
-            if (alertsStatus?.running) {
-              onStopAlerts();
-            } else {
-              if (!enableTickLogging) onToggleTickLogging();
-              onStartAlerts();
-            }
-          }}
+          onClick={handleToggleAlerts}
           tooltip="Toggle Alert Monitor (Also activates Ticks)"
           accentColor={alertsStatus?.running ? "#ef4444" : "#22c55e"}
         />

@@ -50,6 +50,7 @@ const buildIndicatorRequest = (activeIndicators) => {
 const useChartWorkspaceIndicators = ({
   health,
   selectedAsset,
+  selectedAssetKey,
   selectedTimeframe,
   activeIndicators,
   loadIndicators,
@@ -74,14 +75,14 @@ const useChartWorkspaceIndicators = ({
   // FIX: Derive a stable boolean so the effect re-fires the moment history becomes
   // available after an asset switch (historyStatus was previously not in deps,
   // causing a race condition where loadIndicators silently bailed every time).
-  const assetHistoryLoaded = historyStatus?.[selectedAsset] === 'loaded';
+  const assetHistoryLoaded = historyStatus?.[selectedAssetKey] === 'loaded';
 
   useEffect(() => {
-    if (!selectedAsset || !selectedTimeframe) return;
+    if (!selectedAsset || !selectedAssetKey || !selectedTimeframe) return;
     if (!indicatorRequest.indicators.length) return;
 
     // Wait for history to be ready before requesting indicators.
-    // This fires automatically when historyStatus[selectedAsset] transitions to 'loaded'.
+    // This fires automatically when historyStatus[selectedAssetKey] transitions to 'loaded'.
     if (!assetHistoryLoaded) return;
 
     const tfRaw = String(selectedTimeframe || '').trim().toLowerCase();
@@ -99,7 +100,7 @@ const useChartWorkspaceIndicators = ({
     });
     // refreshKey intentionally included: REF button bumps it to force a reload.
     // assetHistoryLoaded intentionally included: re-fires when history finishes loading.
-  }, [selectedAsset, selectedTimeframe, indicatorRequest, loadIndicators, refreshKey, assetHistoryLoaded]);
+  }, [selectedAsset, selectedAssetKey, selectedTimeframe, indicatorRequest, loadIndicators, refreshKey, assetHistoryLoaded]);
 
   const onNewCandle = useCallback(
     async (candle) => {

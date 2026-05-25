@@ -18,7 +18,7 @@ const TAB_PANEL_CONFIG = {
 };
 
 const ContextPanelRouter = () => {
-  const { activeTab } = useMarketStore();
+  const activeTab = useMarketStore((state) => state.activeTab);
 
   useEffect(() => {
     const handlePanelRetracted = (e) => {

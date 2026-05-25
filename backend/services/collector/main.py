@@ -19,6 +19,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger("CollectorService")
 
+def detect_timeframe_minutes(candles: list) -> int:
+    if len(candles) < 2:
+        return 1
+
+    diffs_s = []
+    # Sort by timestamp ascending
+    sorted_candles = sorted(candles, key=lambda c: c.get("timestamp", 0))
+    for i in range(1, min(len(sorted_candles), 200)):
+        ts_curr = sorted_candles[i].get("timestamp")
+        ts_prev = sorted_candles[i - 1].get("timestamp")
+        if ts_curr is not None and ts_prev is not None:
+            try:
+                diff = float(ts_curr) - float(ts_prev)
+                if diff > 0:
+                    diffs_s.append(int(round(diff)))
+            except (ValueError, TypeError):
+                continue
+
+    if not diffs_s:
+        return 1
+
+    # Round each difference to the nearest minute (minimum 60s)
+    rounded = [max(60, int(round(d / 60.0)) * 60) for d in diffs_s]
+    from collections import Counter
+    seconds = Counter(rounded).most_common(1)[0][0]
+    return max(1, int(seconds // 60))
+
 class CollectorService:
     def __init__(self):
         self.running = False
@@ -132,6 +159,11 @@ class CollectorService:
         except Exception as e:
             logger.error(f"Error fetching history events: {e}")
             return
+        if events:
+            logger.info(
+                "CollectorService owns performance-log history capture; persisting %d buffered history event(s)",
+                len(events),
+            )
         for ev in events:
             asset = ev.get("asset")
             if not asset and "candles" in ev and ev["candles"]:
@@ -166,6 +198,9 @@ class CollectorService:
                     except Exception:
                         continue
                         
+                    if ts < 1000000000:
+                        continue
+
                     candles_out.append({
                         "timestamp": ts,
                         "open": o,
@@ -174,6 +209,8 @@ class CollectorService:
                         "close": cl,
                         "volume": v,
                     })
+                if candles_out:
+                    timeframe_min = detect_timeframe_minutes(candles_out)
             elif "history" in ev and isinstance(ev["history"], list) and ev["history"]:
                 points = ev["history"]
                 bucket_s = timeframe_min * 60
@@ -186,6 +223,10 @@ class CollectorService:
                         price = float(item[1])
                     except Exception:
                         continue
+
+                    if ts < 1000000000:
+                        continue
+
                     bucket_start = int(ts // bucket_s) * bucket_s
                     c = buckets.get(bucket_start)
                     if c is None:

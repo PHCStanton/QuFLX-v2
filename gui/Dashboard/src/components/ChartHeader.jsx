@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
 import Combobox from './Combobox';
-import { X, Layers, Clock, FileText, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { X, Layers, Clock, FileText, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import ChartActions from './ChartActions';
 import NeoSyncButton from './NeoSyncButton';
 import syncClickSound from '../assets/Sounds/Click_TF_Sync_Button1.mp3';
 import useMarketStore from '../store/marketStore';
+import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
 
 const ChartHeader = ({
   selectedAsset,
@@ -29,7 +30,8 @@ const ChartHeader = ({
   isTimeframeSyncLinked
 }) => {
   const { strategyLabFiles, selectedStrategyFileId, setSelectedStrategyFileId } = useMarketStore();
-  const { clearHistoryCache, loadHistory, historyStatus } = useMarketStore();
+  const { historyStatus, reloadHistoryFromPayload } = useMarketStore();
+  const selectedAssetKey = normalizeAsset(selectedAsset);
   const [syncClicked, setSyncClicked] = useState(false);
   const [duplicateMsg, setDuplicateMsg] = useState('');
   const [cacheClicked, setCacheClicked] = useState(false);
@@ -60,7 +62,7 @@ const ChartHeader = ({
   const handleClearCacheClick = async () => {
     if (!selectedAsset) return;
 
-    const status = historyStatus?.[selectedAsset];
+    const status = historyStatus?.[selectedAssetKey];
     if (status === 'loading') return;
 
     const audio = new Audio(syncClickSound);
@@ -69,11 +71,10 @@ const ChartHeader = ({
     setCacheClicked(true);
     window.setTimeout(() => setCacheClicked(false), 1000);
 
-    clearHistoryCache(selectedAsset);
     try {
-      await loadHistory(selectedAsset);
+      await reloadHistoryFromPayload(selectedAsset);
     } catch (err) {
-      console.error('Clear cache reload failed:', err);
+      console.error('Refresh history payload reload failed:', err);
     }
   };
 
@@ -186,10 +187,10 @@ const ChartHeader = ({
           type="button"
           className="group flex items-center justify-center h-8 w-8 rounded border border-border-primary bg-section-bg/70 text-gray-400 transition-all duration-150 hover:text-yellow-300 hover:border-yellow-500/50 hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed"
           onClick={handleClearCacheClick}
-          disabled={!selectedAsset || historyStatus?.[selectedAsset] === 'loading'}
-          title="Clear current asset cache and reload"
+          disabled={!selectedAsset || historyStatus?.[selectedAssetKey] === 'loading'}
+          title="Refresh current asset history from payload"
         >
-          <Trash2 size={13} className={cacheClicked ? 'animate-pulse text-yellow-300' : ''} />
+          <RefreshHistoryPayloadIcon size={13} className={cacheClicked ? 'animate-pulse text-yellow-300' : ''} />
         </button>
       </div>
 
@@ -284,5 +285,18 @@ const IndicatorBadge = ({ name, value, suspended, onClick, onRemove, onSuspend }
     </div>
   );
 };
+
+const RefreshHistoryPayloadIcon = ({ size = 13, className = '' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 -960 960 960"
+    width={size}
+    height={size}
+    className={className}
+    fill="currentColor"
+  >
+    <path d="M400-240v-80h240v80H400Zm-158 0L15-467l57-57 170 170 366-366 57 57-423 423Zm318-160v-80h240v80H560Zm160-160v-80h240v80H720Z" />
+  </svg>
+);
 
 export default ChartHeader;

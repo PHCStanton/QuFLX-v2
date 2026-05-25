@@ -2,6 +2,9 @@
   "folders": [
     {
       "path": "."
+    },
+    {
+      "path": "../../Github_Stuff/prompt-master"
     }
   ],
   "settings": {

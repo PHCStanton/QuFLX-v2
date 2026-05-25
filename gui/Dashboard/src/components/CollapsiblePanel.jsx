@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 /**
@@ -44,31 +44,44 @@ const CollapsiblePanel = ({
 
   const isControlled = controlledIsOpen !== undefined;
   const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
+  const storageKey = id ? `quflx-panel-${id}` : null;
 
   const contentRef = useRef(null);
   const containerRef = useRef(null);
+
+  const setPanelStorageState = useCallback((nextState) => {
+    if (!storageKey) return;
+    const serializedState = JSON.stringify(nextState);
+    if (localStorage.getItem(storageKey) !== serializedState) {
+      localStorage.setItem(storageKey, serializedState);
+    }
+  }, [storageKey]);
+
+  const setInternalPanelState = useCallback((nextState) => {
+    setInternalIsOpen((prevState) => (prevState === nextState ? prevState : nextState));
+    setPanelStorageState(nextState);
+  }, [setPanelStorageState]);
 
   useEffect(() => {
     if (!id) return;
     
     const handleStorageChange = () => {
-      const saved = localStorage.getItem(`quflx-panel-${id}`);
+      const saved = localStorage.getItem(storageKey);
       if (saved !== null) {
-        setInternalIsOpen(JSON.parse(saved));
+        const nextState = JSON.parse(saved);
+        setInternalIsOpen((prevState) => (prevState === nextState ? prevState : nextState));
       }
     };
 
     const handleExpandAll = () => {
       if (!isControlled) {
-        setInternalIsOpen(true);
-        localStorage.setItem(`quflx-panel-${id}`, 'true');
+        setInternalPanelState(true);
       }
     };
 
     const handleCollapseAll = () => {
       if (!isControlled) {
-        setInternalIsOpen(false);
-        localStorage.setItem(`quflx-panel-${id}`, 'false');
+        setInternalPanelState(false);
       }
     };
 
@@ -76,11 +89,9 @@ const CollapsiblePanel = ({
       if (!id || isControlled) return;
       const { retractedId, expandId } = e.detail || {};
       if (id === retractedId) {
-        setInternalIsOpen(false);
-        localStorage.setItem(`quflx-panel-${id}`, 'false');
+        setInternalPanelState(false);
       } else if (id === expandId) {
-        setInternalIsOpen(true);
-        localStorage.setItem(`quflx-panel-${id}`, 'true');
+        setInternalPanelState(true);
       }
     };
 
@@ -95,13 +106,13 @@ const CollapsiblePanel = ({
       window.removeEventListener('quflx-panels-collapse-all', handleCollapseAll);
       window.removeEventListener('quflx-panel-global-retract', handleGlobalRetract);
     };
-  }, [id, isControlled]);
+  }, [id, isControlled, setInternalPanelState, storageKey]);
 
   useEffect(() => {
     if (id && !isControlled) {
-      localStorage.setItem(`quflx-panel-${id}`, JSON.stringify(isOpen));
+      setPanelStorageState(isOpen);
     }
-  }, [isOpen, id, isControlled]);
+  }, [isOpen, id, isControlled, setPanelStorageState]);
 
   const toggleOpen = () => {
     const nextState = !isOpen;
@@ -132,9 +143,10 @@ const CollapsiblePanel = ({
       ref={containerRef}
       className={`flex flex-col border border-border-primary rounded-xl overflow-hidden bg-card-bg transition-all duration-300 ${isOpen && expandable ? 'flex-grow min-h-[120px]' : 'flex-none'} ${className}`}
     >
-      {/* Header Button */}
-      <button
-        type="button"
+      {/* Header Toggle */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={toggleOpen}
         onKeyDown={(e) => {
           if (e.key === ' ' || e.key === 'Enter') {
@@ -167,7 +179,7 @@ const CollapsiblePanel = ({
             <ChevronDown size={14} strokeWidth={2.5} />
           </div>
         </div>
-      </button>
+      </div>
 
       {/* Content Body */}
       <div

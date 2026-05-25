@@ -12,9 +12,11 @@ import ErrorToast from './ErrorToast';
 import StrategyLabChartWorkspace from './StrategyLab/StrategyLabChartWorkspace';
 
 const Dashboard = () => {
-  const { connectSocket, disconnectSocket, activeTab, selectedStrategyFileId } = useMarketStore();
-  const { settings } = useSettingsStore();
-  const dashboardBgDataUrl = settings?.global?.dashboardBgDataUrl || null;
+  const connectSocket = useMarketStore((state) => state.connectSocket);
+  const disconnectSocket = useMarketStore((state) => state.disconnectSocket);
+  const activeTab = useMarketStore((state) => state.activeTab);
+  const selectedStrategyFileId = useMarketStore((state) => state.selectedStrategyFileId);
+  const dashboardBgDataUrl = useSettingsStore((state) => state.settings?.global?.dashboardBgDataUrl || null);
 
   const containerRef = useRef(null);
   const isDraggingRef = useRef(false);
@@ -178,39 +180,7 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className="h-full min-h-0 pl-0 quflx-right-panel flex flex-col gap-2">
-                <GlobalControls
-                  backendReady={Boolean(useMarketStore.getState().backendStatus && useMarketStore.getState().backendStatus.readyForAssets)}
-                  autoRefresh={useMarketStore.getState().autoRefresh}
-                  onToggleAutoRefresh={useMarketStore.getState().toggleAutoRefresh}
-                  otcOnly={useMarketStore.getState().assetFilterState?.filterMode === 'otc'}
-                  onToggleOtcOnly={() => useMarketStore.getState().setAssetFilterState({
-                    ...(useMarketStore.getState().assetFilterState || {}),
-                    filterMode: useMarketStore.getState().assetFilterState?.filterMode === 'otc' ? null : 'otc'
-                  })}
-                  onGetAssets={() => {
-                    const state = useMarketStore.getState();
-                    const options = {
-                      min_pct: state.assetFilterState?.minPayout || 92,
-                      max_assets: state.assetFilterState?.maxAssets || 5,
-                      include_assets: (state.assetFilterState?.includeAssets || '').split(',').map(a => a.trim()).filter(Boolean),
-                      ignore_assets: (state.assetFilterState?.ignoreAssets || '').split(',').map(a => a.trim()).filter(Boolean),
-                      filter_mode: state.assetFilterState?.filterMode
-                    };
-                    state.refreshAssets(options);
-                  }}
-                  isBusyRefreshing={useMarketStore.getState().autoRefresh}
-                  alertsStatus={useMarketStore.getState().alertsStatus}
-                  onStartAlerts={() => useMarketStore.getState().startAlerts(useMarketStore.getState().payoutAssets)}
-                  onStopAlerts={useMarketStore.getState().stopAlerts}
-                  enableTickLogging={useMarketStore.getState().enableTickLogging}
-                  onToggleTickLogging={() => {
-                    const { toggleTickLogging } = useMarketStore.getState();
-                    const { settings, updateSection } = useSettingsStore.getState();
-                    const newValue = !settings.alerts?.enableTickLogging;
-                    updateSection('alerts', { enableTickLogging: newValue });
-                    toggleTickLogging();
-                  }}
-                />
+                <GlobalControls />
                 <div className="flex-1 min-h-0">
                   <ContextPanelRouter />
                 </div>

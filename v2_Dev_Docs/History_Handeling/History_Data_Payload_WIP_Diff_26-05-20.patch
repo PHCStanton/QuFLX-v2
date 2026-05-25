@@ -1,0 +1,631 @@
+﻿diff --git a/backend/services/collector/interceptor.py b/backend/services/collector/interceptor.py
+index 4c43dfb..c91c132 100644
+--- a/backend/services/collector/interceptor.py
++++ b/backend/services/collector/interceptor.py
+@@ -89,6 +89,8 @@ class WebSocketInterceptor:
+         """
+         self._refresh_logs()
+         events = list(self._history_buffer)
++        if events:
++            logger.info(f"INTERCEPTOR: Cleared history buffer after yielding {len(events)} events")
+         self._history_buffer = []
+         return events
+ 
+diff --git a/backend/services/gateway/routes/history.py b/backend/services/gateway/routes/history.py
+index f92d001..ccadc08 100644
+--- a/backend/services/gateway/routes/history.py
++++ b/backend/services/gateway/routes/history.py
+@@ -322,6 +322,41 @@ async def append_candle(payload: Dict[str, Any] = Body(...)):
+ 
+     return {"status": "success", "asset": asset, "timeframe": timeframe_min, "store": "legacy"}
+ 
++
++@router.delete("/{asset}")
++async def delete_history(asset: str, timeframe: str | None = None):
++    """
++    Delete historical CSV data for an asset.
++    If timeframe is provided, deletes only that timeframe.
++    """
++    try:
++        from backend.utils.data_store import delete_candles
++        
++        timeframe_str = None
++        if timeframe:
++            tf_min = 1
++            tf = timeframe.strip().lower()
++            if tf.endswith("m"):
++                tf_min = max(1, int(tf[:-1]))
++            elif tf.endswith("h"):
++                tf_min = max(1, int(tf[:-1]) * 60)
++            elif tf.isdigit():
++                tf_min = max(1, int(tf))
++            timeframe_str = f"{tf_min}m"
++
++        files_deleted = delete_candles(asset, timeframe_str)
++        return {
++            "ok": True,
++            "asset": asset,
++            "timeframe": timeframe,
++            "files_deleted": files_deleted,
++            "message": f"Successfully deleted {files_deleted} history cache file(s)"
++        }
++    except Exception as e:
++        logger.error(f"Failed to delete history for {asset}: {e}")
++        raise HTTPException(status_code=500, detail=str(e))
++
++
+ @router.post("/collect-history")
+ async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):
+     """
+diff --git a/backend/utils/data_store.py b/backend/utils/data_store.py
+index 99eca98..2892417 100644
+--- a/backend/utils/data_store.py
++++ b/backend/utils/data_store.py
+@@ -122,6 +122,15 @@ def upsert_candles(asset: str, timeframe_str: str, candles: List[Dict[str, Any]]
+         # Combine
+         combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+         
++        # Sanitize numeric columns to prevent comparison or typing errors
++        for col in ["timestamp", "open", "high", "low", "close", "volume"]:
++            if col in combined_df.columns:
++                combined_df[col] = pd.to_numeric(combined_df[col], errors="coerce")
++                
++        # Drop rows that have invalid/NaN timestamps
++        combined_df = combined_df.dropna(subset=["timestamp"])
++        combined_df["timestamp"] = combined_df["timestamp"].astype(int)
++        
+         # Deduplicate by timestamp, keeping the last (newest) entry
+         combined_df = combined_df.drop_duplicates(subset=["timestamp"], keep="last")
+         
+@@ -136,3 +145,26 @@ def upsert_candles(asset: str, timeframe_str: str, candles: List[Dict[str, Any]]
+         return len(new_df)
+     except Exception as e:
+         raise RuntimeError(f"Failed to upsert candles for {asset} {timeframe_str}: {e}") from e
++
++
++def delete_candles(asset: str, timeframe_str: Optional[str] = None) -> int:
++    """
++    Delete candle CSV files for a given asset.
++    If timeframe_str is specified, deletes only that timeframe's file.
++    Otherwise, deletes all timeframes for the asset.
++    Returns the number of files deleted.
++    """
++    asset = asset.upper()
++    files_deleted = 0
++    if timeframe_str:
++        path = get_candle_path(asset, timeframe_str)
++        if path.exists():
++            path.unlink()
++            files_deleted += 1
++    else:
++        for path in CANDLES_DIR.glob(f"{asset}_*.csv"):
++            if path.exists():
++                path.unlink()
++                files_deleted += 1
++    return files_deleted
++
+diff --git a/capabilities_v2/history_collector.py b/capabilities_v2/history_collector.py
+index 96c1a00..7660cf9 100644
+--- a/capabilities_v2/history_collector.py
++++ b/capabilities_v2/history_collector.py
+@@ -122,7 +122,8 @@ class HistoryCollector(Capability):
+         target = self._normalize_asset(asset)
+ 
+         history_candles: List[Candle] = []
+-        history_deadline = time.time() + 3
++        wait_time = max(3.0, float(duration_s)) if duration_s > 0 else 3.0
++        history_deadline = time.time() + wait_time
+         while time.time() < history_deadline:
+             events = interceptor.fetch_history_events()
+             if events:
+@@ -151,6 +152,9 @@ class HistoryCollector(Capability):
+                     if target in ev_str:
+                         logger.info(f"HistoryCollector: Fuzzy match found for {target} in event payload")
+                         is_match = True
++                    elif target.endswith("OTC") and target[:-3] in ev_str and "OTC" in ev_str:
++                        logger.info(f"HistoryCollector: Split fuzzy match found for {target} in event payload")
++                        is_match = True
+ 
+                 if is_match:
+                     history_candles = self._parse_history_payload(ctx, ev, timeframe_min or 1)
+@@ -258,6 +262,9 @@ class HistoryCollector(Capability):
+                     if target in ev_str:
+                         logger.info(f"HistoryCollector: Fuzzy match found for {target} in event payload")
+                         is_match = True
++                    elif target.endswith("OTC") and target[:-3] in ev_str and "OTC" in ev_str:
++                        logger.info(f"HistoryCollector: Split fuzzy match found for {target} in event payload")
++                        is_match = True
+ 
+                 if is_match:
+                     history_candles = self._parse_history_payload(ctx, ev, timeframe_min or 1)
+diff --git a/gui/Dashboard/src/components/AssetListView.jsx b/gui/Dashboard/src/components/AssetListView.jsx
+index e1e6416..26a10d9 100644
+--- a/gui/Dashboard/src/components/AssetListView.jsx
++++ b/gui/Dashboard/src/components/AssetListView.jsx
+@@ -2,8 +2,8 @@ import { useMemo } from 'react';
+ import { CollapsibleCard } from './Card';
+ import TickerTape from './TickerTape';
+ import NeomorphicSwitch from './NeomorphicSwitch';
+-import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap, Star } from 'lucide-react';
+-
++import { Search, RefreshCw, HelpCircle, X, ChevronUp, ChevronDown, Plus, Minus, Check, Zap } from 'lucide-react';
++import useMarketStore from '../store/marketStore';
+ import { normalizeSpecificAsset } from '../utils/assetUtils';
+ 
+ const AssetListView = ({
+@@ -21,14 +21,15 @@ const AssetListView = ({
+   onRemoveFromIgnore,
+   isAssetIncluded,
+   isAssetIgnored,
+-  quotesByAssetKey,
+   tickerAssets,
+   assetSearchQuery,
+   onSearchQueryChange,
+   onUseForTrade,
+-  favorites = [],
+-  onToggleFavorite
++  onPurgeAndSelectAsset,
+ }) => {
++  // Subscribe directly ΓÇö only this component re-renders on tick updates,
++  // keeping the parent AssetPayoutPanel stable.
++  const quotesByAssetKey = useMarketStore((state) => state.quotesByAssetKey);
+   const filteredPayoutAssets = useMemo(() => {
+     const source = Array.isArray(payoutAssets) ? payoutAssets : [];
+     const q = String(assetSearchQuery || '').trim().toLowerCase();
+@@ -43,19 +44,7 @@ const AssetListView = ({
+     });
+   }, [payoutAssets, assetSearchQuery]);
+ 
+-  const easyAccessAssets = useMemo(() => {
+-    if (!Array.isArray(favorites)) return [];
+-    // Only show favorites that are NOT in the current payout list to avoid duplication if we want separate section?
+-    // Or just show all favorites.
+-    // If I show a separate section, I should probably filter them out of the main list or just duplicate them.
+-    // Duplication is fine for "Easy Access".
+-    return favorites;
+-  }, [favorites]);
+ 
+-  const isFavorite = (asset) => {
+-    if (!favorites) return false;
+-    return favorites.includes(asset);
+-  };
+ 
+   const count = Array.isArray(payoutAssets) ? payoutAssets.length : 0;
+ 
+@@ -110,54 +99,7 @@ const AssetListView = ({
+                 </div>
+               </div>
+               <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+-                
+-                {/* Easy Access Section */}
+-                {easyAccessAssets.length > 0 && !assetSearchQuery && (
+-                  <div className="mb-2 pb-2 border-b border-border-primary/50">
+-                    <div className="px-2 mb-1 text-[10px] font-bold text-accent-blue uppercase tracking-widest flex items-center gap-1">
+-                      <Star size={10} className="fill-accent-blue" />
+-                      Easy Access
+-                    </div>
+-                    {easyAccessAssets.map((asset) => (
+-                       <div
+-                       key={`fav-${asset}`}
+-                       onClick={() => !selectedAssetLoading && onSelectAsset(asset)}
+-                       className={`p-1.5 rounded flex justify-between items-center transition-colors ${selectedAsset === asset
+-                         ? 'bg-accent-green/20 text-accent-green border border-accent-green/50'
+-                         : 'hover:bg-section-bg/50 text-text-secondary'
+-                         } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
+-                     >
+-                       <div className="flex items-center gap-2">
+-                         <button
+-                            type="button"
+-                            onClick={(e) => {
+-                              e.stopPropagation();
+-                              onToggleFavorite && onToggleFavorite(asset);
+-                            }}
+-                            className="w-4 h-4 flex items-center justify-center rounded-full text-accent-blue hover:bg-accent-blue/20 transition-colors"
+-                            title="Remove from Easy Access"
+-                         >
+-                           <Star size={10} className="fill-accent-blue" />
+-                         </button>
+-                         <span className="font-medium text-sm">{normalizeSpecificAsset(asset)}</span>
+-                         {onUseForTrade && (
+-                           <button
+-                             type="button"
+-                             onClick={(e) => {
+-                               e.stopPropagation();
+-                               onUseForTrade(asset);
+-                             }}
+-                             className="p-1 rounded bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 border border-yellow-500/30 transition-all ml-1"
+-                             title="Use for Live Trade"
+-                           >
+-                             <Zap size={10} />
+-                           </button>
+-                         )}
+-                       </div>
+-                     </div>
+-                    ))}
+-                  </div>
+-                )}
++
+ 
+                 {filteredPayoutAssets.length === 0 ? (
+                   <div className="p-2 text-[11px] text-text-secondary text-center border border-dashed border-border-primary rounded">
+@@ -174,17 +116,6 @@ const AssetListView = ({
+                         } ${selectedAssetLoading ? 'cursor-wait opacity-80' : 'cursor-pointer'}`}
+                     >
+                       <div className="flex items-center gap-2">
+-                        <button
+-                          type="button"
+-                          onClick={(e) => {
+-                            e.stopPropagation();
+-                            onToggleFavorite && onToggleFavorite(asset);
+-                          }}
+-                          className={`w-4 h-4 flex items-center justify-center rounded-full border border-border-primary hover:bg-white/10 transition-colors ${isFavorite(asset) ? 'text-accent-blue border-accent-blue' : 'text-text-secondary'}`}
+-                          title={isFavorite(asset) ? "Remove from Easy Access" : "Add to Easy Access"}
+-                        >
+-                          <Star size={10} className={isFavorite(asset) ? "fill-accent-blue" : ""} />
+-                        </button>
+                         <button
+                           type="button"
+                           onClick={(e) => {
+@@ -276,7 +207,13 @@ const AssetListView = ({
+             </>
+           ) : (
+             <div className="flex-1 min-h-0 bg-black/20 rounded overflow-hidden">
+-              <TickerTape assets={tickerAssets} quotesByAssetKey={quotesByAssetKey} />
++              <TickerTape
++                assets={tickerAssets}
++                quotesByAssetKey={quotesByAssetKey}
++                selectedAsset={selectedAsset}
++                selectedAssetLoading={selectedAssetLoading}
++                onPurgeAndSelectAsset={onPurgeAndSelectAsset}
++              />
+             </div>
+           )}
+     </CollapsibleCard>
+diff --git a/gui/Dashboard/src/components/AssetPayoutPanel.jsx b/gui/Dashboard/src/components/AssetPayoutPanel.jsx
+index d184834..af2c1c1 100644
+--- a/gui/Dashboard/src/components/AssetPayoutPanel.jsx
++++ b/gui/Dashboard/src/components/AssetPayoutPanel.jsx
+@@ -1,6 +1,6 @@
+-import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react';
++import { useMemo, useState, useRef, useLayoutEffect } from 'react';
+ import useMarketStore from '../store/marketStore';
+-import { useStreamHealth } from '../hooks/useStreamHealth';
++import { useShallow } from 'zustand/react/shallow';
+ import { CollapsibleCard } from './Card';
+ import AssetFilterGroup from './AssetFilterGroup';
+ import AssetListView from './AssetListView';
+@@ -12,6 +12,8 @@ const AssetPayoutPanel = ({
+     onUseForTrade = null, // Integration prop
+     className = ""
+ }) => {
++    // Narrow subscription: only asset-panel-relevant fields.
++    // Alert polling and alert status are owned by GlobalControls, not this panel.
+     const {
+         payoutAssets,
+         selectedAsset,
+@@ -19,37 +21,27 @@ const AssetPayoutPanel = ({
+         selectedAssetLoading,
+         removePayoutAsset,
+         refreshAssets,
+-        autoRefresh,
+-        toggleAutoRefresh,
+         panelMode,
+         setPanelMode,
+-        quotesByAssetKey,
+         tickerMaxAssets,
+-        backendStatus,
+-        collectHistory,
+         assetFilterState,
+         setAssetFilterState,
+-        // Alerts Integration
+-        autoRunAlertMonitor,
+-        toggleAutoRunAlertMonitor,
+-        alertsStatus,
+-        startAlerts,
+-        stopAlerts,
+-        checkAlertsStatus,
+-        enableTickLogging,
+-        toggleTickLogging,
+-        favorites,
+-        toggleFavorite,
+-    } = useMarketStore();
+-
+-    // Poll Alerts Status
+-    useEffect(() => {
+-        checkAlertsStatus();
+-        const interval = setInterval(checkAlertsStatus, 10000);
+-        return () => clearInterval(interval);
+-    }, [checkAlertsStatus]);
+-
+-    const streamHealth = useStreamHealth();
++        purgeAndSelectAsset,
++    } = useMarketStore(useShallow((state) => ({
++        payoutAssets: state.payoutAssets,
++        selectedAsset: state.selectedAsset,
++        setSelectedAsset: state.setSelectedAsset,
++        selectedAssetLoading: state.selectedAssetLoading,
++        removePayoutAsset: state.removePayoutAsset,
++        refreshAssets: state.refreshAssets,
++        panelMode: state.panelMode,
++        setPanelMode: state.setPanelMode,
++        tickerMaxAssets: state.tickerMaxAssets,
++        assetFilterState: state.assetFilterState,
++        setAssetFilterState: state.setAssetFilterState,
++        purgeAndSelectAsset: state.purgeAndSelectAsset,
++    })));
++
+ 
+     const [assetSearchQuery, setAssetSearchQuery] = useState('');
+     const maxAssetsToStar = assetFilterState?.maxAssets ?? 5;
+@@ -92,7 +84,9 @@ const AssetPayoutPanel = ({
+                 Math.min(maxTopHeight, Math.round(availableHeight / 2))
+             );
+ 
+-            setTopHeight(nextTopHeight);
++            // Guard: only update state if the value actually changed to prevent
++            // re-render ΓåÆ ResizeObserver ΓåÆ setTopHeight ΓåÆ re-render loops.
++            setTopHeight((prev) => (prev === nextTopHeight ? prev : nextTopHeight));
+         };
+ 
+         applyHalfSplit();
+@@ -149,8 +143,6 @@ const AssetPayoutPanel = ({
+     const rawTickerAssets = (payoutAssets || []).slice(0, tickerMaxAssets);
+     const tickerAssets = Array.from(new Set([selectedAsset, ...rawTickerAssets].filter(Boolean))).slice(0, tickerMaxAssets);
+ 
+-    const backendReady = Boolean(backendStatus && backendStatus.readyForAssets);
+-
+     const includeAssetSet = useMemo(() => new Set(parseSpecificAssets(includeAssets)), [includeAssets]);
+     const ignoreAssetSet = useMemo(() => new Set(parseSpecificAssets(ignoreAssets)), [ignoreAssets]);
+ 
+@@ -297,13 +289,11 @@ const AssetPayoutPanel = ({
+                 onRemoveFromIgnore={removeFromIgnoreAssets}
+                 isAssetIncluded={isAssetIncluded}
+                 isAssetIgnored={isAssetIgnored}
+-                quotesByAssetKey={quotesByAssetKey}
+                 tickerAssets={tickerAssets}
+                 assetSearchQuery={assetSearchQuery}
+                 onSearchQueryChange={setAssetSearchQuery}
+                 onUseForTrade={onUseForTrade}
+-                favorites={favorites}
+-                onToggleFavorite={toggleFavorite}
++                onPurgeAndSelectAsset={purgeAndSelectAsset}
+             />
+         </div>
+     );
+diff --git a/gui/Dashboard/src/components/ChartWorkspace.jsx b/gui/Dashboard/src/components/ChartWorkspace.jsx
+index 01e5113..8283798 100644
+--- a/gui/Dashboard/src/components/ChartWorkspace.jsx
++++ b/gui/Dashboard/src/components/ChartWorkspace.jsx
+@@ -152,16 +152,16 @@ const ChartWorkspace = () => {
+ 
+   // Initial History Load Fix
+   useEffect(() => {
+-    if (!selectedAsset || !selectedTimeframe) return;
++    if (!selectedAsset || !selectedAssetKey || !selectedTimeframe) return;
+ 
+-    const status = historyStatus[selectedAsset];
++    const status = historyStatus[selectedAssetKey];
+     // Only load if we haven't loaded/attempted yet
+     if (!status) {
+       loadHistory(selectedAsset).catch((err) => {
+         console.error('Initial history load failed:', err);
+       });
+     }
+-  }, [selectedAsset, selectedTimeframe, historyStatus, loadHistory]);
++  }, [selectedAsset, selectedAssetKey, selectedTimeframe, historyStatus, loadHistory]);
+ 
+   const [volumeSeries, setVolumeSeries] = useState(null);
+ 
+@@ -318,6 +318,7 @@ const ChartWorkspace = () => {
+   const { onNewCandle } = useChartWorkspaceIndicators({
+     health,
+     selectedAsset,
++    selectedAssetKey,
+     selectedTimeframe,
+     activeIndicators,
+     loadIndicators,
+diff --git a/gui/Dashboard/src/components/TickerTape.jsx b/gui/Dashboard/src/components/TickerTape.jsx
+index 6272288..3027109 100644
+--- a/gui/Dashboard/src/components/TickerTape.jsx
++++ b/gui/Dashboard/src/components/TickerTape.jsx
+@@ -1,4 +1,4 @@
+-import { TrendingUp, TrendingDown } from 'lucide-react';
++import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+ import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
+ 
+ const formatPrice = (price) => {
+@@ -34,7 +34,13 @@ const buildItems = (assets, quotesByAssetKey) => {
+   }, []);
+ };
+ 
+-const TickerTape = ({ assets, quotesByAssetKey }) => {
++const TickerTape = ({
++  assets,
++  quotesByAssetKey,
++  selectedAsset,
++  selectedAssetLoading,
++  onPurgeAndSelectAsset,
++}) => {
+   const items = buildItems(assets, quotesByAssetKey);
+ 
+   if (items.length === 0) {
+@@ -49,6 +55,7 @@ const TickerTape = ({ assets, quotesByAssetKey }) => {
+     <div className="h-full w-full rounded bg-black/20 border border-gray-800 flex flex-col">
+       <div className="flex-1 overflow-y-auto pr-1 space-y-1">
+         {items.map((it) => {
++          const isSelected = selectedAsset === it.label;
+           const isUp = Number.isFinite(it.changePct) ? it.changePct >= 0 : true;
+           const color = isUp ? 'text-accent-green' : 'text-red-400';
+           const Icon = isUp ? TrendingUp : TrendingDown;
+@@ -56,9 +63,23 @@ const TickerTape = ({ assets, quotesByAssetKey }) => {
+           return (
+             <div
+               key={it.assetKey}
+-              className="flex items-center justify-between px-3 py-1.5 rounded border border-gray-700 bg-gray-900/60"
++              onClick={() => !selectedAssetLoading && onPurgeAndSelectAsset && onPurgeAndSelectAsset(it.label)}
++              className={`flex items-center justify-between px-3 py-1.5 rounded border transition-all ${
++                isSelected
++                  ? 'bg-accent-green/10 border-accent-green/40 shadow-[0_0_10px_rgba(34,197,94,0.05)]'
++                  : 'border-gray-700 bg-gray-900/60 hover:bg-gray-800 hover:border-gray-600'
++              } ${selectedAssetLoading ? 'cursor-wait' : 'cursor-pointer'} ${
++                selectedAssetLoading && isSelected ? 'opacity-80' : ''
++              }`}
+             >
+-              <span className="text-[11px] font-bold text-gray-200">{it.label}</span>
++              <div className="flex items-center gap-2">
++                <span className={`text-[11px] font-bold ${isSelected ? 'text-accent-green' : 'text-gray-200'}`}>
++                  {it.label}
++                </span>
++                {isSelected && selectedAssetLoading && (
++                  <RefreshCw size={10} className="animate-spin text-accent-green" />
++                )}
++              </div>
+               <span className="text-[11px] font-mono text-gray-200">{formatPrice(it.price)}</span>
+               <span className={`text-[11px] font-bold ${color} inline-flex items-center gap-1`}>
+                 <Icon size={14} />
+diff --git a/gui/Dashboard/src/hooks/useTickAggregation.js b/gui/Dashboard/src/hooks/useTickAggregation.js
+index 269b635..5d79f64 100644
+--- a/gui/Dashboard/src/hooks/useTickAggregation.js
++++ b/gui/Dashboard/src/hooks/useTickAggregation.js
+@@ -34,7 +34,10 @@ const useTickAggregation = ({
+   useEffect(() => {
+     if (candleSeries) {
+       const candles = historyCandlesRef.current;
+-      const hasCachedData = candles && selectedAsset && Array.isArray(candles[selectedAsset]) && candles[selectedAsset].length > 0;
++      const hasCachedData = candles
++        && selectedAssetKey
++        && Array.isArray(candles[selectedAssetKey])
++        && candles[selectedAssetKey].length > 0;
+       if (!hasCachedData) {
+         console.log(`Asset changed to: ${selectedAsset}, no cache found, clearing chart`);
+         candleSeries.setData([]);
+@@ -46,14 +49,14 @@ const useTickAggregation = ({
+       currentVolumeRef.current = 0;
+       setIsLoading(true);
+     }
+-  }, [selectedAsset, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
++  }, [selectedAsset, selectedAssetKey, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
+ 
+   // Load Historical Data
+   useEffect(() => {
+-    if (!candleSeries || !selectedAsset) return;
++    if (!candleSeries || !selectedAssetKey) return;
+ 
+-    const status = historyStatus && selectedAsset ? historyStatus[selectedAsset] : undefined;
+-    const candles = historyCandles && selectedAsset ? historyCandles[selectedAsset] : undefined;
++    const status = historyStatus && selectedAssetKey ? historyStatus[selectedAssetKey] : undefined;
++    const candles = historyCandles && selectedAssetKey ? historyCandles[selectedAssetKey] : undefined;
+ 
+     if (!Array.isArray(candles)) return;
+ 
+@@ -91,7 +94,7 @@ const useTickAggregation = ({
+     }
+ 
+     setIsLoading(false);
+-  }, [historyCandles, historyStatus, selectedAsset, candleSeries, volumeSeries]);
++  }, [historyCandles, historyStatus, selectedAssetKey, candleSeries, volumeSeries]);
+ 
+   // Handle Tick Aggregation
+   useEffect(() => {
+diff --git a/gui/Dashboard/src/store/marketStore.js b/gui/Dashboard/src/store/marketStore.js
+index 8c60584..31e8950 100644
+--- a/gui/Dashboard/src/store/marketStore.js
++++ b/gui/Dashboard/src/store/marketStore.js
+@@ -323,6 +323,77 @@ const createMarketSlice = (set, get) => ({
+     }
+     return false;
+   },
++  purgeAndSelectAsset: async (asset) => {
++    if (!asset) return;
++    const nextAssetKey = normalizeAsset(asset);
++
++    set({
++      selectedAsset: asset,
++      selectedAssetKey: nextAssetKey,
++      selectedAssetLoading: true,
++      marketData: {},       // Clear old tick data immediately
++      indicatorSeries: {},  // Clear stale indicator data
++    });
++
++    try {
++      const timeframe = get().selectedTimeframe || '1m';
++      const tfRaw = String(timeframe).trim().toLowerCase();
++      let timeframeMinutes = 1;
++      const minutesRaw = tfRaw.endsWith('m') ? tfRaw.slice(0, -1) : null;
++      const hoursRaw = tfRaw.endsWith('h') ? tfRaw.slice(0, -1) : null;
++      const tfNumberMatch = tfRaw.match(/^\d+$/);
++      if (minutesRaw && minutesRaw.match(/^\d+$/)) {
++        timeframeMinutes = Math.max(1, parseInt(minutesRaw, 10));
++      } else if (hoursRaw && hoursRaw.match(/^\d+$/)) {
++        timeframeMinutes = Math.max(1, parseInt(hoursRaw, 10) * 60);
++      } else if (tfNumberMatch) {
++        timeframeMinutes = Math.max(1, parseInt(tfRaw, 10));
++      }
++
++      const cleanUrl = `${getApiBaseUrl()}/api/v1/history/${encodeURIComponent(asset)}?timeframe=${timeframeMinutes}`;
++      const res = await fetch(cleanUrl, { method: 'DELETE' });
++      if (!res.ok) {
++        const errorData = await res.json().catch(() => ({}));
++        throw new Error(errorData.detail || `HTTP ${res.status}`);
++      }
++    } catch (err) {
++      console.error('Failed to clear backend history cache:', err);
++    }
++
++    get().clearHistoryCache(asset);
++
++    const { settings } = (await import('./settingsStore')).default.getState();
++    const dataSourceMode = settings.analysis?.dataSourceMode || 'history_and_streaming';
++
++    if (dataSourceMode !== 'streaming_only') {
++      try {
++        await get().loadHistory(asset);
++      } catch (err) {
++        console.error('Failed to reload history after purge:', err);
++        set({ lastError: `Failed to reload history: ${getErrorMessage(err)}` });
++      }
++    } else {
++      set((state) => ({
++        historyCandles: { ...state.historyCandles, [asset]: [] },
++        historyStatus: { ...state.historyStatus, [asset]: 'skipped' }
++      }));
++    }
++
++    set({ selectedAssetLoading: false });
++
++    if (dataSourceMode !== 'history_only') {
++      get().syncSubscriptions(nextAssetKey);
++
++      try {
++        await get().awaitStreamingForSelectedAsset(5000, 200);
++      } catch (err) {
++        console.error('Streaming readiness check failed in purge select:', err);
++        set({
++          lastError: `Streaming did not become ready: ${getErrorMessage(err)}. Check backend status.`
++        });
++      }
++    }
++  },
+   starAsset: async (asset) => {
+     const { socket } = get();
+     if (socket && socket.connected) {
+@@ -649,8 +720,9 @@ const createMarketSlice = (set, get) => ({
+       console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
+       console.log(`[LoadHistory] ΓÅ│ Waiting for ${asset} data (Timeout: ${waitTime}s)`);
+ 
++      const maxAttempts = settings.automation.retryAttempts !== undefined ? Number(settings.automation.retryAttempts) : 3;
++      const retryDelaySetting = settings.automation.retryDelay !== undefined ? Number(settings.automation.retryDelay) : 500;
+       let attempts = 0;
+-      const maxAttempts = 3;
+       let lastErrorObj = null;
+       let result = null;
+ 
+@@ -678,7 +750,7 @@ const createMarketSlice = (set, get) => ({
+         }
+ 
+         if (attempts < maxAttempts) {
+-          const backoff = Math.pow(2, attempts) * 1000;
++          const backoff = retryDelaySetting > 0 ? retryDelaySetting : (Math.pow(2, attempts) * 1000);
+           console.log(`[LoadHistory] Retrying in ${backoff}ms...`);
+           await new Promise(r => setTimeout(r, backoff));
+         }

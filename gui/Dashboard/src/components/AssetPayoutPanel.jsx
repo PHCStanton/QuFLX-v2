@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react';
+import { useMemo, useState, useRef, useLayoutEffect } from 'react';
 import useMarketStore from '../store/marketStore';
-import { useStreamHealth } from '../hooks/useStreamHealth';
+import { useShallow } from 'zustand/react/shallow';
 import { CollapsibleCard } from './Card';
 import AssetFilterGroup from './AssetFilterGroup';
 import AssetListView from './AssetListView';
@@ -12,6 +12,8 @@ const AssetPayoutPanel = ({
     onUseForTrade = null, // Integration prop
     className = ""
 }) => {
+    // Narrow subscription: only asset-panel-relevant fields.
+    // Alert polling and alert status are owned by GlobalControls, not this panel.
     const {
         payoutAssets,
         selectedAsset,
@@ -19,37 +21,27 @@ const AssetPayoutPanel = ({
         selectedAssetLoading,
         removePayoutAsset,
         refreshAssets,
-        autoRefresh,
-        toggleAutoRefresh,
         panelMode,
         setPanelMode,
-        quotesByAssetKey,
         tickerMaxAssets,
-        backendStatus,
-        collectHistory,
         assetFilterState,
         setAssetFilterState,
-        // Alerts Integration
-        autoRunAlertMonitor,
-        toggleAutoRunAlertMonitor,
-        alertsStatus,
-        startAlerts,
-        stopAlerts,
-        checkAlertsStatus,
-        enableTickLogging,
-        toggleTickLogging,
-        favorites,
-        toggleFavorite,
-    } = useMarketStore();
+        reloadHistoryFromPayload,
+    } = useMarketStore(useShallow((state) => ({
+        payoutAssets: state.payoutAssets,
+        selectedAsset: state.selectedAsset,
+        setSelectedAsset: state.setSelectedAsset,
+        selectedAssetLoading: state.selectedAssetLoading,
+        removePayoutAsset: state.removePayoutAsset,
+        refreshAssets: state.refreshAssets,
+        panelMode: state.panelMode,
+        setPanelMode: state.setPanelMode,
+        tickerMaxAssets: state.tickerMaxAssets,
+        assetFilterState: state.assetFilterState,
+        setAssetFilterState: state.setAssetFilterState,
+        reloadHistoryFromPayload: state.reloadHistoryFromPayload,
+    })));
 
-    // Poll Alerts Status
-    useEffect(() => {
-        checkAlertsStatus();
-        const interval = setInterval(checkAlertsStatus, 10000);
-        return () => clearInterval(interval);
-    }, [checkAlertsStatus]);
-
-    const streamHealth = useStreamHealth();
 
     const [assetSearchQuery, setAssetSearchQuery] = useState('');
     const maxAssetsToStar = assetFilterState?.maxAssets ?? 5;
@@ -92,7 +84,9 @@ const AssetPayoutPanel = ({
                 Math.min(maxTopHeight, Math.round(availableHeight / 2))
             );
 
-            setTopHeight(nextTopHeight);
+            // Guard: only update state if the value actually changed to prevent
+            // re-render → ResizeObserver → setTopHeight → re-render loops.
+            setTopHeight((prev) => (prev === nextTopHeight ? prev : nextTopHeight));
         };
 
         applyHalfSplit();
@@ -148,8 +142,6 @@ const AssetPayoutPanel = ({
 
     const rawTickerAssets = (payoutAssets || []).slice(0, tickerMaxAssets);
     const tickerAssets = Array.from(new Set([selectedAsset, ...rawTickerAssets].filter(Boolean))).slice(0, tickerMaxAssets);
-
-    const backendReady = Boolean(backendStatus && backendStatus.readyForAssets);
 
     const includeAssetSet = useMemo(() => new Set(parseSpecificAssets(includeAssets)), [includeAssets]);
     const ignoreAssetSet = useMemo(() => new Set(parseSpecificAssets(ignoreAssets)), [ignoreAssets]);
@@ -297,13 +289,11 @@ const AssetPayoutPanel = ({
                 onRemoveFromIgnore={removeFromIgnoreAssets}
                 isAssetIncluded={isAssetIncluded}
                 isAssetIgnored={isAssetIgnored}
-                quotesByAssetKey={quotesByAssetKey}
                 tickerAssets={tickerAssets}
                 assetSearchQuery={assetSearchQuery}
                 onSearchQueryChange={setAssetSearchQuery}
                 onUseForTrade={onUseForTrade}
-                favorites={favorites}
-                onToggleFavorite={toggleFavorite}
+                 onReloadAndSelectAsset={reloadHistoryFromPayload}
             />
         </div>
     );

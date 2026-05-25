@@ -66,12 +66,6 @@ class AssetControl(Capability):
                 return CapResult(ok=False, error="Asset name required")
             return self._select_asset(ctx, asset)
         
-        elif action == "star_asset":
-            asset = inputs.get("asset")
-            if not asset:
-                return CapResult(ok=False, error="Asset name required")
-            return self._star_asset(ctx, asset)
-            
         elif action == "select_timeframe":
             timeframe = inputs.get("timeframe")
             if not timeframe:
@@ -90,13 +84,17 @@ class AssetControl(Capability):
         # 1. Open assets panel if not already open
         if not self._is_assets_panel_open(ctx):
             self._open_assets_dropdown(ctx)
-            # Wait for search input instead of sleep
+            # Wait for modern asset panel/search DOM instead of relying on fixed sleeps.
             try:
-                WebDriverWait(driver, 1.0).until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder*='Search']"))
+                WebDriverWait(driver, 2.0).until(
+                    EC.visibility_of_element_located((
+                        By.CSS_SELECTOR,
+                        "input[type='text'], input[type='search'], input[placeholder*='Search'], input[placeholder*='Asset'], input[placeholder*='Pair']"
+                    ))
                 )
             except Exception:
-                time.sleep(0.2) # Fallback
+                logger.debug("Asset search input did not become visible immediately after dropdown click")
+                time.sleep(0.4)
             
         if not self._is_assets_panel_open(ctx):
             return CapResult(ok=False, error="Failed to open assets panel")
@@ -104,31 +102,43 @@ class AssetControl(Capability):
         # 2. Search for asset
         try:
             search_input = WebDriverWait(driver, self._wait_timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder*='Search']"))
+                EC.visibility_of_element_located((
+                    By.CSS_SELECTOR,
+                    "input[type='text'], input[type='search'], input[placeholder*='Search'], input[placeholder*='Asset'], input[placeholder*='Pair']"
+                ))
             )
             search_input.clear()
             search_input.send_keys(asset_name)
             # Wait for asset list to update/filter
             # We can't easily detect "filtered" state, but we can wait for at least one row to be visible
             try:
-                WebDriverWait(driver, 1.0).until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, ".assets-table__row, .asset-item, .assets-list__item"))
+                WebDriverWait(driver, 2.0).until(
+                    EC.visibility_of_element_located((
+                        By.CSS_SELECTOR,
+                        ".assets-table__row, .asset-item, .assets-list__item, [class*='asset'][class*='row'], [class*='asset'][class*='item'], [class*='pair'][class*='item']"
+                    ))
                 )
             except Exception:
-                time.sleep(0.1)
+                logger.debug("Asset rows did not become visible immediately after filtering for %s", asset_name)
+                time.sleep(0.2)
         except Exception as e:
             logger.warning(f"Failed to find or interact with search input: {e}")
 
         # 3. Find and click the asset row
         try:
-            asset_rows = driver.find_elements(By.CSS_SELECTOR, ".assets-table__row, .asset-item, .assets-list__item")
+            row_selector = ".assets-table__row, .asset-item, .assets-list__item, [class*='asset'][class*='row'], [class*='asset'][class*='item'], [class*='pair'][class*='item']"
+            asset_rows = driver.find_elements(By.CSS_SELECTOR, row_selector)
+            logger.info("Asset search for %s found %s candidate row(s)", asset_name, len(asset_rows))
             target_row = None
+            inspected_rows = []
             
             for row in asset_rows:
                 if not row.is_displayed():
                     continue
                     
                 asset_text = row.text or ""
+                if asset_text:
+                    inspected_rows.append(asset_text.replace("\n", " ")[:80])
                 norm_target = normalize_asset(asset_name)
                 norm_row = normalize_asset(asset_text)
                 
@@ -137,6 +147,7 @@ class AssetControl(Capability):
                     break
             
             if not target_row:
+                logger.warning("Asset %s not found. Visible candidate rows: %s", asset_name, inspected_rows[:10])
                 return CapResult(ok=False, error=f"Asset {asset_name} not found in list")
             
             # Click the row to select the asset
@@ -151,118 +162,6 @@ class AssetControl(Capability):
             
         except Exception as e:
             return CapResult(ok=False, error=f"Error selecting asset: {e}")
-
-    def _star_asset(self, ctx: Ctx, asset_name: str) -> CapResult:
-        """
-        Stars an asset (adds to favorites) without selecting it.
-        Opens assets panel if needed, searches for asset, and clicks the star icon.
-        """
-        driver = ctx.driver
-        
-        # 1. Open assets panel if not already open
-        if not self._is_assets_panel_open(ctx):
-            self._open_assets_dropdown(ctx)
-            # Wait for search input
-            try:
-                WebDriverWait(driver, 1.0).until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder*='Search']"))
-                )
-            except Exception:
-                time.sleep(0.2)
-            
-        if not self._is_assets_panel_open(ctx):
-            return CapResult(ok=False, error="Failed to open assets panel")
-
-        # 2. Search for asset
-        try:
-            search_input = WebDriverWait(driver, self._wait_timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='text'], input[placeholder*='Search']"))
-            )
-            search_input.clear()
-            search_input.send_keys(asset_name)
-            # Wait for list to update
-            try:
-                WebDriverWait(driver, 1.0).until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, ".assets-table__row, .asset-item, .assets-list__item"))
-                )
-            except Exception:
-                time.sleep(0.1)
-        except Exception as e:
-            logger.warning(f"Failed to find or interact with search input: {e}")
-
-        # 3. Find the asset row and star it
-        try:
-            # Look for asset rows in the panel
-            asset_rows = driver.find_elements(By.CSS_SELECTOR, ".assets-table__row, .asset-item, .assets-list__item")
-            target_row = None
-            
-            for row in asset_rows:
-                if not row.is_displayed():
-                    continue
-                    
-                # Check if this row contains our target asset
-                asset_text = row.text or ""
-                # Normalize for comparison
-                norm_target = normalize_asset(asset_name)
-                norm_row = normalize_asset(asset_text)
-                
-                if norm_target in norm_row:
-                    target_row = row
-                    break
-            
-            if not target_row:
-                return CapResult(ok=False, error=f"Asset {asset_name} not found in list")
-            
-            # 4. Find and click the star icon in the target row
-            star_selectors = [
-                ".fa-star-o",  # Empty star (add to favorites)
-                ".fa-star",    # Star (could be filled or empty)
-                "i[class*='star']",
-                "button[class*='favorite']",
-                ".asset-star",
-                "[data-action='toggle-favorite']"
-            ]
-            
-            star_element = None
-            for selector in star_selectors:
-                try:
-                    stars = target_row.find_elements(By.CSS_SELECTOR, selector)
-                    for star in stars:
-                        if star.is_displayed() and star.is_enabled():
-                            star_element = star
-                            break
-                    if star_element:
-                        break
-                except Exception:
-                    continue
-            
-            if not star_element:
-                return CapResult(ok=False, error=f"No star/favorite button found for asset {asset_name}")
-            
-            # 5. Click the star
-            try:
-                # Check if already starred (has different class)
-                star_classes = star_element.get_attribute("class") or ""
-                is_already_starred = "fa-star-o" not in star_classes and "star" in star_classes
-                
-                if is_already_starred:
-                    return CapResult(ok=True, data={"message": f"Asset {asset_name} already starred"})
-                
-                # Click the star
-                star_element.click()
-                # time.sleep(0.2)  # Removed for speed
-                
-                return CapResult(ok=True, data={"message": f"Starred asset {asset_name} successfully"})
-                
-            except Exception as e:
-                logger.warning(f"Star click failed, trying JS click: {e}")
-                driver.execute_script("arguments[0].click();", star_element)
-                # time.sleep(0.2) # Removed for speed
-                
-                return CapResult(ok=True, data={"message": f"Starred asset {asset_name} successfully (JS click)"})
-
-        except Exception as e:
-            return CapResult(ok=False, error=f"Error starring asset: {e}")
 
     def _select_timeframe(self, ctx: Ctx, timeframe: str) -> CapResult:
         """
@@ -381,34 +280,58 @@ class AssetControl(Capability):
             logger.error(error_detail)
             return CapResult(ok=False, error=error_detail)
 
-    # Reuse helpers from favorite_star_select.py or similar
     def _is_assets_panel_open(self, ctx: Ctx) -> bool:
         try:
-            # Check for star icons (original logic)
-            is_open = bool(ctx.driver.execute_script("""
-                const inView = (el) => {
-                  const r = el.getBoundingClientRect();
-                  return r.width > 0 && r.height > 0;
-                };
-                const nodes = Array.from(document.querySelectorAll(
-                  "i.alist__icon.fa.fa-star-o.add, i.alist__icon.fa.fa-star.del"
-                ));
-                for (const n of nodes) { if (inView(n)) return true; }
-                return false;
-            """))
-            if is_open: return True
-            
-            # Fallback: Check for the assets list container
             return bool(ctx.driver.execute_script("""
-                const el = document.querySelector('.assets-block__list, .assets-table, .assets-list');
-                return el && el.offsetParent !== null;
+                const isVisible = (el) => {
+                  if (!el) return false;
+                  const style = window.getComputedStyle(el);
+                  const rect = el.getBoundingClientRect();
+                  return style.visibility !== 'hidden'
+                    && style.display !== 'none'
+                    && rect.width > 0
+                    && rect.height > 0;
+                };
+
+                const searchSelectors = [
+                  "input[type='search']",
+                  "input[placeholder*='Search']",
+                  "input[placeholder*='search']",
+                  "input[placeholder*='Asset']",
+                  "input[placeholder*='asset']",
+                  "input[placeholder*='Pair']",
+                  "input[placeholder*='pair']"
+                ];
+                if (searchSelectors.some((sel) => Array.from(document.querySelectorAll(sel)).some(isVisible))) {
+                  return true;
+                }
+
+                const panelSelectors = [
+                  ".assets-block__list",
+                  ".assets-table",
+                  ".assets-list",
+                  ".assets-list__item",
+                  ".assets-table__row",
+                  ".asset-item",
+                  ".sidebar-assets",
+                  ".assets-category",
+                  "[class*='assets'][class*='list']",
+                  "[class*='assets'][class*='table']",
+                  "[class*='asset'][class*='list']",
+                  "[class*='asset'][class*='item']",
+                  "[class*='pair'][class*='list']",
+                  "[class*='pair'][class*='item']"
+                ];
+                return panelSelectors.some((sel) => Array.from(document.querySelectorAll(sel)).some(isVisible));
             """))
-        except Exception:
+        except Exception as exc:
+            logger.debug("Failed to inspect asset panel open state: %s", exc)
             return False
 
-    def _open_assets_dropdown(self, ctx: Ctx):
-        # Optimized open logic with explicit waits and caching
+    def _open_assets_dropdown(self, ctx: Ctx) -> bool:
+        # Robust open logic with explicit waits, stale-cache handling, and diagnostics.
         drv = ctx.driver
+        diagnostics = []
         
         # Check cache first
         cache_key = "assets_dropdown"
@@ -417,56 +340,82 @@ class AssetControl(Capability):
                 cached_el = self._element_cache[cache_key]
                 if cached_el.is_displayed() and cached_el.is_enabled():
                     cached_el.click()
-                    time.sleep(0.2)
+                    time.sleep(0.4)
                     if self._is_assets_panel_open(ctx):
-                        return
-            except Exception:
+                        logger.info("Opened assets panel using cached selector element")
+                        return True
+            except Exception as exc:
                 # Cache invalid, clear it
+                diagnostics.append(f"cached element failed: {str(exc)[:120]}")
                 del self._element_cache[cache_key]
         
         selectors = [
-            ".asset-selector", 
-            ".asset__selector", 
-            ".assets-select",
-            ".current-asset",
-            ".assets-block",
-            "//div[contains(@class, 'current-asset')]",
-            "//div[contains(@class, 'asset-selector')]"
+            (By.CSS_SELECTOR, ".asset-selector"),
+            (By.CSS_SELECTOR, ".asset__selector"),
+            (By.CSS_SELECTOR, ".assets-select"),
+            (By.CSS_SELECTOR, ".assets__select"),
+            (By.CSS_SELECTOR, ".asset-dropdown"),
+            (By.CSS_SELECTOR, ".current-asset"),
+            (By.CSS_SELECTOR, ".chart-asset-name"),
+            (By.CSS_SELECTOR, ".pair-title"),
+            (By.CSS_SELECTOR, ".pair-selector"),
+            (By.CSS_SELECTOR, ".assets-block"),
+            (By.CSS_SELECTOR, "[data-test*='asset']"),
+            (By.CSS_SELECTOR, "[data-testid*='asset']"),
+            (By.CSS_SELECTOR, "[class*='asset'][class*='selector']"),
+            (By.CSS_SELECTOR, "[class*='asset'][class*='dropdown']"),
+            (By.CSS_SELECTOR, "[class*='pair'][class*='selector']"),
+            (By.CSS_SELECTOR, "[class*='current'][class*='asset']"),
+            (By.XPATH, "//div[contains(@class, 'current-asset')]"),
+            (By.XPATH, "//div[contains(@class, 'asset-selector')]"),
+            (By.XPATH, "//button[contains(normalize-space(.),'/')]"),
+            (By.XPATH, "//div[contains(normalize-space(.),'/') and (contains(normalize-space(.),'OTC') or contains(normalize-space(.),'%'))]")
         ]
         
-        for _ in range(2): # Reduced from 3 to 2 retries
-            for sel in selectors:
+        for attempt in range(1, 4):
+            if attempt > 1:
+                self._element_cache.pop(cache_key, None)
+
+            for by, sel in selectors:
                 try:
-                    # Use explicit wait for better performance
-                    if sel.startswith("//"):
-                        els = WebDriverWait(drv, self._implicit_wait).until(
-                            EC.presence_of_all_elements_located((By.XPATH, sel))
-                        )
-                    else:
-                        els = WebDriverWait(drv, self._implicit_wait).until(
-                            EC.presence_of_all_elements_located((By.CSS_SELECTOR, sel))
-                        )
+                    els = WebDriverWait(drv, self._implicit_wait).until(
+                        EC.presence_of_all_elements_located((by, sel))
+                    )
+                    diagnostics.append(f"attempt {attempt}: {sel} found {len(els)}")
                     
                     for el in els:
-                        if el.is_displayed() and el.is_enabled():
+                        if not el.is_displayed() or not el.is_enabled():
+                            diagnostics.append(f"attempt {attempt}: {sel} element hidden/disabled")
+                            continue
+
+                        try:
+                            el.click()
+                            # Cache successful element
+                            self._element_cache[cache_key] = el
+                            time.sleep(0.5)
+                            if self._is_assets_panel_open(ctx):
+                                logger.info("Opened assets panel using selector %s on attempt %s", sel, attempt)
+                                return True
+                            diagnostics.append(f"attempt {attempt}: {sel} clicked but panel not detected")
+                        except Exception as click_err:
+                            diagnostics.append(f"attempt {attempt}: {sel} normal click failed: {str(click_err)[:120]}")
                             try:
-                                el.click()
-                                # Cache successful element
-                                self._element_cache[cache_key] = el
-                                time.sleep(0.2)  # Reduced from 0.5s
-                                if self._is_assets_panel_open(ctx):
-                                    return
-                            except Exception as click_err:
-                                logger.warning(f"Click failed, trying JS click: {click_err}")
                                 drv.execute_script("arguments[0].click();", el)
                                 self._element_cache[cache_key] = el
-                                time.sleep(0.2)
+                                time.sleep(0.5)
                                 if self._is_assets_panel_open(ctx):
-                                    return
+                                    logger.info("Opened assets panel using JS click selector %s on attempt %s", sel, attempt)
+                                    return True
+                                diagnostics.append(f"attempt {attempt}: {sel} JS clicked but panel not detected")
+                            except Exception as js_click_err:
+                                diagnostics.append(f"attempt {attempt}: {sel} JS click failed: {str(js_click_err)[:120]}")
                 except Exception as e:
-                    logger.warning(f"Error interacting with asset selector {sel}: {e}")
+                    diagnostics.append(f"attempt {attempt}: {sel} lookup failed: {str(e)[:120]}")
                     continue
-            time.sleep(0.3)  # Reduced from 0.5s
+            time.sleep(0.5)
+
+        logger.error("Failed to open assets panel. Selector diagnostics: %s", " | ".join(diagnostics[-30:]))
+        return False
 
 if __name__ == "__main__":
     import argparse
@@ -485,7 +434,7 @@ if __name__ == "__main__":
         ctx = Ctx(driver=driver, artifacts_root=".", debug=True, dry_run=False, verbose=True)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--action", required=True, choices=["select_asset", "star_asset", "select_timeframe"])
+    parser.add_argument("--action", required=True, choices=["select_asset", "select_timeframe"])
     parser.add_argument("--asset")
     parser.add_argument("--timeframe")
     args = parser.parse_args()

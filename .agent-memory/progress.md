@@ -1,5 +1,24 @@
 # Project Progress
 
+## History Data Payload & Chart Rendering Fix (2026-05-20 → 24-05-2026) ✅ Complete
+- [x] Phase 1 — Frontend History Cache Key Stabilization ✅ Complete
+- [x] Phase 2 — Non-destructive ticker payload reload ✅ Complete
+- [x] Phase 3 — Backend History Route & Data Store Hardening ✅ Complete
+- [x] Phase 4 — Collector-owned bootstrap polling refactor ✅ Complete
+- [x] Phase 5 — Deprecated favorite-star cleanup ✅ Complete
+- [x] Phase 6 — Frontend UI & Zustand Store Integration (`marketStore.js` & `ChartWorkspace.jsx` modified) ✅ Complete
+- [x] Phase 7 — Data store mock test suite updated with realistic Unix timestamps to satisfy validation guards ✅ Complete
+- [x] Verification — Full Python test suite (197 tests) passing green ✅
+- [x] Verification — Frontend production build builds cleanly with zero errors ✅
+
+## Grok 4.3 Migration (2026-05-17) ✅ Complete
+- [x] `backend/services/ai/providers.py` — `ProviderSpec` dataclass extended with `reasoning_effort: Optional[str]`; both Grok specs updated to `model="grok-4.3"`, new labels, `reasoning_effort="low"` / `"none"`
+- [x] `backend/services/ai/service.py` — `_prepare_chat_request()` injects `reasoning_effort` into API payload (guarded: only sent when non-None, so local providers are unaffected)
+- [x] `backend/tests/test_ai_routing.py` — stale assertions updated; `reasoning_effort` assertions added
+- [x] All 43 AI tests passing ✅
+- [x] Committed: `feat(ai): Grok 4.3 migration + reasoning_effort support (post-May 15 2026 xAI update)` (`570dad9`)
+- [x] Pushed to `origin/master` ✅
+
 ## Ask AI Performance Optimization (2026-04-18) — In Progress
 - [x] Phase A — Lower-Risk Optimizations ✅ Complete
   - [x] `backend/services/ai/service.py` — pooled probe reuse + local fallback probing

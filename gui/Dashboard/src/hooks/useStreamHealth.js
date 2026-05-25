@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import useMarketStore from '../store/marketStore';
 
 export const useStreamHealth = () => {
-  const { lastTickTimestamp } = useMarketStore();
+  const lastTickTimestamp = useMarketStore((state) => state.lastTickTimestamp);
   const [health, setHealth] = useState('idle');
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { normalizeSpecificAsset as normalizeAsset } from '../utils/assetUtils';
 
 const formatPrice = (price) => {
@@ -34,7 +34,13 @@ const buildItems = (assets, quotesByAssetKey) => {
   }, []);
 };
 
-const TickerTape = ({ assets, quotesByAssetKey }) => {
+const TickerTape = ({
+  assets,
+  quotesByAssetKey,
+  selectedAsset,
+  selectedAssetLoading,
+  onReloadAndSelectAsset,
+}) => {
   const items = buildItems(assets, quotesByAssetKey);
 
   if (items.length === 0) {
@@ -49,6 +55,7 @@ const TickerTape = ({ assets, quotesByAssetKey }) => {
     <div className="h-full w-full rounded bg-black/20 border border-gray-800 flex flex-col">
       <div className="flex-1 overflow-y-auto pr-1 space-y-1">
         {items.map((it) => {
+          const isSelected = selectedAsset === it.label;
           const isUp = Number.isFinite(it.changePct) ? it.changePct >= 0 : true;
           const color = isUp ? 'text-accent-green' : 'text-red-400';
           const Icon = isUp ? TrendingUp : TrendingDown;
@@ -56,9 +63,23 @@ const TickerTape = ({ assets, quotesByAssetKey }) => {
           return (
             <div
               key={it.assetKey}
-              className="flex items-center justify-between px-3 py-1.5 rounded border border-gray-700 bg-gray-900/60"
+              onClick={() => !selectedAssetLoading && onReloadAndSelectAsset && onReloadAndSelectAsset(it.label)}
+              className={`flex items-center justify-between px-3 py-1.5 rounded border transition-all ${
+                isSelected
+                  ? 'bg-accent-green/10 border-accent-green/40 shadow-[0_0_10px_rgba(34,197,94,0.05)]'
+                  : 'border-gray-700 bg-gray-900/60 hover:bg-gray-800 hover:border-gray-600'
+              } ${selectedAssetLoading ? 'cursor-wait' : 'cursor-pointer'} ${
+                selectedAssetLoading && isSelected ? 'opacity-80' : ''
+              }`}
             >
-              <span className="text-[11px] font-bold text-gray-200">{it.label}</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-bold ${isSelected ? 'text-accent-green' : 'text-gray-200'}`}>
+                  {it.label}
+                </span>
+                {isSelected && selectedAssetLoading && (
+                  <RefreshCw size={10} className="animate-spin text-accent-green" />
+                )}
+              </div>
               <span className="text-[11px] font-mono text-gray-200">{formatPrice(it.price)}</span>
               <span className={`text-[11px] font-bold ${color} inline-flex items-center gap-1`}>
                 <Icon size={14} />

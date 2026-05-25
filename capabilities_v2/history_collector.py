@@ -36,12 +36,6 @@ class Candle:
     volume: float = 0.0
 
     def to_csv_row(self) -> List[Any]:
-        # Unified format uses raw numeric timestamp or ISO? 
-        # User example shows 2025_09_30_20_28_50 in filename, 
-        # but row content usually matches platform's unified format.
-        # Platforms usually use ISO or unix timestamp.
-        # main.py uses c.get("timestamp") directly.
-        # I'll stick to what main.py does for row consistency.
         return [self.timestamp, self.open, self.high, self.low, self.close, self.volume]
 
     def to_ohlc(self, asset: str, timeframe: Any) -> Dict[str, Any]:
@@ -78,7 +72,10 @@ class HistoryCollector(Capability):
         output_root_str = str(output_root) if output_root is not None else None
 
         timeframe_raw = inputs.get("timeframe")
-        timeframe_min = self._parse_timeframe_minutes(timeframe_raw)
+        try:
+            timeframe_min = self._parse_timeframe_minutes(timeframe_raw)
+        except ValueError as exc:
+            return CapResult(ok=False, error=str(exc), error_code="unsupported_timeframe")
 
         if action == "collect":
             duration_s = float(inputs.get("duration", 0))
@@ -121,9 +118,31 @@ class HistoryCollector(Capability):
         interceptor = WebSocketInterceptor(ctx.driver)
         target = self._normalize_asset(asset)
 
+        # Poll data store first to see if background collector updated it
+        from backend.utils.data_store import read_candles
+        tf_str = f"{timeframe_min or 1}m"
+        baseline_candles = read_candles(target, tf_str)
+        baseline_sig = (len(baseline_candles), max([c.get("timestamp", 0) for c in baseline_candles]) if baseline_candles else None)
+
         history_candles: List[Candle] = []
-        history_deadline = time.time() + 3
+        wait_time = max(3.0, float(duration_s)) if duration_s > 0 else 3.0
+        history_deadline = time.time() + wait_time
         while time.time() < history_deadline:
+            # Poll data store first
+            current_candles = read_candles(target, tf_str)
+            current_sig = (len(current_candles), max([c.get("timestamp", 0) for c in current_candles]) if current_candles else None)
+            if current_candles and current_sig != baseline_sig:
+                logger.info("HistoryCollector: Detected data store update from background collector.")
+                history_candles = [Candle(
+                    timestamp=float(c["timestamp"]),
+                    open=float(c["open"]),
+                    high=float(c["high"]),
+                    low=float(c["low"]),
+                    close=float(c["close"]),
+                    volume=float(c.get("volume", 0.0))
+                ) for c in current_candles]
+                break
+
             events = interceptor.fetch_history_events()
             if events:
                 logger.info(f"HistoryCollector: Checking {len(events)} events for {asset}...")
@@ -150,6 +169,9 @@ class HistoryCollector(Capability):
                     ev_str = str(ev).upper()
                     if target in ev_str:
                         logger.info(f"HistoryCollector: Fuzzy match found for {target} in event payload")
+                        is_match = True
+                    elif target.endswith("OTC") and target[:-3] in ev_str and "OTC" in ev_str:
+                        logger.info(f"HistoryCollector: Split fuzzy match found for {target} in event payload")
                         is_match = True
 
                 if is_match:
@@ -190,7 +212,6 @@ class HistoryCollector(Capability):
         final_candles.sort(key=lambda c: c.timestamp)
 
         if not final_candles:
-            # Enhanced diagnostic info
             err = f"no data collected for {asset} (history_captured={len(history_candles)}, ticks_captured={len(ticks)})"
             logger.error(err)
             return CapResult(ok=False, error=err)
@@ -225,21 +246,36 @@ class HistoryCollector(Capability):
         interceptor = WebSocketInterceptor(ctx.driver)
         target = self._normalize_asset(asset)
 
-        # 1. Attempt to capture initial history (approx 100 candles)
         history_candles: List[Candle] = []
-        # Use duration_s if provided and larger than 3s, otherwise default to 3s
-        # This allows the frontend to control the timeout (e.g. 15s for manual mode)
         wait_time = max(3.0, float(duration_s)) if duration_s > 0 else 3.0
         history_deadline = time.time() + wait_time
         
         logger.info(f"Waiting for history data for {asset} (timeout: {wait_time}s)...")
 
+        from backend.utils.data_store import read_candles
+        tf_str = f"{timeframe_min or 1}m"
+        baseline_candles = read_candles(target, tf_str)
+        baseline_sig = (len(baseline_candles), max([c.get("timestamp", 0) for c in baseline_candles]) if baseline_candles else None)
+
         while time.time() < history_deadline:
+            current_candles = read_candles(target, tf_str)
+            current_sig = (len(current_candles), max([c.get("timestamp", 0) for c in current_candles]) if current_candles else None)
+            if current_candles and current_sig != baseline_sig:
+                logger.info("HistoryCollector: Detected data store update from background collector.")
+                history_candles = [Candle(
+                    timestamp=float(c["timestamp"]),
+                    open=float(c["open"]),
+                    high=float(c["high"]),
+                    low=float(c["low"]),
+                    close=float(c["close"]),
+                    volume=float(c.get("volume", 0.0))
+                ) for c in current_candles]
+                break
+
             events = interceptor.fetch_history_events()
             if events:
                 logger.info(f"HistoryCollector: Checking {len(events)} events for {asset}...")
             for ev in events:
-                # Resilient Asset Matching (Fuzzy)
                 ev_asset = ev.get("asset") or ev.get("symbol") or ev.get("active")
                 
                 if not ev_asset and "candles" in ev and ev["candles"]:
@@ -253,10 +289,12 @@ class HistoryCollector(Capability):
                     if norm_ev_asset == target:
                         is_match = True
                 else:
-                    # Deep Search fallback
                     ev_str = str(ev).upper()
                     if target in ev_str:
                         logger.info(f"HistoryCollector: Fuzzy match found for {target} in event payload")
+                        is_match = True
+                    elif target.endswith("OTC") and target[:-3] in ev_str and "OTC" in ev_str:
+                        logger.info(f"HistoryCollector: Split fuzzy match found for {target} in event payload")
                         is_match = True
 
                 if is_match:
@@ -270,15 +308,10 @@ class HistoryCollector(Capability):
                 break
             time.sleep(0.5)
 
-        # 2. Collect real-time ticks (optional - skip if history already captured)
-        # OPTIMIZATION: If we already have history candles (typically ~100), 
-        # we don't need to wait for additional ticks. This enables rapid subsequent requests.
         if history_candles:
-            # History captured - collect ticks for max 2 seconds to get latest updates
             tick_duration = min(2.0, float(duration_s)) if duration_s > 0 else 0.0
             logger.info(f"History captured ({len(history_candles)} candles), collecting ticks for {tick_duration}s only")
         else:
-            # No history yet - collect ticks for full duration
             tick_duration = max(1.0, float(duration_s))
             logger.info(f"No history captured, collecting ticks for full {tick_duration}s")
         
@@ -290,17 +323,12 @@ class HistoryCollector(Capability):
                     ticks.append(t)
             time.sleep(0.25)
 
-        # 3. Merge history and ticks
         tf = timeframe_min if timeframe_min is not None else 1
-        
-        # Convert ticks to candles
         tick_candles = self._aggregate_ticks_to_candles(ticks, tf)
         
-        # Merge: simple dictionary merge by timestamp
         merged_map = {c.timestamp: c for c in history_candles}
         for c in tick_candles:
             if c.timestamp in merged_map:
-                # Update existing (simple overwrite for now, or OHLC logic)
                 existing = merged_map[c.timestamp]
                 existing.high = max(existing.high, c.high)
                 existing.low = min(existing.low, c.low)
@@ -313,7 +341,6 @@ class HistoryCollector(Capability):
         final_candles.sort(key=lambda c: c.timestamp)
         
         if not final_candles:
-            # Determine specific error code based on what failed
             if not history_candles and not ticks:
                 error_code = "manual_click_timeout"
                 error_msg = f"No history data received for {asset} within {wait_time}s. Manual click may not have been detected."
@@ -330,10 +357,7 @@ class HistoryCollector(Capability):
                 error_code=error_code
             )
 
-        # Save to CSV
         filepath = self._save_csv(asset, tf, final_candles, output_root)
-        
-        # Convert candles to OHLC format for frontend consumption
         candles_ohlc = [c.to_ohlc(asset=asset, timeframe=tf) for c in final_candles]
         
         return CapResult(
@@ -342,7 +366,7 @@ class HistoryCollector(Capability):
                 "filepath": filepath, 
                 "count": len(final_candles), 
                 "timeframe": tf,
-                "candles": candles_ohlc,  # Return candles directly for in-memory response
+                "candles": candles_ohlc,
                 "asset": asset
             }
         )
@@ -350,20 +374,11 @@ class HistoryCollector(Capability):
     def _parse_history_payload(self, ctx: Ctx, data: Dict[str, Any], timeframe_min: int) -> List[Candle]:
         candles = []
         
-        # Case A: 'candles' list of dicts or lists
         if 'candles' in data and data['candles']:
             raw_list = data['candles']
-            # V1 says reversed? "candles = list(reversed(data['candles']))"
-            # Let's check timestamp order.
-            # Usually latest is first or last.
-            pass 
-            # I'll reuse _parse_candles but need to be careful about format
             candles = self._parse_candles(ctx, raw_list)
 
-        # Case B: 'history' list of [timestamp, price]
         elif 'history' in data and data['history']:
-            # Reconstruct candles from price points
-            # This requires grouping by timeframe
             points = data['history']
             bucket_s = timeframe_min * 60
             buckets: Dict[int, Candle] = {}
@@ -373,6 +388,9 @@ class HistoryCollector(Capability):
                 ts = float(item[0])
                 price = float(item[1])
                 
+                if ts < 1000000000:
+                    continue
+
                 bucket_start = int(ts // bucket_s) * bucket_s
                 
                 if bucket_start not in buckets:
@@ -381,15 +399,11 @@ class HistoryCollector(Capability):
                     c = buckets[bucket_start]
                     c.high = max(c.high, price)
                     c.low = min(c.low, price)
-                    c.close = price # Assuming chronological order? 
-                    # If not sorted, close might be wrong.
-                    # V1 assumes: "for tstamp, value in data['history']" -> update close
-                    # So yes, it updates close with every new point.
+                    c.close = price
             
             candles = list(buckets.values())
 
         return candles
-
 
     def _aggregate_ticks_to_candles(self, ticks: List[Any], timeframe_min: int) -> List[Candle]:
         bucket_s = max(1, int(timeframe_min)) * 60
@@ -420,9 +434,12 @@ class HistoryCollector(Capability):
         for c in raw_candles:
             try:
                 if isinstance(c, dict):
+                    ts = float(c.get("timestamp"))
+                    if ts < 1000000000:
+                        continue
                     candles.append(
                         Candle(
-                            timestamp=float(c.get("timestamp")),
+                            timestamp=ts,
                             open=float(c.get("open")),
                             high=float(c.get("high")),
                             low=float(c.get("low")),
@@ -433,11 +450,14 @@ class HistoryCollector(Capability):
                     continue
 
                 if isinstance(c, (list, tuple)):
+                    ts = float(c[0])
+                    if ts < 1000000000:
+                        continue
                     if len(c) == 5:
                         # Format [ts, open, close, high, low]
                         candles.append(
                             Candle(
-                                timestamp=float(c[0]),
+                                timestamp=ts,
                                 open=float(c[1]),
                                 high=float(c[3]),
                                 low=float(c[4]),
@@ -450,7 +470,7 @@ class HistoryCollector(Capability):
                         # Format [ts, open, close, high, low, volume]
                         candles.append(
                             Candle(
-                                timestamp=float(c[0]),
+                                timestamp=ts,
                                 open=float(c[1]),
                                 high=float(c[3]),
                                 close=float(c[2]),
@@ -486,10 +506,7 @@ class HistoryCollector(Capability):
         return Path(__file__).resolve().parents[1]
 
     def _save_csv(self, asset: str, timeframe: Any, candles: List[Candle], output_root: Optional[str]) -> str:
-        # Normalize asset name
         asset_clean = self._normalize_asset(asset)
-        
-        # Normalize timeframe string
         tf_str = str(timeframe).lower().strip()
         if tf_str.isdigit():
             tf_str = f"{tf_str}m"
@@ -526,8 +543,6 @@ class HistoryCollector(Capability):
             source="history_capture_subprocess"
         )
         
-        # For compatibility with callers expecting a filepath string
-        # we return the logical filename that would have been used or the new data store path
         from backend.utils.data_store import get_candle_path
         return str(get_candle_path(asset_clean, tf_str))
 
@@ -536,13 +551,10 @@ class HistoryCollector(Capability):
             return None
         tf_str = str(timeframe).lower().strip()
         if tf_str == "ticks":
-            return 0
+            raise ValueError(f"unsupported timeframe: {timeframe}")
         if tf_lower := tf_str:
             if tf_lower.endswith("s"):
-                # Handle seconds (15s -> 0.25m or similar)
-                # But collector usually works in minutes.
-                # For now, we'll return 1 as a safe minimum for OHLC grouping
-                return 1 
+                raise ValueError(f"unsupported timeframe: {timeframe}")
             if tf_lower.endswith("m"):
                 try: return int(tf_lower[:-1])
                 except: pass
@@ -570,7 +582,7 @@ if __name__ == "__main__":
     ctx = None
     driver = None
     try:
-        import qf  # type: ignore
+        import qf
         ok, _res = qf.attach_chrome_session(port=9222, verbose=True)
         if ok:
             ctx = qf.ctx
@@ -580,8 +592,8 @@ if __name__ == "__main__":
 
     if ctx is None:
         try:
-            from selenium import webdriver  # type: ignore
-            from selenium.webdriver.chrome.options import Options  # type: ignore
+            from selenium import webdriver
+            from selenium.webdriver.chrome.options import Options
             opts = Options()
             opts.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
             driver = webdriver.Chrome(options=opts)
@@ -593,7 +605,6 @@ if __name__ == "__main__":
             raise SystemExit(1)
 
     cap = HistoryCollector()
-    # Use collect_and_save to ensure CSV is written to data/data_output/history
     inputs = {
         "action": "collect_and_save",
         "asset": args.asset,

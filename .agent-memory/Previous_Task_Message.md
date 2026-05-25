@@ -1,39 +1,82 @@
-# Executive Summary
+__History Refresh / Asset Control Remediation Status — 2026-05-24__
 
-## Ask AI Performance Optimization
-- Phases A and B were implemented and incrementally reviewed.
-- The Ask AI stack now includes pooled provider probes, local probe fallbacks, provider-aware indicator caching, cache-friendly prompt layout, shared AI request preparation, SSE streaming, abortable frontend requests, a shared provider store, and streamed modal rendering.
-- The old `useAiProviders.js` path was removed after the store migration to reduce confusion and dead code.
+The History Data Payload / Chart Rendering remediation has progressed beyond the 2026-05-23 blocking report. The remaining runtime blocker was isolated to Selenium-driven Pocket Option asset-panel detection in `backend/services/gateway/asset_control.py`; follow-up remediation has now been implemented and documented, with automated validation green. Final production closeout still requires live Chrome/Pocket Option validation.
 
-## Validation Completed
-- Backend AI test suites passed after each relevant implementation batch.
-- Frontend production builds passed after each relevant frontend batch.
-- Focused tests were added for streaming, probe fallbacks, prompt layout, and indicator cache behavior.
+__Plan document updated__
 
-## Benchmark Harness
-- A reusable benchmark harness was added at `backend/tests/perf_ask_ai_bench.py`.
-- It measures TTFT, total latency, payload size, cache-hit data, answer size, and optional backend indicator timing.
-- It writes a Markdown benchmark artifact for every run.
+- `v2_Dev_Docs/History_Handeling/History_Data_Payload_Chart_Rendering_Fix_Plan_26-05-20.md`
+- Added Phase 6A / 6B / 6C remediation sections:
+  1. Phase 6A — Make clear-cache non-destructive.
+  2. Phase 6B — Harden `asset_control.py` selectors and panel-open detection.
+  3. Phase 6C — Final validation and closeout requirements.
+- Recorded final multi-agent review protocol:
+  - @Reviewer — ✅ Passed for correctness, maintainability, and plan alignment.
+  - @Debugger — ⚠️ Passed for automated/runtime guard coverage; live Pocket Option DOM validation still required.
+  - @Optimizer — ✅ Passed.
+  - @Code_Simplifier — ✅ Passed.
+  - @Team_Leader final verdict — implementation complete and automated validation green; production closeout pending live Chrome/Pocket Option workflow validation.
 
-## Live Benchmark Outcome
-- Live benchmark report: `v2_Dev_Docs/AI_Model_Routing/Reports/Ask_AI_Bench_26-04-18.md`.
-- Command executed: `python backend/tests/perf_ask_ai_bench.py --iterations 20 --models grok-4,grok-4-fast,gemma-local --ui-modes modal,insights`.
-- Total samples: `120`.
-- Result profile:
-- `grok-4`: 0/20 modal, 0/20 insights.
-- `grok-4-fast`: 0/20 modal, 1/20 insights.
-- `gemma-local`: 0/20 modal, 0/20 insights.
-- Most failed requests clustered around `30000ms`, indicating timeout-dominated failure rather than healthy interactive streaming.
-- The only success was `grok-4-fast insights`, but it was still too slow for acceptable UX: `TTFT 43438.87ms`, `Total 53105.79ms`.
-- `gemma-local insights` still triggered a `413 context_too_large` failure in at least one run.
+__Code changes completed__
 
-## Current Assessment
-- The implementation work is in place and benchmarkable.
-- The benchmark results do not support calling the optimization effort operationally successful yet.
-- The main remaining work is runtime diagnosis, especially timeout behavior, provider connectivity, and local-provider context reduction.
+1. `gui/Dashboard/src/components/ChartHeader.jsx`
+   - Replaced the destructive clear-cache button flow with `reloadHistoryFromPayload(selectedAsset)`.
+   - Removed the direct `clearHistoryCache()` / `loadHistory()` path from the header button.
+   - Uses normalized `selectedAssetKey` for history loading-state checks.
+   - Updated tooltip from destructive clear-cache wording to `Refresh current asset history from payload`.
+   - Result: the refresh-history button now attempts fresh payload bootstrap without deleting existing backend/frontend history first.
 
-## Recommended Next Actions
-- Improve benchmark exception reporting so failures are more actionable.
-- Diagnose streaming-path timeout/provider behavior.
-- Apply additional provider-aware context shrinking for `gemma-local insights`.
-- Re-run a smaller live benchmark matrix first, then repeat the full benchmark after remediation.
+2. `backend/services/gateway/asset_control.py`
+   - Removed stale favorite-star command/helper path and star-based panel detection assumptions.
+   - `_is_assets_panel_open()` now detects visible search inputs, asset rows, asset-list containers, and modern asset/pair class patterns instead of relying on old `fa-star` DOM markers.
+   - `_open_assets_dropdown()` now returns `bool`, uses 3 bounded retry rounds, clears stale cached elements on retry, expands selector coverage, and logs selector diagnostics when the panel cannot be opened.
+   - `_select_asset()` now waits longer for modern search/list DOM, logs candidate row counts, and logs visible candidate row text when a target asset is not found.
+
+__Validation completed__
+
+Automated checks run successfully:
+
+```powershell
+conda run -n QuFLX-v2 python -m py_compile backend/services/gateway/asset_control.py
+conda run -n QuFLX-v2 python -m pytest backend/tests/test_history_delete_routes.py -v
+conda run -n QuFLX-v2 python -m pytest backend/tests -q --tb=short
+npm --prefix gui/Dashboard run build
+git diff --check -- v2_Dev_Docs/History_Handeling/History_Data_Payload_Chart_Rendering_Fix_Plan_26-05-20.md gui/Dashboard/src/components/ChartHeader.jsx backend/services/gateway/asset_control.py
+```
+
+Results:
+
+- `asset_control.py` compile check ✅
+- Focused history route suite: `10 passed` ✅
+- Full backend suite: `197 passed, 7 warnings` ✅
+- Frontend production build ✅
+- `git diff --check` ✅
+
+__Current runtime behavior__
+
+- `reloadHistoryFromPayload()` remains the preferred non-destructive refresh path.
+- The chart refresh button in `ChartHeader.jsx` now uses that same non-destructive path.
+- The old delete-path route bug remains fixed.
+- Backend bootstrap still follows the collector-owned polling model; no competing Chrome performance-log reader was reintroduced.
+- `asset_control.py` is now more observable: selector failures should include diagnostics instead of only `Failed to open assets panel`.
+
+__Remaining live validation required__
+
+Phase 6A/6B are implemented and reviewed, but should stay `[~]` rather than `[x]` until live validation confirms current Pocket Option DOM behavior.
+
+Required live checks:
+
+1. Start/attach Chrome + Pocket Option session.
+2. Start Gateway/collector as normal.
+3. Trigger `POST /api/v1/history/bootstrap-history` for at least one OTC asset.
+4. Confirm `asset_control.py` can open/detect the current asset panel.
+5. Confirm the target asset can be selected.
+6. Confirm collector-owned fresh history persists to CSV/data store.
+7. Confirm frontend chart refreshes from returned/persisted candles without deleting old history on failure.
+
+__Related report__
+
+- `reports/reports_2026-05/asset_control_history_blocking_report_26-05-23.md`
+
+__Important note for next agent__
+
+Do not mark Phase 6 fully `[x]` closed until live Chrome/Pocket Option validation passes or the user explicitly accepts the remaining live-validation risk.

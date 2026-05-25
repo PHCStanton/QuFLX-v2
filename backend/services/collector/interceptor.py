@@ -89,6 +89,8 @@ class WebSocketInterceptor:
         """
         self._refresh_logs()
         events = list(self._history_buffer)
+        if events:
+            logger.info(f"INTERCEPTOR: Cleared history buffer after yielding {len(events)} events")
         self._history_buffer = []
         return events
 

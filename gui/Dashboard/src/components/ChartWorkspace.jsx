@@ -152,16 +152,16 @@ const ChartWorkspace = () => {
 
   // Initial History Load Fix
   useEffect(() => {
-    if (!selectedAsset || !selectedTimeframe) return;
+    if (!selectedAsset || !selectedAssetKey || !selectedTimeframe) return;
 
-    const status = historyStatus[selectedAsset];
+    const status = historyStatus[selectedAssetKey];
     // Only load if we haven't loaded/attempted yet
     if (!status) {
-      loadHistory(selectedAsset).catch((err) => {
+      loadHistory(selectedAsset, 100).catch((err) => {
         console.error('Initial history load failed:', err);
       });
     }
-  }, [selectedAsset, selectedTimeframe, historyStatus, loadHistory]);
+  }, [selectedAsset, selectedAssetKey, selectedTimeframe, historyStatus, loadHistory]);
 
   const [volumeSeries, setVolumeSeries] = useState(null);
 
@@ -318,6 +318,7 @@ const ChartWorkspace = () => {
   const { onNewCandle } = useChartWorkspaceIndicators({
     health,
     selectedAsset,
+    selectedAssetKey,
     selectedTimeframe,
     activeIndicators,
     loadIndicators,

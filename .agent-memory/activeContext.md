@@ -1,6 +1,18 @@
 # Active Context
 
-- ## Current Focus (as of 19-04-2026)
+## Current Focus (as of 24-05-2026)
+- **History Data Payload Flow and Fixes (2026-05-24):** ✅ Fully implemented and verified.
+- **Frontend changes:** Zustand store (`marketStore.js`) updated to support `num_candles` configuration in history queries and POST body payloads. Initial load in `ChartWorkspace.jsx` and force refresh logic explicitly query 100 candles.
+- **Backend changes:** Pytest unit test suite in `backend/tests/test_data_store.py` updated to use valid Unix timestamps (> 1,000,000,000).
+- **Validation:** 197/197 backend tests passing; frontend production build builds cleanly with zero errors.
+
+## Prior Focus (17-05-2026)
+- **Grok 4.3 Migration (2026-05-17):** ✅ Complete — migrated retired xAI model slugs to `grok-4.3`, added `reasoning_effort` param, updated tests, committed & pushed to master.
+- **Commit:** `feat(ai): Grok 4.3 migration + reasoning_effort support (post-May 15 2026 xAI update)` (`570dad9`)
+- **Files changed:** `backend/services/ai/providers.py`, `backend/services/ai/service.py`, `backend/tests/test_ai_routing.py`
+- **Tests:** 43/43 passing ✅
+
+## Prior Focus (19-04-2026)
 - **Ask AI Performance Optimization (2026-04-18 → 19-04):** Phase A quick wins and Phase B targeted rewrites implemented and incrementally reviewed; Phase C benchmark harness/report path added.
 - **Plan Location:** `v2_Dev_Docs/AI_Model_Routing/Ask_AI_Performance_Optimization_Plan_26-04-18.md`
 - **Status:** Phase A ✅ Complete · Phase B ✅ Complete · Phase C harness/report ✅ Implemented · live benchmark execution pending reachable Gateway/providers.
@@ -72,6 +84,68 @@
 
 ## Current State
 
+
+### AI Multi-Model Routing — Phase 1 Summary (17-04-2026)
+**Root Cause:** Single AIService singleton used for all AI requests — no per-provider config, no model selection, no context size awareness per provider.
+
+**Solution (Phase 1):** Full rewrite per Core Principle #7:
+1. `providers.py` — `ProviderSpec` frozen dataclass + grok-4 / grok-4-fast / gemma-local configs
+2. `service.py` — `AIService` now accepts `ProviderSpec`; `base_url` treated as root; `probe()` method added
+3. `registry.py` — `AIProviderRegistry` with `get()`, `resolve_default(ui_context)`, `probe_all()`, `close_all()`
+4. `local_process.py` — `LocalAIProcessManager` with `asyncio.to_thread()` stop() + stdout/stderr log capture to `system_LOGS/llama-server-{ts}.log`
+5. Gateway lifespan wires local_ai manager + registry
+6. Route `/ask` accepts `model` field (whitelist: grok-4, grok-4-fast, gemma-local); provider-aware context size check after indicator injection → 413 if exceeded
+7. Route `/providers` returns all 3 providers with availability status
+
+**Key Design Decisions:**
+- `ProviderSpec` is frozen/immutable — safe to share across async contexts
+- `AIService._enabled = bool(api_key) or spec.is_local` — local providers don't need API keys
+- `x-grok-conv-id` header NOT attached for `is_local=True` providers
+- Context size guard fires AFTER `_inject_backend_indicators()` so the limit reflects the full post-injection payload
+- `local_process.py` stdout/stderr → `system_LOGS/llama-server-{timestamp}.log` (never swallowed)
+
+### AI Multi-Model Routing — Phase 2A Review (17-04 → 18-04-2026)
+**Result:** 🔴 BLOCKING → ✅ RESOLVED by @Coder → 🔴 Follow-up regression R-1 → ✅ FIXED (18-04)
+
+**@Reviewer findings (17-04-17):** 2 Critical, 3 High, 3 Medium, 4 Low. C-1 (model field silently dropped) + C-2 (stale handleAsk closure) were BLOCKING.
+
+**@Coder remediated (17-04-17):** 9 code changes across 5 files — model now propagates end-to-end through `useAskAi → aiClient → fetch POST body`.
+
+**Follow-up double-check (18-04-18):** Found regression R-1 — `model` added to `useCallback` deps array in `useAskAi.js` but `model` is an inner function argument, not in hook scope. Would cause `ReferenceError` on mount. Fixed by removing `model` from deps array.
+
+**Phase 2A items completed:**
+- `useAiProviders.js` — NEW hook with `refresh()`, `error` state, `AbortController`
+- `AiModelSelector.jsx` — NEW chip UI; disabled "No models" chip on empty/error
+- `settingsStore.js` — `defaultModel` + `alertDispatchModel` + `normalizeAiModel`
+- `AskAiModal.jsx` — chip in header, `model` passed in `onAsk`, deps fixed, error wired
+- `useAskAi.js` — `model` destructure + forward to `askAI()` (deps array corrected 18-04)
+- `aiClient.js` — `model` in POST body (conditional, backward compat)
+
+**Remaining Phase 2A items (deferred):** AiInsightsPanel toolbar chip, SettingsPanel AI tab selects, Alert Dispatcher `QFLX_ALERT_AI_MODEL` env injection.
+
+**Report:** `v2_Dev_Docs/AI_Model_Routing/Reviewer_Phase2A_26-04-17.md`
+
+---
+
+## Prior Focus Areas (Completed)
+
+### Data Collection & Persistence Refactor (2026-03-29) ✅
+- Plan: `v2_Dev_Docs/History_Handeling/Data_Collection_Persistence_Refactor_Plan_26-03-29.md`
+- Report: `@reports_2026-03/Data_Collection_Persistence_Refactor_Report_26-03-29.md`
+- 7 phases complete — `data_store.py` Single Source of Truth, in-process bootstrap, all consumers updated
+
+### Asset Normalization Single Source of Truth (2026-03-21) ✅
+- `backend/utils/asset_utils.py` + `gui/Dashboard/src/utils/assetUtils.js`
+- `EURUSD_otc` → `EURUSDOTC` normalization across all UI and backend components
+
+### Indicator Stack Optimization (14-03-2026) ✅
+- `POST /api/v1/indicators` migrated to in-process pipeline with per-asset DataFrame cache
+- All 11 items in `Indicator_Fixes_Optimizations_Plan_2026-03-05.md` complete
+
+---
+
+## Current State
+
 ### Backend
 - Collector / Strategy / Gateway operational
 - SSID Service running as standalone FastAPI microservice
@@ -79,14 +153,12 @@
 - Indicator endpoint in-process with DataFrame cache (no subprocess)
 - Profile system — full CRUD + active profile sync
 - **AI Multi-Provider Registry** — 3 providers (grok-4, grok-4-fast, gemma-local) with `AIProviderRegistry`
+- **Grok 4.3** — both Grok providers now use `model="grok-4.3"` with `reasoning_effort` (`"low"` / `"none"`)
 - **`/api/v1/ai/providers`** — health endpoint returning key/label/available/capabilities for all 3
 - **`/api/v1/ai/ask`** — `model` field, provider-aware 413 enforcement, `model_validate` + serializable errors
 - **`/api/v1/ai/ask/stream`** — SSE endpoint for incremental modal responses using shared request validation/prep
 - `AIService.ask_stream()` — streaming path sharing the same prompt construction and provider headers as sync ask
 - `backend/utils/indicator_utils.py` — 5s mtime-aware indicator TTL cache keyed by asset/timeframe/pipeline params
-- `LocalAIProcessManager` — Gemma auto-start/stop integrated into Gateway lifespan
-- Voice WS relay at `/api/v1/ai/voice/realtime`
-- Settings: `GET/PUT /api/v1/settings` + versioned `data/settings/settings.json`
 - Local Ops endpoints (opt-in via `QFLX_ENABLE_OPS=1`)
 
 ### Frontend

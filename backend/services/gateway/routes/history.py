@@ -3,18 +3,15 @@ import sys
 import json
 import asyncio
 import logging
-import re
 import pandas as pd
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from .common import parse_script_json
-from backend.utils.history_utils import persist_history_csv, get_recent_history_file, append_candle_to_history
-from backend.utils.data_store import read_candles, upsert_candles, generate_session_id, log_session
+from backend.utils.history_utils import get_recent_history_file, append_candle_to_history
+from backend.utils.data_store import read_candles, upsert_candles
 from backend.utils.asset_utils import normalize_asset
 from backend.models.errors import (
     HistoryErrorCode, 
@@ -25,6 +22,30 @@ from backend.models.errors import (
 
 router = APIRouter()
 logger = logging.getLogger("gateway.history")
+
+
+def _parse_timeframe_minutes(value: int | str, *, route_name: str) -> int:
+    if isinstance(value, int):
+        return max(1, int(value))
+
+    tf = str(value).strip().lower()
+    if not tf:
+        raise HTTPException(status_code=400, detail=f"{route_name}: timeframe required")
+    if tf == "ticks" or tf.endswith("s"):
+        raise HTTPException(status_code=400, detail=f"{route_name}: unsupported timeframe: {value}")
+    if tf.endswith("m"):
+        raw = tf[:-1]
+        if not raw.isdigit():
+            raise HTTPException(status_code=400, detail=f"{route_name}: invalid timeframe: {value}")
+        return max(1, int(raw))
+    if tf.endswith("h"):
+        raw = tf[:-1]
+        if not raw.isdigit():
+            raise HTTPException(status_code=400, detail=f"{route_name}: invalid timeframe: {value}")
+        return max(1, int(raw) * 60)
+    if tf.isdigit():
+        return max(1, int(tf))
+    raise HTTPException(status_code=400, detail=f"{route_name}: invalid timeframe: {value}")
 
 
 def _error_status_for_code(code: HistoryErrorCode) -> int:
@@ -43,29 +64,157 @@ def _json_error(code: HistoryErrorCode, message: str, details: Dict[str, Any] | 
     resp = create_error_response(error_code=code, error_message=message, details=details)
     return JSONResponse(status_code=_error_status_for_code(code), content=resp.model_dump())
 
+
+def _history_signature(candles: List[Dict[str, Any]]) -> Tuple[int, Optional[float]]:
+    if not candles:
+        return (0, None)
+
+    latest_ts: Optional[float] = None
+    for candle in candles:
+        ts = candle.get("timestamp", candle.get("time"))
+        if ts is None:
+            continue
+        try:
+            ts_val = float(ts)
+        except (TypeError, ValueError):
+            continue
+        if latest_ts is None or ts_val > latest_ts:
+            latest_ts = ts_val
+
+    return (len(candles), latest_ts)
+
+
+async def _select_asset_in_ui(asset: str) -> Dict[str, Any]:
+    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../asset_control.py"))
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        script_path,
+        "--action",
+        "select_asset",
+        "--asset",
+        asset,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+    stdout_str = stdout.decode().strip()
+    stderr_str = stderr.decode().strip()
+
+    if process.returncode != 0:
+        raise RuntimeError(stderr_str or stdout_str or "asset selection process failed")
+
+    output_json = parse_script_json(stdout_str)
+    if not output_json.get("ok"):
+        raise RuntimeError(str(output_json.get("error") or "asset selection failed"))
+
+    return output_json
+
+
+async def _run_history_collector_capability(asset: str, timeframe_str: str, duration_s: float) -> Dict[str, Any]:
+    runner_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py")
+    )
+    
+    run_inputs = {
+        "action": "collect_and_save",
+        "asset": asset,
+        "timeframe": timeframe_str,
+        "duration": duration_s
+    }
+    
+    args = [
+        sys.executable,
+        runner_path,
+        "history_collector",
+        "--inputs",
+        json.dumps(run_inputs),
+    ]
+
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    stdout, stderr = await process.communicate()
+    return {
+        "return_code": process.returncode,
+        "stdout": (stdout or b"").decode(errors="replace").strip(),
+        "stderr": (stderr or b"").decode(errors="replace").strip(),
+    }
+
+
+async def _poll_for_fresh_candles(
+    asset: str,
+    timeframe_str: str,
+    *,
+    baseline_signature: Tuple[int, Optional[float]],
+    timeout_s: float,
+    limit: int = 100,
+    poll_interval_s: float = 0.25,
+) -> List[Dict[str, Any]]:
+    deadline = asyncio.get_running_loop().time() + timeout_s
+    while True:
+        candles = await asyncio.to_thread(read_candles, asset, timeframe_str, limit)
+        current_signature = _history_signature(candles)
+        if candles and current_signature != baseline_signature:
+            return candles
+
+        if asyncio.get_running_loop().time() >= deadline:
+            return []
+
+        await asyncio.sleep(poll_interval_s)
+
+
+def _map_bootstrap_selection_error(message: str) -> HistoryErrorCode:
+    msg = (message or "").lower()
+    if "not found" in msg or "invalid asset" in msg:
+        return HistoryErrorCode.INVALID_ASSET
+    if "chrome" in msg or "connect" in msg or "session" in msg:
+        return HistoryErrorCode.CHROME_NOT_CONNECTED
+    return HistoryErrorCode.UNKNOWN_ERROR
+
+
+def _decorate_history_rows(candles: List[Dict[str, Any]], timeframe_str: str) -> List[Dict[str, Any]]:
+    for row in candles:
+        if "timeframe" not in row:
+            row["timeframe"] = timeframe_str
+    return candles
+
 @router.get("/{asset}")
-async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
+async def get_history(asset: str, timeframe: int = 1, num_candles: int = 100, limit: Optional[int] = None):
     """
     Fetch historical candle data for a specific asset and timeframe from local CSV.
     """
     asset = normalize_asset(asset)
-    target_tf_str = f"{int(timeframe)}m"
-    logger.info(f"HISTORY: Fetching history for asset={asset}, timeframe={timeframe}")
+    if not asset:
+        raise HTTPException(status_code=400, detail="invalid asset")
+
+    timeframe_min = _parse_timeframe_minutes(timeframe, route_name="get_history")
+    target_tf_str = f"{timeframe_min}m"
+    logger.info(f"HISTORY: Fetching history for asset={asset}, timeframe={timeframe_min}")
     
+    target_limit = limit if limit is not None else num_candles
+
     try:
-        candles = read_candles(asset, target_tf_str, limit=limit)
+        candles = read_candles(asset, target_tf_str, limit=target_limit)
         
         if not candles:
             # Fallback to old utility if new store is empty (backward compatibility during transition)
-            csv_path = get_recent_history_file(asset, timeframe)
+            csv_path = get_recent_history_file(asset, timeframe_min)
             if not csv_path:
-                logger.warning(f"HISTORY: No history file found for {asset} @ {timeframe}m")
-                raise HTTPException(status_code=404, detail=f"No history found for {asset} @ {timeframe}m")
+                logger.warning(f"HISTORY: No history file found for {asset} @ {timeframe_min}m")
+                raise HTTPException(status_code=404, detail=f"No history found for {asset} @ {timeframe_min}m")
                 
             df = pd.read_csv(csv_path)
             if not df.empty:
                 # df.tail() gets OLD data in old CSVs because they are reverse-sorted
-                rows = df.head(limit).to_dict("records")
+                rows = df.head(target_limit).to_dict("records")
                 for r in rows:
                     if "timeframe" not in r:
                         r["timeframe"] = target_tf_str
@@ -80,53 +229,40 @@ async def get_history(asset: str, timeframe: int = 1, limit: int = 100):
         return {
             "ok": True,
             "asset": asset,
-            "timeframe": int(timeframe),
+            "timeframe": timeframe_min,
             "count": len(candles),
             "candles": candles,
             "data": candles,
             "file_path": file_name,
             "file": file_name,
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error reading history for {asset}: {e}")
+        logger.error(f"Error reading history for {asset}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bootstrap-history")
 async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     """
-    Collect initial history for an asset using V2 history_collector.
-    In Manual Mode, this waits for the user to click the asset in Pocket Option.
+    Trigger asset selection in Pocket Option UI, then poll the collector-owned
+    CSV/data-store path until fresh history appears.
     """
     asset = payload.get("asset")
     if not isinstance(asset, str) or not asset.strip():
         return _json_error(HistoryErrorCode.INVALID_ASSET, "asset required")
+    asset_norm = normalize_asset(asset)
+    if not asset_norm:
+        return _json_error(HistoryErrorCode.INVALID_ASSET, f"invalid asset: {asset}")
 
     timeframe = payload.get("timeframe", "1m")
-    timeframe_min = 1
-    if isinstance(timeframe, str):
-        tf = timeframe.strip().lower()
-        if tf == "ticks":
-            return _json_error(HistoryErrorCode.UNSUPPORTED_TIMEFRAME, f"unsupported timeframe: {timeframe}")
-        if tf.endswith("m"):
-            raw = tf[:-1]
-            if not raw.isdigit():
-                return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
-            timeframe_min = max(1, int(raw))
-        elif tf.endswith("h"):
-            raw = tf[:-1]
-            if not raw.isdigit():
-                return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
-            timeframe_min = max(1, int(raw) * 60)
-        elif tf.endswith("s"):
-            return _json_error(HistoryErrorCode.UNSUPPORTED_TIMEFRAME, f"unsupported timeframe: {timeframe}")
-        elif tf.isdigit():
-            timeframe_min = max(1, int(tf))
-        else:
-            return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
-    elif isinstance(timeframe, int):
-        timeframe_min = max(1, int(timeframe))
-    else:
-        return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, f"invalid timeframe: {timeframe}")
+    try:
+        timeframe_min = _parse_timeframe_minutes(timeframe, route_name="bootstrap_history")
+    except HTTPException as exc:
+        detail = str(exc.detail)
+        if "unsupported timeframe" in detail:
+            return _json_error(HistoryErrorCode.UNSUPPORTED_TIMEFRAME, detail)
+        return _json_error(HistoryErrorCode.INVALID_TIMEFRAME, detail)
 
     # In Manual Mode, we increase the duration to give the user time to click
     # We'll wait up to 3 seconds for the payload to appear
@@ -139,126 +275,100 @@ async def bootstrap_history(payload: Dict[str, Any] = Body(...)):
     if duration_s < 0.5:
         return _json_error(HistoryErrorCode.INVALID_DURATION, f"invalid duration: {duration_s}")
 
+    timeframe_str = f"{timeframe_min}m"
+    num_candles = payload.get("num_candles", 100)
+
     try:
-        def run_in_process():
-            import time
-            from capabilities_v2.history_collector import HistoryCollector
-            from capabilities_v2.base import Ctx
+        baseline_candles = await asyncio.to_thread(read_candles, asset_norm, timeframe_str, num_candles)
+        baseline_signature = _history_signature(baseline_candles)
 
-            def _get_shared_driver():
-                try:
-                    from backend.services.collector.connection import ChromeConnectionManager
-                    mgr = ChromeConnectionManager()
-                    return mgr.connect()
-                except Exception as e:
-                    logger.warning(f"_get_shared_driver: could not get shared driver: {e}")
-                    return None
+        started_at = asyncio.get_running_loop().time()
+        logger.info(
+            "BOOTSTRAP: selecting asset=%s timeframe=%s and polling collector-owned store",
+            asset_norm,
+            timeframe_str,
+        )
 
-            driver = _get_shared_driver()
-            if driver is None:
-                return {"ok": False, "error": "Chrome browser not connected", "error_code": "chrome_not_connected"}
-
-            ctx = Ctx(
-                driver=driver,
-                artifacts_root=str(Path("data/artifacts").resolve()),
-                debug=True,
-                dry_run=False,
-                verbose=True
+        selection_error_msg: Optional[str] = None
+        selection_error_code: Optional[HistoryErrorCode] = None
+        try:
+            await _select_asset_in_ui(asset)
+        except Exception as exc:
+            selection_error_msg = f"asset selection failed for {asset_norm}: {exc}"
+            selection_error_code = _map_bootstrap_selection_error(str(exc))
+            logger.warning(
+                "Bootstrap asset selection failed; continuing to poll collector-owned store: %s",
+                selection_error_msg,
             )
-            
-            # Use 'collect' action to prevent old CSV writing behavior.
-            cap = HistoryCollector()
-            inputs = {
-                "action": "collect",
-                "asset": asset,
-                "timeframe": timeframe_min,
-                "duration": duration_s,
-            }
-            
-            session_start = datetime.now(timezone.utc)
-            start_ms = time.time()
-            
-            res = cap.run(ctx, inputs)
-            duration_ms = int((time.time() - start_ms) * 1000)
-            
-            if not res.ok:
-                return {
-                    "ok": False, 
-                    "error": res.error, 
-                    "error_code": getattr(res, "error_code", "unknown_error")
-                }
-                
-            candles = res.data.get("candles", [])
-            
-            # Persist using data_store
-            session_id = generate_session_id()
-            tf_str = f"{timeframe_min}m"
-            
-            log_data = {
-                "session_id": session_id,
-                "asset": normalize_asset(asset),
-                "timeframe": tf_str,
-                "started_at": session_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "candle_count": len(candles),
-                "source": "history_capture",
-                "status": "complete",
-                "duration_ms": duration_ms
-            }
-            log_session(log_data)
-            
-            if candles:
-                upsert_candles(
-                    asset=normalize_asset(asset),
-                    timeframe_str=tf_str,
-                    candles=candles,
-                    session_id=session_id,
-                    source="history_capture"
-                )
-                
-            return {
-                "ok": True,
-                "data": res.data,
-                "collection_time_ms": duration_ms
-            }
 
-        out = await asyncio.to_thread(run_in_process)
-
-        if not out.get("ok"):
-            error_code_str = out.get("error_code", "unknown_error")
-            error_msg = out.get("error", "History collection failed")
-
+        candles = await _poll_for_fresh_candles(
+            asset_norm,
+            timeframe_str,
+            baseline_signature=baseline_signature,
+            timeout_s=duration_s,
+            limit=num_candles,
+        )
+        if not candles:
+            logger.info("BOOTSTRAP: CSV not updated by background collector. Triggering on-demand collection fallback via runner.")
             try:
-                error_code = HistoryErrorCode(error_code_str)
-            except ValueError:
-                error_code = HistoryErrorCode.UNKNOWN_ERROR
+                proc_result = await _run_history_collector_capability(
+                    asset=asset_norm,
+                    timeframe_str=timeframe_str,
+                    duration_s=max(5.0, duration_s)
+                )
+                if proc_result.get("return_code") == 0:
+                    logger.info("BOOTSTRAP: On-demand collection fallback succeeded. Reading candles again.")
+                    candles = await asyncio.to_thread(read_candles, asset_norm, timeframe_str, num_candles)
+                else:
+                    logger.error("BOOTSTRAP: On-demand collection fallback failed: %s", proc_result.get("stderr"))
+            except Exception as fallback_exc:
+                logger.error("BOOTSTRAP: Exception during on-demand collection fallback: %s", fallback_exc, exc_info=True)
 
-            logger.error(f"Bootstrap history failed: {error_msg} (code: {error_code_str})")
+        if not candles:
+            if selection_error_msg and selection_error_code:
+                logger.error(
+                    "Bootstrap history failed after asset selection error and no fresh candles: %s",
+                    selection_error_msg,
+                )
+                return _json_error(
+                    selection_error_code,
+                    selection_error_msg,
+                    details={
+                        "asset": asset_norm,
+                        "timeframe": timeframe_min,
+                        "duration": duration_s,
+                    },
+                )
+            logger.error(
+                "Bootstrap history timed out waiting for collector-owned history update: asset=%s timeframe=%s baseline=%s",
+                asset_norm,
+                timeframe_str,
+                baseline_signature,
+            )
             return _json_error(
-                error_code,
-                error_msg,
-                details={"asset": asset, "timeframe": timeframe_min, "duration": duration_s},
+                HistoryErrorCode.CAPABILITY_TIMEOUT,
+                f"Timed out waiting for fresh history for {asset_norm} @ {timeframe_str}",
+                details={"asset": asset_norm, "timeframe": timeframe_min, "duration": duration_s},
             )
 
-        data = out.get("data", {}) or {}
-        candles = data.get("candles") or []
-        if not isinstance(candles, list):
-            candles = []
+        candles = _decorate_history_rows(candles, timeframe_str)
+        collection_time_ms = int((asyncio.get_running_loop().time() - started_at) * 1000)
 
         return {
             "ok": True,
-            "asset": asset,
+            "asset": asset_norm,
             "timeframe": timeframe_min,
             "candles": candles,
-            "file_path": None,
-            "collection_time_ms": out.get("collection_time_ms"),
+            "file_path": f"{asset_norm}_{timeframe_str}.csv",
+            "collection_time_ms": collection_time_ms,
         }
 
     except Exception as e:
-        logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}")
+        logger.error(f"Bootstrap history failed: {type(e).__name__}: {e}", exc_info=True)
         return _json_error(
             HistoryErrorCode.UNKNOWN_ERROR,
             f"Bootstrap failed: {type(e).__name__}: {str(e)}",
-            details={"asset": asset, "timeframe": timeframe_min},
+            details={"asset": asset_norm, "timeframe": timeframe_min},
         )
 
 @router.post("/append-candle")
@@ -322,6 +432,36 @@ async def append_candle(payload: Dict[str, Any] = Body(...)):
 
     return {"status": "success", "asset": asset, "timeframe": timeframe_min, "store": "legacy"}
 
+
+@router.delete("/{asset}")
+async def delete_history(asset: str, timeframe: str | None = None):
+    """
+    Delete historical CSV data for an asset.
+    If timeframe is provided, deletes only that timeframe.
+    """
+    try:
+        from backend.utils.data_store import delete_candles
+        
+        timeframe_str = None
+        if timeframe:
+            tf_min = _parse_timeframe_minutes(timeframe, route_name="delete_history")
+            timeframe_str = f"{tf_min}m"
+
+        files_deleted = delete_candles(asset, timeframe_str)
+        return {
+            "ok": True,
+            "asset": asset,
+            "timeframe": timeframe,
+            "files_deleted": files_deleted,
+            "message": f"Successfully deleted {files_deleted} history cache file(s)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete history for {asset}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/collect-history")
 async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):
     """
@@ -332,7 +472,8 @@ async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):
         runner_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../capabilities_v2/runner.py"))
 
         duration = int(payload.get("duration", 10))
-        timeframe = payload.get("timeframe", "1m")
+        timeframe_min = _parse_timeframe_minutes(payload.get("timeframe", "1m"), route_name="collect_history")
+        timeframe = f"{timeframe_min}m"
 
         log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../data/data_output/logs"))
         os.makedirs(log_dir, exist_ok=True)
@@ -368,7 +509,8 @@ async def collect_history(payload: Dict[str, Any] = Body(default_factory=dict)):
             "pid": proc.pid, 
             "log_path": log_path
         }
-
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Collect history failed: {e}")
+        logger.error(f"Collect history failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

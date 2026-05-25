@@ -13,13 +13,6 @@ const AutomationsPanel = () => {
     >
       <div className="space-y-2">
         <div className="flex items-center justify-between p-2 bg-gray-800 rounded border border-gray-700">
-          <span className="text-sm">Auto-Select Favorites</span>
-          <ToggleSwitch 
-            checked={automations.autoSelectFavorites} 
-            onChange={() => toggleAutomation('autoSelectFavorites')} 
-          />
-        </div>
-        <div className="flex items-center justify-between p-2 bg-gray-800 rounded border border-gray-700">
           <span className="text-sm">Pending Orders</span>
           <ToggleSwitch 
             checked={automations.pendingOrders} 

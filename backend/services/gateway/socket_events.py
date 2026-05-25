@@ -61,52 +61,6 @@ def register_socket_events(sio, redis_client, system_state):
             logger.error(f"Error publishing ticker update: {e}")
 
     @sio.event
-    async def star_asset(sid, asset):
-        """
-        Handle asset starring request via Socket.IO.
-        Executes asset_control.py to star asset in browser (add to favorites).
-        """
-        logger.info(f"Client {sid} requested to star asset: {asset}")
-        
-        try:
-            # Run asset_control.py in a separate thread to avoid blocking event loop
-            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "asset_control.py"))
-            
-            def run_script():
-                return subprocess.run(
-                    [sys.executable, script_path, "--action", "star_asset", "--asset", asset],
-                    capture_output=True,
-                    text=True,
-                    timeout=10  # 10 second timeout to prevent hanging
-                )
-                
-            # Use asyncio.to_thread for non-blocking execution (Python 3.9+)
-            result = await asyncio.to_thread(run_script)
-            
-            if result.returncode != 0:
-                logger.error(f"Error starring asset: {result.stderr}")
-                await sio.emit('asset_star_error', {'error': f"Script failed: {result.stderr}"}, room=sid)
-                return
-
-            try:
-                output_json = json.loads(result.stdout)
-                if not output_json.get("ok"):
-                    error_msg = output_json.get("error", "Unknown error")
-                    logger.error(f"Asset starring failed: {error_msg}")
-                    await sio.emit('asset_star_error', {'error': error_msg}, room=sid)
-                else:
-                    logger.info(f"Successfully starred asset: {asset}")
-                    await sio.emit('asset_starred', {'asset': asset, 'message': output_json.get("data", {}).get("message", "Asset starred")}, room=sid)
-                    
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON output from script: {result.stdout}")
-                await sio.emit('asset_star_error', {'error': "Invalid script output"}, room=sid)
-
-        except Exception as e:
-            logger.error(f"Exception in star_asset: {e}")
-            await sio.emit('asset_star_error', {'error': str(e)}, room=sid)
-
-    @sio.event
     async def check_status(sid):
         """Provide comprehensive backend status to frontend"""
         try:

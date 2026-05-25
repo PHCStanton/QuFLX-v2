@@ -570,21 +570,22 @@ const createMarketSlice = (set, get) => ({
       }, { ...state.historyStatus }),
     }));
   },
-  loadHistory: async (asset) => {
+  loadHistory: async (asset, numCandles = 100) => {
     if (!asset) return;
 
-    const existingStatus = get().historyStatus[asset];
-    const existingCandles = get().historyCandles[asset];
+    const assetKey = normalizeAsset(asset);
+    const existingStatus = get().historyStatus[assetKey];
+    const existingCandles = get().historyCandles[assetKey];
     
     if (existingStatus === 'loaded' && Array.isArray(existingCandles) && existingCandles.length > 0) {
-      console.log(`[LoadHistory] Early return: Cache hit for ${asset}`);
+      console.log(`[LoadHistory] Early return: Cache hit for ${assetKey}`);
       return;
     }
 
     set((state) => ({
       historyStatus: {
         ...state.historyStatus,
-        [asset]: 'loading'
+        [assetKey]: 'loading'
       }
     }));
 
@@ -603,8 +604,8 @@ const createMarketSlice = (set, get) => ({
     if (tfRaw === 'ticks' || (secondsRaw && secondsRaw.match(/^\d+$/))) {
       const msg = `History is not available for ${timeframe}. Use Streaming Only or History + Streaming.`;
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [asset]: [] },
-        historyStatus: { ...state.historyStatus, [asset]: 'skipped' },
+        historyCandles: { ...state.historyCandles, [assetKey]: [] },
+        historyStatus: { ...state.historyStatus, [assetKey]: 'skipped' },
         lastError: dataSourceMode === 'history_only' ? msg : state.lastError
       }));
       return;
@@ -620,108 +621,168 @@ const createMarketSlice = (set, get) => ({
     }
 
     const timeframeMin = String(timeframeMinutes);
-    const limit = 200;
 
     try {
       // Step 1: Quick check for existing CSV file
-      console.log(`[LoadHistory] Checking for existing history: ${asset} @ ${timeframe}`);
+      console.log(`[LoadHistory] Checking for existing history: ${assetKey} @ ${timeframe}`);
       const checkRes = await fetch(
-        `${getApiBaseUrl()}/api/v1/history/${encodeURIComponent(asset)}?timeframe=${timeframeMin}&limit=${limit}`
+        `${getApiBaseUrl()}/api/v1/history/${encodeURIComponent(assetKey)}?timeframe=${timeframeMin}&num_candles=${numCandles}&limit=${numCandles}`
       );
 
       if (checkRes.ok) {
         const hist = await checkRes.json();
-        const existingCandles = Array.isArray(hist.candles)
+        const candles = Array.isArray(hist.candles)
           ? hist.candles
           : (Array.isArray(hist.data) ? hist.data : []);
 
-        if (existingCandles.length > 0) {
-          console.log(`[LoadHistory] ✓ Found existing history: ${existingCandles.length} candles`);
+        if (candles.length > 0) {
+          console.log(`[LoadHistory] ✓ Found existing history: ${candles.length} candles`);
           set((state) => ({
-            historyCandles: { ...state.historyCandles, [asset]: existingCandles },
-            historyStatus: { ...state.historyStatus, [asset]: 'loaded' }
+            historyCandles: { ...state.historyCandles, [assetKey]: candles },
+            historyStatus: { ...state.historyStatus, [assetKey]: 'loaded' }
           }));
           return;
         }
       }
 
-      // Step 2: No existing data - Bootstrap collection (AWAITS completion, no polling!)
-      console.log(`[LoadHistory] No existing data. Starting bootstrap for ${asset}...`);
-      console.log(`[LoadHistory] ⏳ Waiting for ${asset} data (Timeout: ${waitTime}s)`);
-
-      let attempts = 0;
-      const maxAttempts = 3;
-      let lastErrorObj = null;
-      let result = null;
-
-      while (attempts < maxAttempts) {
-        attempts++;
-        try {
-          const bootstrapRes = await fetch(`${getApiBaseUrl()}/api/v1/history/bootstrap-history`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              asset,
-              timeframe: timeframeMin,
-              duration: waitTime
-            })
-          });
-
-          result = await bootstrapRes.json();
-          if (result.ok) break;
-
-          lastErrorObj = result;
-          console.warn(`[LoadHistory] Bootstrap attempt ${attempts} failed:`, result);
-        } catch (err) {
-          lastErrorObj = { error_message: err.message };
-          console.warn(`[LoadHistory] Bootstrap attempt ${attempts} failed with network error:`, err);
-        }
-
-        if (attempts < maxAttempts) {
-          const backoff = Math.pow(2, attempts) * 1000;
-          console.log(`[LoadHistory] Retrying in ${backoff}ms...`);
-          await new Promise(r => setTimeout(r, backoff));
-        }
-      }
-
-      // Step 3: Handle response (success or structured error)
-      if (!result || !result.ok) {
-        // Structured error response from backend
-        const errorCode = lastErrorObj?.error_code || 'unknown_error';
-        const userMessage = lastErrorObj?.user_message || lastErrorObj?.error_message || lastErrorObj?.detail || 'History collection failed after retries';
-
-        console.error(`[LoadHistory] ✗ Bootstrap failed: ${errorCode}`, lastErrorObj);
-
-        set((state) => ({
-          historyCandles: { ...state.historyCandles, [asset]: [] },
-          historyStatus: { ...state.historyStatus, [asset]: 'error' },
-          lastError: userMessage
-        }));
-
-        // Re-throw with user-friendly message for upstream handling
-        throw new Error(userMessage);
-      }
-
-      // Success! Extract candles directly from in-memory response
-      const candles = result.candles || [];
-      console.log(`[LoadHistory] ✓ Bootstrap SUCCESS: Received ${candles.length} candles for ${asset}`);
-
-      set((state) => ({
-        historyCandles: { ...state.historyCandles, [asset]: candles },
-        historyStatus: { ...state.historyStatus, [asset]: 'loaded' }
-      }));
+      // Step 2: No existing data - Bootstrap collection
+      console.log(`[LoadHistory] No existing data. Starting bootstrap for ${assetKey}...`);
+      await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: false, num_candles: numCandles });
 
     } catch (err) {
       console.error('[LoadHistory] Failed to load history:', err);
-
       set((state) => ({
-        historyCandles: { ...state.historyCandles, [asset]: [] },
-        historyStatus: { ...state.historyStatus, [asset]: 'error' },
+        historyCandles: { ...state.historyCandles, [assetKey]: [] },
+        historyStatus: { ...state.historyStatus, [assetKey]: 'error' },
         lastError: err.message || 'Failed to load history data'
       }));
-
-      // Re-throw for upstream error handling
       throw err;
+    }
+  },
+  bootstrapHistoryForAsset: async (asset, options = {}) => {
+    const assetKey = normalizeAsset(asset);
+    if (!assetKey) {
+      throw new Error(`Invalid asset: ${asset}`);
+    }
+
+    const {
+      preserveExistingOnError = false,
+      num_candles = 100,
+    } = options;
+
+    const timeframe = get().selectedTimeframe || '1m';
+    const tfRaw = String(timeframe).trim().toLowerCase();
+    const tfNumberMatch = tfRaw.match(/^\d+$/);
+    const minutesRaw = tfRaw.endsWith('m') ? tfRaw.slice(0, -1) : null;
+    const hoursRaw = tfRaw.endsWith('h') ? tfRaw.slice(0, -1) : null;
+    const secondsRaw = tfRaw.endsWith('s') ? tfRaw.slice(0, -1) : null;
+
+    const { settings } = (await import('./settingsStore')).default.getState();
+    const waitTime = settings.automation.historyWaitTime || 1.5;
+
+    if (tfRaw === 'ticks' || (secondsRaw && secondsRaw.match(/^\d+$/))) {
+      throw new Error(`History is not available for ${timeframe}. Use Streaming Only or History + Streaming.`);
+    }
+
+    let timeframeMinutes = 1;
+    if (minutesRaw && minutesRaw.match(/^\d+$/)) {
+      timeframeMinutes = Math.max(1, parseInt(minutesRaw, 10));
+    } else if (hoursRaw && hoursRaw.match(/^\d+$/)) {
+      timeframeMinutes = Math.max(1, parseInt(hoursRaw, 10) * 60);
+    } else if (tfNumberMatch) {
+      timeframeMinutes = Math.max(1, parseInt(tfRaw, 10));
+    }
+
+    const maxAttempts = settings.automation.retryAttempts !== undefined ? Number(settings.automation.retryAttempts) : 3;
+    const retryDelaySetting = settings.automation.retryDelay !== undefined ? Number(settings.automation.retryDelay) : 500;
+    let attempts = 0;
+    let lastErrorObj = null;
+    let result = null;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const bootstrapRes = await fetch(`${getApiBaseUrl()}/api/v1/history/bootstrap-history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            asset: assetKey,
+            timeframe: String(timeframeMinutes),
+            duration: waitTime,
+            num_candles: num_candles
+          })
+        });
+
+        result = await bootstrapRes.json().catch(() => ({
+          ok: false,
+          detail: `HTTP ${bootstrapRes.status}`,
+        }));
+
+        if (bootstrapRes.ok && result.ok) {
+          break;
+        }
+
+        lastErrorObj = result;
+        console.warn(`[LoadHistory] Bootstrap attempt ${attempts} failed:`, result);
+      } catch (err) {
+        lastErrorObj = { error_message: err.message };
+        console.warn(`[LoadHistory] Bootstrap attempt ${attempts} failed with network error:`, err);
+      }
+
+      if (attempts < maxAttempts) {
+        const backoff = retryDelaySetting > 0 ? retryDelaySetting : (Math.pow(2, attempts) * 1000);
+        console.log(`[LoadHistory] Retrying in ${backoff}ms...`);
+        await sleep(backoff);
+      }
+    }
+
+    if (!result || !result.ok) {
+      const errorCode = lastErrorObj?.error_code || 'unknown_error';
+      const userMessage = lastErrorObj?.user_message || lastErrorObj?.error_message || lastErrorObj?.detail || 'History collection failed after retries';
+
+      console.error(`[LoadHistory] ✗ Bootstrap failed: ${errorCode}`, lastErrorObj);
+
+      if (!preserveExistingOnError) {
+        set((state) => ({
+          historyCandles: { ...state.historyCandles, [assetKey]: [] },
+          historyStatus: { ...state.historyStatus, [assetKey]: 'error' },
+          lastError: userMessage
+        }));
+      }
+
+      throw new Error(userMessage);
+    }
+
+    const candles = Array.isArray(result.candles) ? result.candles : [];
+    console.log(`[LoadHistory] ✓ Bootstrap SUCCESS: Received ${candles.length} candles for ${assetKey}`);
+
+    set((state) => ({
+      historyCandles: { ...state.historyCandles, [assetKey]: candles },
+      historyStatus: { ...state.historyStatus, [assetKey]: 'loaded' }
+    }));
+
+    return candles;
+  },
+  reloadHistoryFromPayload: async (asset) => {
+    if (!asset) return;
+    const assetKey = normalizeAsset(asset);
+
+    set({
+      selectedAsset: asset,
+      selectedAssetKey: assetKey,
+      selectedAssetLoading: true,
+      marketData: {},       // Clear old tick data immediately
+      indicatorSeries: {},  // Clear stale indicator data
+    });
+
+    try {
+      // Do NOT DELETE existing CSV first - force a fresh bootstrap attempt while
+      // preserving the current chart/cache if the payload refresh fails.
+      await get().bootstrapHistoryForAsset(assetKey, { preserveExistingOnError: true, num_candles: 100 });
+    } catch (err) {
+      set({ lastError: `Fresh payload reload failed; keeping existing history. ${getErrorMessage(err)}` });
+    } finally {
+      set({ selectedAssetLoading: false });
     }
   },
   payoutAssets: [],

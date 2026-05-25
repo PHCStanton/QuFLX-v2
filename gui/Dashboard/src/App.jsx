@@ -10,7 +10,9 @@ import StatementAnalysisPage from './components/StatementAnalysisPage';
 import useSettingsStore from './store/settingsStore';
 
 function App() {
-  const { settings, fetchSettings } = useSettingsStore();
+  const fetchSettings = useSettingsStore((state) => state.fetchSettings);
+  const theme = useSettingsStore((state) => state.settings.global.theme);
+  const fontSize = useSettingsStore((state) => state.settings.global.fontSize);
 
   useEffect(() => {
     fetchSettings();
@@ -20,7 +22,7 @@ function App() {
     const root = window.document.documentElement;
     root.classList.remove('theme-light', 'theme-dark', 'theme-orange-dark', 'theme-ironman', 'theme-black-white', 'dark');
 
-    const targetTheme = settings.global.theme;
+    const targetTheme = theme;
 
     root.classList.add('dark');
     if (targetTheme === 'dark') {
@@ -36,8 +38,8 @@ function App() {
       root.classList.add('theme-black-white');
     }
 
-    root.style.setProperty('--app-font-size', `${settings.global.fontSize || 13}px`);
-  }, [settings.global.theme, settings.global.fontSize]);
+    root.style.setProperty('--app-font-size', `${fontSize || 13}px`);
+  }, [theme, fontSize]);
 
   return (
     <Router>

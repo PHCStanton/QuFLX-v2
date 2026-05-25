@@ -34,26 +34,35 @@ const useTickAggregation = ({
   useEffect(() => {
     if (candleSeries) {
       const candles = historyCandlesRef.current;
-      const hasCachedData = candles && selectedAsset && Array.isArray(candles[selectedAsset]) && candles[selectedAsset].length > 0;
-      if (!hasCachedData) {
-        console.log(`Asset changed to: ${selectedAsset}, no cache found, clearing chart`);
-        candleSeries.setData([]);
-        if (volumeSeries) volumeSeries.setData([]); // Clear volume
-      } else {
-        console.log(`Asset changed to: ${selectedAsset}, cache found, preserving chart data briefly`);
-      }
+      const hasCachedData = candles
+        && selectedAssetKey
+        && Array.isArray(candles[selectedAssetKey])
+        && candles[selectedAssetKey].length > 0;
+
       currentCandleRef.current = null;
       currentVolumeRef.current = 0;
-      setIsLoading(true);
+
+      if (hasCachedData) {
+        // Phase 1 fix: cache exists — do NOT set loading, the history effect will
+        // render the cached candles immediately and call setIsLoading(false).
+        console.log(`Asset changed to: ${selectedAsset}, cache found, preserving chart data`);
+        setIsLoading(false);
+      } else {
+        // No cache — clear chart and show loading overlay while history fetches
+        console.log(`Asset changed to: ${selectedAsset}, no cache found, clearing chart`);
+        candleSeries.setData([]);
+        if (volumeSeries) volumeSeries.setData([]);
+        setIsLoading(true);
+      }
     }
-  }, [selectedAsset, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
+  }, [selectedAsset, selectedAssetKey, candleSeries, volumeSeries]); // Use ref for historyCandles to avoid stale closure without adding to deps
 
   // Load Historical Data
   useEffect(() => {
-    if (!candleSeries || !selectedAsset) return;
+    if (!candleSeries || !selectedAssetKey) return;
 
-    const status = historyStatus && selectedAsset ? historyStatus[selectedAsset] : undefined;
-    const candles = historyCandles && selectedAsset ? historyCandles[selectedAsset] : undefined;
+    const status = historyStatus && selectedAssetKey ? historyStatus[selectedAssetKey] : undefined;
+    const candles = historyCandles && selectedAssetKey ? historyCandles[selectedAssetKey] : undefined;
 
     if (!Array.isArray(candles)) return;
 
@@ -91,7 +100,7 @@ const useTickAggregation = ({
     }
 
     setIsLoading(false);
-  }, [historyCandles, historyStatus, selectedAsset, candleSeries, volumeSeries]);
+  }, [historyCandles, historyStatus, selectedAssetKey, candleSeries, volumeSeries]);
 
   // Handle Tick Aggregation
   useEffect(() => {

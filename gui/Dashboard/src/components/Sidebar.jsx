@@ -381,7 +381,10 @@ const SIDEBAR_TABS = [
 ];
 
 const Sidebar = () => {
-  const { isSidebarOpen, toggleSidebar, activeTab, setActiveTab } = useMarketStore();
+  const isSidebarOpen = useMarketStore((state) => state.isSidebarOpen);
+  const toggleSidebar = useMarketStore((state) => state.toggleSidebar);
+  const activeTab = useMarketStore((state) => state.activeTab);
+  const setActiveTab = useMarketStore((state) => state.setActiveTab);
   const sidebarSkinDataUrl = useSettingsStore((s) => s.settings.global.sidebarSkinDataUrl);
 
   return (
